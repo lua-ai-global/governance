@@ -5,9 +5,9 @@
  * Schema and row mappers are in storage-postgres-schema.ts.
  */
 
-import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage";
-import { getSchemaSQL, rowToAgent, rowToEvent } from "./storage-postgres-schema";
-import type { AgentRow, AuditRow } from "./storage-postgres-schema";
+import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
+import { getSchemaSQL, rowToAgent, rowToEvent } from "./storage-postgres-schema.js";
+import type { AgentRow, AuditRow } from "./storage-postgres-schema.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 

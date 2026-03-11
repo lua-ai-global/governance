@@ -5,8 +5,8 @@
  * Preset builders are in policy-presets.ts.
  */
 
-import { detectInjection } from "./injection-detect";
-import type { InjectionCategory } from "./injection-detect";
+import { detectInjection } from "./injection-detect.js";
+import type { InjectionCategory } from "./injection-detect.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -244,4 +244,4 @@ export {
   requireLevel,
   requireSequence,
   timeWindow,
-} from "./policy-presets";
+} from "./policy-presets.js";

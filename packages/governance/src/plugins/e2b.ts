@@ -31,7 +31,7 @@ import type {
   E2BFilesystemOp, E2BCommandExecution,
   E2BCodeHandler, E2BFilesystemHandler, E2BCommandHandler,
   GovernE2BConfig, GovernedE2BResult,
-} from "./e2b-types";
+} from "./e2b-types.js";
 
 // Re-export all types
 export type {
@@ -39,7 +39,7 @@ export type {
   E2BFilesystemOp, E2BCommandExecution,
   E2BCodeHandler, E2BFilesystemHandler, E2BCommandHandler,
   GovernE2BConfig, GovernedE2BResult,
-} from "./e2b-types";
+} from "./e2b-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

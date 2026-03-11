@@ -28,14 +28,14 @@ import type { AgentRegistration } from "../types";
 import type {
   ComposioTool,
   GovernComposioConfig, GovernedComposioResult,
-} from "./composio-types";
+} from "./composio-types.js";
 
 // Re-export all types (new + legacy aliases)
 export type {
   ComposioTool, ComposioToolResult, ComposioConnectedAccount, ComposioTrigger,
   ComposioAction, ComposioActionResult, ComposioConnection,
   GovernComposioConfig, GovernedComposioResult,
-} from "./composio-types";
+} from "./composio-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

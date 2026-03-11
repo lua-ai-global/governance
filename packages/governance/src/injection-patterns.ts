@@ -6,8 +6,8 @@
  * in injection-patterns-ext.ts.
  */
 
-import type { InjectionPattern } from "./injection-detect";
-import { EXTENDED_PATTERNS } from "./injection-patterns-ext";
+import type { InjectionPattern } from "./injection-detect.js";
+import { EXTENDED_PATTERNS } from "./injection-patterns-ext.js";
 
 export const BUILTIN_PATTERNS: InjectionPattern[] = [
   // ─── Instruction Override ────────────────────────────────────────

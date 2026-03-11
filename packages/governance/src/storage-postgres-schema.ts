@@ -3,8 +3,8 @@
  * Separated from storage-postgres.ts to keep files under 300 LOC.
  */
 
-import type { StoredAgent, AuditEvent } from "./storage";
-import type { AuditIntegrity } from "./audit-integrity";
+import type { StoredAgent, AuditEvent } from "./storage.js";
+import type { AuditIntegrity } from "./audit-integrity.js";
 
 // ─── Schema SQL ─────────────────────────────────────────────────
 

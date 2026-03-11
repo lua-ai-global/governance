@@ -28,13 +28,13 @@ import type { AgentRegistration } from "../types";
 import type {
   GenkitTool, GenkitFlow,
   GovernGenkitConfig, GovernedGenkitToolsResult, GovernedGenkitFlowResult,
-} from "./genkit-types";
+} from "./genkit-types.js";
 
 // Re-export all types
 export type {
   GenkitTool, GenkitFlow, GenkitMiddleware,
   GovernGenkitConfig, GovernedGenkitToolsResult, GovernedGenkitFlowResult,
-} from "./genkit-types";
+} from "./genkit-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

@@ -6,7 +6,7 @@
  * EU AI Act Article 12 compliant.
  */
 
-import type { AuditEvent, AuditQueryFilters, GovernanceInstance } from "./index";
+import type { AuditEvent, AuditQueryFilters, GovernanceInstance } from "./index.js";
 
 // ─── Types ──────────────────────────────────────────────────
 

@@ -26,7 +26,7 @@ import type { AgentRegistration } from "../types";
 import type {
   AnthropicToolExecutor, AnthropicToolUseBlock, AnthropicToolResultBlock,
   GovernAnthropicConfig, GovernedAnthropicResult,
-} from "./anthropic-types";
+} from "./anthropic-types.js";
 
 // Re-export all types
 export type {
@@ -34,7 +34,7 @@ export type {
   AnthropicContentBlock, AnthropicContentBlockParam, AnthropicToolExecutor,
   AnthropicCacheControl, AnthropicInputSchema, AnthropicToolCaller,
   GovernAnthropicConfig, GovernedAnthropicResult,
-} from "./anthropic-types";
+} from "./anthropic-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

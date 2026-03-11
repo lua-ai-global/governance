@@ -34,7 +34,7 @@ import type { AgentRegistration } from "../types";
 import type {
   AutoGenTool, AutoGenAgent,
   GovernAutoGenConfig, GovernedAutoGenAgentResult, GovernedAutoGenToolsResult,
-} from "./autogen-types";
+} from "./autogen-types.js";
 
 // Re-export all types
 export type {
@@ -43,7 +43,7 @@ export type {
   AutoGenFunctionCall, AutoGenFunctionExecutionResult,
   AutoGenToolCallRequest, AutoGenToolCallExecution,
   GovernAutoGenConfig, GovernedAutoGenAgentResult, GovernedAutoGenToolsResult,
-} from "./autogen-types";
+} from "./autogen-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

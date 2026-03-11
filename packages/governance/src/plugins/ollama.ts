@@ -26,13 +26,13 @@ import type { AgentRegistration } from "../types";
 import type {
   OllamaToolExecutor, OllamaToolCall,
   GovernOllamaConfig, GovernedOllamaResult,
-} from "./ollama-types";
+} from "./ollama-types.js";
 
 // Re-export all types
 export type {
   OllamaToolDefinition, OllamaToolCall, OllamaToolExecutor,
   GovernOllamaConfig, GovernedOllamaResult,
-} from "./ollama-types";
+} from "./ollama-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

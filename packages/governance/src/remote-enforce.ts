@@ -6,8 +6,8 @@
  * continue to work locally.
  */
 
-import type { EnforcementContext, EnforcementDecision } from "./policy";
-import type { AgentRegistration, GovernanceAssessment } from "./types";
+import type { EnforcementContext, EnforcementDecision } from "./policy.js";
+import type { AgentRegistration, GovernanceAssessment } from "./types.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 

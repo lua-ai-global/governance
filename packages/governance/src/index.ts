@@ -24,17 +24,17 @@
  * @packageDocumentation
  */
 
-import { assessAgent, assessFleet } from "./scorer";
-import { createPolicyEngine } from "./policy";
-import { createMemoryStorage } from "./storage";
-import { createRemoteEnforcer, validateRemoteConfig } from "./remote-enforce";
-import type { AgentRegistration, GovernanceAssessment, FleetSummary } from "./types";
-import type { PolicyRule, PolicyEngine, EnforcementContext, EnforcementDecision } from "./policy";
-import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage";
+import { assessAgent, assessFleet } from "./scorer.js";
+import { createPolicyEngine } from "./policy.js";
+import { createMemoryStorage } from "./storage.js";
+import { createRemoteEnforcer, validateRemoteConfig } from "./remote-enforce.js";
+import type { AgentRegistration, GovernanceAssessment, FleetSummary } from "./types.js";
+import type { PolicyRule, PolicyEngine, EnforcementContext, EnforcementDecision } from "./policy.js";
+import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
 
 // Re-export storage types (other modules import from ./index)
-export type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage";
-export { createMemoryStorage } from "./storage";
+export type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
+export { createMemoryStorage } from "./storage.js";
 
 // ─── Governance Instance ────────────────────────────────────────
 
@@ -243,24 +243,24 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 // ─── Re-exports ─────────────────────────────────────────────────
 
 export { storedToRegistration };
-export { assessAgent, assessFleet, getGovernanceLevel } from "./scorer";
-export { createPolicyEngine, blockTools, allowOnlyTools, requireApproval, tokenBudget, rateLimit, requireLevel, requireSequence, timeWindow } from "./policy";
-export type { PolicyRule, PolicyEngine, PolicyAction, PolicyCondition, PolicyOutcome, EnforcementContext, EnforcementDecision, PolicyEngineConfig } from "./policy";
-export type { AgentRegistration, AgentFramework, AgentStatus, GovernanceAssessment, GovernanceLevel, DimensionResult, ScoreDimension, FleetSummary } from "./types";
-export { detectInjection, createInjectionGuard, getBuiltinPatterns } from "./injection-detect";
-export type { InjectionPattern, InjectionCategory, InjectionResult, InjectionDetectorConfig } from "./injection-detect";
-export { createGovernanceEmitter } from "./events";
-export { dryRun, fleetDryRun } from "./dry-run";
-export type { DryRunScenario, DryRunAction, DryRunResult, DryRunDecision, DryRunSummary, DryRunConfig, FleetDryRunResult } from "./dry-run";
-export { createGovernanceMetrics } from "./metrics";
-export type { GovernanceMetrics, MetricName, TimingName, MetricLabels, MetricsSnapshot } from "./metrics";
-export type { GovernanceEmitter, GovernanceEvent, GovernanceEventType, GovernanceEventHandler } from "./events";
-export { computeSignals, computeBehavioralAdjustments, applyBehavioralAdjustments } from "./behavioral-scorer";
-export type { BehavioralInput, BehavioralAdjustment, BehavioralAssessment, BehavioralSignals } from "./behavioral-scorer";
-export { scanRepoContents, SCAN_GLOBS, SCAN_IGNORE } from "./repo-patterns";
-export type { CapabilityDetection, RepoScanResult } from "./repo-patterns";
-export { findPackageJsonPaths, detectAgentRoots } from "./monorepo-detect";
-export type { AgentRoot } from "./monorepo-detect";
-export { RemoteEnforcementError } from "./remote-enforce";
-export { composePolicies, securityBaseline, complianceOverlay, platformDefaults } from "./policy-compose";
-export type { PolicySet, ConflictStrategy, ComposeConfig, ComposeResult, PolicyConflict } from "./policy-compose";
+export { assessAgent, assessFleet, getGovernanceLevel } from "./scorer.js";
+export { createPolicyEngine, blockTools, allowOnlyTools, requireApproval, tokenBudget, rateLimit, requireLevel, requireSequence, timeWindow } from "./policy.js";
+export type { PolicyRule, PolicyEngine, PolicyAction, PolicyCondition, PolicyOutcome, EnforcementContext, EnforcementDecision, PolicyEngineConfig } from "./policy.js";
+export type { AgentRegistration, AgentFramework, AgentStatus, GovernanceAssessment, GovernanceLevel, DimensionResult, ScoreDimension, FleetSummary } from "./types.js";
+export { detectInjection, createInjectionGuard, getBuiltinPatterns } from "./injection-detect.js";
+export type { InjectionPattern, InjectionCategory, InjectionResult, InjectionDetectorConfig } from "./injection-detect.js";
+export { createGovernanceEmitter } from "./events.js";
+export { dryRun, fleetDryRun } from "./dry-run.js";
+export type { DryRunScenario, DryRunAction, DryRunResult, DryRunDecision, DryRunSummary, DryRunConfig, FleetDryRunResult } from "./dry-run.js";
+export { createGovernanceMetrics } from "./metrics.js";
+export type { GovernanceMetrics, MetricName, TimingName, MetricLabels, MetricsSnapshot } from "./metrics.js";
+export type { GovernanceEmitter, GovernanceEvent, GovernanceEventType, GovernanceEventHandler } from "./events.js";
+export { computeSignals, computeBehavioralAdjustments, applyBehavioralAdjustments } from "./behavioral-scorer.js";
+export type { BehavioralInput, BehavioralAdjustment, BehavioralAssessment, BehavioralSignals } from "./behavioral-scorer.js";
+export { scanRepoContents, SCAN_GLOBS, SCAN_IGNORE } from "./repo-patterns.js";
+export type { CapabilityDetection, RepoScanResult } from "./repo-patterns.js";
+export { findPackageJsonPaths, detectAgentRoots } from "./monorepo-detect.js";
+export type { AgentRoot } from "./monorepo-detect.js";
+export { RemoteEnforcementError } from "./remote-enforce.js";
+export { composePolicies, securityBaseline, complianceOverlay, platformDefaults } from "./policy-compose.js";
+export type { PolicySet, ConflictStrategy, ComposeConfig, ComposeResult, PolicyConflict } from "./policy-compose.js";

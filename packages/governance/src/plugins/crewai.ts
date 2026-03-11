@@ -30,13 +30,13 @@ import type { AgentRegistration } from "../types";
 import type {
   CrewAITool, CrewAIAgent,
   GovernCrewAIConfig, GovernedCrewAIAgentResult, GovernedCrewAIToolsResult,
-} from "./crewai-types";
+} from "./crewai-types.js";
 
 // Re-export all types
 export type {
   CrewAITool, CrewAIAgent, CrewAITask,
   GovernCrewAIConfig, GovernedCrewAIAgentResult, GovernedCrewAIToolsResult,
-} from "./crewai-types";
+} from "./crewai-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

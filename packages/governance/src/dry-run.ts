@@ -6,13 +6,13 @@
  * WOULD have been blocked, without actually blocking anything.
  */
 
-import type { GovernanceInstance, StoredAgent } from "./index";
+import type { GovernanceInstance, StoredAgent } from "./index.js";
 import type {
   PolicyRule,
   PolicyAction,
   EnforcementDecision,
-} from "./policy";
-import { createPolicyEngine } from "./policy";
+} from "./policy.js";
+import { createPolicyEngine } from "./policy.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 

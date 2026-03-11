@@ -11,10 +11,10 @@
  * and layered policy application.
  */
 
-import type { PolicyRule, PolicyAction } from "./policy";
+import type { PolicyRule, PolicyAction } from "./policy.js";
 
 // Re-export presets from separate file for <300 LOC compliance
-export { securityBaseline, complianceOverlay, platformDefaults } from "./policy-compose-presets";
+export { securityBaseline, complianceOverlay, platformDefaults } from "./policy-compose-presets.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 

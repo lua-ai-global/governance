@@ -32,7 +32,7 @@ import type {
   A2AAgentCard, A2AMessageSendRequest, A2ASendTaskRequest, A2ATask,
   GovernA2AConfig, GovernedA2AResult,
   A2AMessageSendHandler, A2AMessageReceiveHandler,
-} from "./a2a-types";
+} from "./a2a-types.js";
 
 // Re-export all types
 export type {
@@ -43,7 +43,7 @@ export type {
   GovernA2AConfig, GovernedA2AResult,
   A2AMessageSendHandler, A2AMessageReceiveHandler,
   A2ATaskSendHandler, A2ATaskReceiveHandler,
-} from "./a2a-types";
+} from "./a2a-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

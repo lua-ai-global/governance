@@ -14,8 +14,8 @@ import type {
   GovernanceAssessment,
   GovernanceLevel,
   AgentStatus,
-} from "./types";
-import { DIMENSION_SCORERS } from "./scorer-dimensions";
+} from "./types.js";
+import { DIMENSION_SCORERS } from "./scorer-dimensions.js";
 
 // ─── Governance Levels ──────────────────────────────────────────
 

@@ -7,7 +7,7 @@
  * Enforcement deadline: August 2, 2026
  */
 
-import type { StoredAgent, GovernanceInstance } from "./index";
+import type { StoredAgent, GovernanceInstance } from "./index.js";
 import {
   EU_AI_ACT_ARTICLES,
   type ArticleRequirement,
@@ -15,7 +15,7 @@ import {
   type RequirementAssessment,
   type ArticleAssessment,
   type ComplianceReport,
-} from "./compliance-articles";
+} from "./compliance-articles.js";
 
 // Re-export all types from articles module
 export type {
@@ -25,8 +25,8 @@ export type {
   RequirementAssessment,
   ArticleAssessment,
   ComplianceReport,
-} from "./compliance-articles";
-export { getArticles, getDaysUntilDeadline } from "./compliance-articles";
+} from "./compliance-articles.js";
+export { getArticles, getDaysUntilDeadline } from "./compliance-articles.js";
 
 // ─── Assessment Config ───────────────────────────────────────
 

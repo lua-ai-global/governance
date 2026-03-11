@@ -26,13 +26,13 @@ import type { AgentRegistration } from "../types";
 import type {
   MistralToolExecutor, MistralToolCall,
   GovernMistralConfig, GovernedMistralResult,
-} from "./mistral-types";
+} from "./mistral-types.js";
 
 // Re-export all types
 export type {
   MistralToolDefinition, MistralToolCall, MistralToolExecutor,
   GovernMistralConfig, GovernedMistralResult,
-} from "./mistral-types";
+} from "./mistral-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

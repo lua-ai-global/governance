@@ -30,13 +30,13 @@ import type { AgentRegistration } from "../types";
 import type {
   DenoTool, DenoAgent, DenoPermissionDescriptor,
   GovernDenoConfig, GovernedDenoAgentResult, GovernedDenoToolsResult,
-} from "./deno-types";
+} from "./deno-types.js";
 
 // Re-export all types
 export type {
   DenoTool, DenoAgent, DenoPermissionDescriptor,
   GovernDenoConfig, GovernedDenoAgentResult, GovernedDenoToolsResult,
-} from "./deno-types";
+} from "./deno-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

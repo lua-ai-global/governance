@@ -26,14 +26,14 @@ import type { AgentRegistration } from "../types";
 import type {
   CloudflareToolExecutor,
   GovernCloudflareAIConfig, GovernedCloudflareAIResult,
-} from "./cloudflare-ai-types";
+} from "./cloudflare-ai-types.js";
 
 // Re-export all types
 export type {
   CloudflareToolCall, CloudflareToolDefinition, CloudflareMessage,
   CloudflareToolCallMessage, CloudflareAIGatewayRequest, CloudflareToolExecutor,
   GovernCloudflareAIConfig, GovernedCloudflareAIResult,
-} from "./cloudflare-ai-types";
+} from "./cloudflare-ai-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

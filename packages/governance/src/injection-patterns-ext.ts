@@ -3,7 +3,7 @@
  * Separated to keep each file under 300 LOC.
  */
 
-import type { InjectionPattern } from "./injection-detect";
+import type { InjectionPattern } from "./injection-detect.js";
 
 export const EXTENDED_PATTERNS: InjectionPattern[] = [
   // ─── Obfuscation ───────────────────────────────────────────────

@@ -5,7 +5,7 @@
  * Separated from scorer.ts to keep files under 300 LOC.
  */
 
-import type { AgentRegistration, DimensionResult, ScoreDimension } from "./types";
+import type { AgentRegistration, DimensionResult, ScoreDimension } from "./types.js";
 
 // ─── Dimension Weights ──────────────────────────────────────────
 

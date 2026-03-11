@@ -30,14 +30,14 @@ import type { AgentRegistration } from "../types";
 import type {
   KernelFunction, KernelPlugin, FunctionFilter, FunctionFilterContext,
   GovernSKConfig, GovernedSKResult, GovernedSKPluginResult,
-} from "./semantic-kernel-types";
+} from "./semantic-kernel-types.js";
 
 // Re-export all types
 export type {
   KernelFunction, KernelParameter, KernelPlugin,
   FunctionFilter, FunctionFilterContext,
   GovernSKConfig, GovernedSKResult, GovernedSKPluginResult,
-} from "./semantic-kernel-types";
+} from "./semantic-kernel-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

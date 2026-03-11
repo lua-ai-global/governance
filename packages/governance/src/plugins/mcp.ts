@@ -35,7 +35,7 @@ import type {
   GovernedMCPResult,
   MCPToolCallHandler,
   MCPResourceReadHandler,
-} from "./mcp-types";
+} from "./mcp-types.js";
 
 // Re-export all types
 export type {
@@ -43,7 +43,7 @@ export type {
   MCPReadResourceRequest, MCPToolDefinition,
   GovernMCPConfig, GovernedMCPResult,
   MCPToolCallHandler, MCPResourceReadHandler,
-} from "./mcp-types";
+} from "./mcp-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

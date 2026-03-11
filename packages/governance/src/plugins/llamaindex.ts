@@ -29,14 +29,14 @@ import type { AgentRegistration } from "../types";
 import type {
   LlamaIndexTool, LlamaIndexAgent, LlamaIndexJSONValue,
   GovernLlamaIndexConfig, GovernedLlamaIndexToolsResult, GovernedLlamaIndexAgentResult,
-} from "./llamaindex-types";
+} from "./llamaindex-types.js";
 
 // Re-export all types
 export type {
   LlamaIndexTool, LlamaIndexToolMetadata, LlamaIndexToolOutput, LlamaIndexJSONValue,
   LlamaIndexQueryEngineTool, LlamaIndexAgent,
   GovernLlamaIndexConfig, GovernedLlamaIndexToolsResult, GovernedLlamaIndexAgentResult,
-} from "./llamaindex-types";
+} from "./llamaindex-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

@@ -3,14 +3,14 @@
  * Used with composePolicies() from policy-compose.ts.
  */
 
-import type { PolicySet } from "./policy-compose";
+import type { PolicySet } from "./policy-compose.js";
 import {
   blockTools,
   requireApproval,
   tokenBudget,
   rateLimit,
   requireLevel,
-} from "./policy";
+} from "./policy.js";
 
 /**
  * Security baseline — blocks dangerous tools and requires minimum governance.

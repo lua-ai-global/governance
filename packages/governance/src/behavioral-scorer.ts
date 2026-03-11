@@ -9,8 +9,8 @@
  * Returns per-dimension adjustments (-20 to +20) and evidence.
  */
 
-import type { ScoreDimension, DimensionResult } from "./types";
-import type { AuditEvent } from "./storage";
+import type { ScoreDimension, DimensionResult } from "./types.js";
+import type { AuditEvent } from "./storage.js";
 
 /** Behavioral analysis input — raw audit events for one agent */
 export interface BehavioralInput {

@@ -16,7 +16,7 @@
  * ```
  */
 
-import { BUILTIN_PATTERNS } from "./injection-patterns";
+import { BUILTIN_PATTERNS } from "./injection-patterns.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 

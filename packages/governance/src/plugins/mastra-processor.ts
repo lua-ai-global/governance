@@ -16,7 +16,7 @@ import type {
   GovernanceProcessorConfig,
   GovernanceViolation,
   ProcessorStats,
-} from "./mastra-processor-types";
+} from "./mastra-processor-types.js";
 
 // Re-export all types
 export type {
@@ -30,7 +30,7 @@ export type {
   MastraProcessorInterface,
   GovernanceProcessorConfig,
   ProcessorStats,
-} from "./mastra-processor-types";
+} from "./mastra-processor-types.js";
 
 // ─── GovernanceProcessor ──────────────────────────────────────
 

@@ -31,7 +31,7 @@ import type { AgentRegistration } from "../types";
 import type {
   BedrockInvokeAgentInput, BedrockActionGroupInvocation, BedrockToolUseBlock,
   GovernBedrockConfig, GovernedBedrockResult, BedrockInvokeHandler,
-} from "./bedrock-types";
+} from "./bedrock-types.js";
 
 // Re-export all types
 export type {
@@ -41,7 +41,7 @@ export type {
   BedrockContentBlock, BedrockToolSpec, BedrockTool, BedrockToolChoice,
   BedrockToolConfiguration,
   GovernBedrockConfig, GovernedBedrockResult, BedrockInvokeHandler,
-} from "./bedrock-types";
+} from "./bedrock-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

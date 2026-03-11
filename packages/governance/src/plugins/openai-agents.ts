@@ -33,13 +33,13 @@ import type {
   GovernAgentConfig,
   GovernedAgentResult,
   GovernedToolsResult,
-} from "./openai-agents-types";
+} from "./openai-agents-types.js";
 
 // Re-export all types for consumers
 export type {
   OpenAIFunctionTool, OpenAIAgent, OpenAIRunContext, OpenAIToolCallDetails,
   GovernAgentConfig, GovernedAgentResult, GovernedToolsResult,
-} from "./openai-agents-types";
+} from "./openai-agents-types.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 

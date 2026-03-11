@@ -5,7 +5,7 @@
  * Separated from the policy engine to keep files under 300 LOC.
  */
 
-import type { PolicyRule, PolicyAction } from "./policy";
+import type { PolicyRule, PolicyAction } from "./policy.js";
 
 /**
  * Block specific tools from being called by any agent.
