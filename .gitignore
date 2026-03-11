@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# env
+.env
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# claude
+.claude/
+.agent-logs/
+.agents/
+skills-lock.json
+
+# ide
+.idea/
+.vscode/

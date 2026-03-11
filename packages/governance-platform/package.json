@@ -1,0 +1,44 @@
+{
+  "name": "@lua-ai-global/governance-platform",
+  "version": "0.1.0",
+  "description": "Platform storage layer for @lua-ai-global/governance — auto-migrating schema, typed queries for org settings and policy tiers",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "tsx --test src/*.test.ts",
+    "lint": "tsc --noEmit"
+  },
+  "author": "Lua <hello@heylua.ai> (https://heylua.ai)",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lua-ai-global/governance",
+    "directory": "packages/governance-platform"
+  },
+  "peerDependencies": {
+    "pg": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": { "optional": true }
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

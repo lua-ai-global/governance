@@ -1,0 +1,269 @@
+{
+  "name": "@lua-ai-global/governance",
+  "version": "0.2.0",
+  "description": "AI Agent Governance for TypeScript — policy enforcement, scoring, compliance, and audit for AI agents",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "lua-governance": "dist/cli/init.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./policy": {
+      "types": "./dist/policy.d.ts",
+      "import": "./dist/policy.js"
+    },
+    "./scorer": {
+      "types": "./dist/scorer.d.ts",
+      "import": "./dist/scorer.js"
+    },
+    "./plugins/mastra": {
+      "types": "./dist/plugins/mastra.d.ts",
+      "import": "./dist/plugins/mastra.js"
+    },
+    "./plugins/mastra-processor": {
+      "types": "./dist/plugins/mastra-processor.d.ts",
+      "import": "./dist/plugins/mastra-processor.js"
+    },
+    "./plugins/vercel-ai": {
+      "types": "./dist/plugins/vercel-ai.d.ts",
+      "import": "./dist/plugins/vercel-ai.js"
+    },
+    "./plugins/langchain": {
+      "types": "./dist/plugins/langchain.d.ts",
+      "import": "./dist/plugins/langchain.js"
+    },
+    "./audit-integrity": {
+      "types": "./dist/audit-integrity.d.ts",
+      "import": "./dist/audit-integrity.js"
+    },
+    "./storage-postgres-schema": {
+      "types": "./dist/storage-postgres-schema.d.ts",
+      "import": "./dist/storage-postgres-schema.js"
+    },
+    "./compliance": {
+      "types": "./dist/compliance.d.ts",
+      "import": "./dist/compliance.js"
+    },
+    "./kill-switch": {
+      "types": "./dist/kill-switch.d.ts",
+      "import": "./dist/kill-switch.js"
+    },
+    "./storage-postgres": {
+      "types": "./dist/storage-postgres.d.ts",
+      "import": "./dist/storage-postgres.js"
+    },
+    "./injection-detect": {
+      "types": "./dist/injection-detect.d.ts",
+      "import": "./dist/injection-detect.js"
+    },
+    "./behavioral-scorer": {
+      "types": "./dist/behavioral-scorer.d.ts",
+      "import": "./dist/behavioral-scorer.js"
+    },
+    "./repo-patterns": {
+      "types": "./dist/repo-patterns.d.ts",
+      "import": "./dist/repo-patterns.js"
+    },
+    "./policy-compose": {
+      "types": "./dist/policy-compose.d.ts",
+      "import": "./dist/policy-compose.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js"
+    },
+    "./metrics": {
+      "types": "./dist/metrics.d.ts",
+      "import": "./dist/metrics.js"
+    },
+    "./plugins/openai-agents": {
+      "types": "./dist/plugins/openai-agents.d.ts",
+      "import": "./dist/plugins/openai-agents.js"
+    },
+    "./dry-run": {
+      "types": "./dist/dry-run.d.ts",
+      "import": "./dist/dry-run.js"
+    },
+    "./plugins/mcp": {
+      "types": "./dist/plugins/mcp.d.ts",
+      "import": "./dist/plugins/mcp.js"
+    },
+    "./plugins/crewai": {
+      "types": "./dist/plugins/crewai.d.ts",
+      "import": "./dist/plugins/crewai.js"
+    },
+    "./plugins/bedrock": {
+      "types": "./dist/plugins/bedrock.d.ts",
+      "import": "./dist/plugins/bedrock.js"
+    },
+    "./plugins/genkit": {
+      "types": "./dist/plugins/genkit.d.ts",
+      "import": "./dist/plugins/genkit.js"
+    },
+    "./plugins/semantic-kernel": {
+      "types": "./dist/plugins/semantic-kernel.d.ts",
+      "import": "./dist/plugins/semantic-kernel.js"
+    },
+    "./plugins/autogen": {
+      "types": "./dist/plugins/autogen.d.ts",
+      "import": "./dist/plugins/autogen.js"
+    },
+    "./plugins/a2a": {
+      "types": "./dist/plugins/a2a.d.ts",
+      "import": "./dist/plugins/a2a.js"
+    },
+    "./plugins/llamaindex": {
+      "types": "./dist/plugins/llamaindex.d.ts",
+      "import": "./dist/plugins/llamaindex.js"
+    },
+    "./plugins/cloudflare-ai": {
+      "types": "./dist/plugins/cloudflare-ai.d.ts",
+      "import": "./dist/plugins/cloudflare-ai.js"
+    },
+    "./plugins/deno": {
+      "types": "./dist/plugins/deno.d.ts",
+      "import": "./dist/plugins/deno.js"
+    },
+    "./plugins/anthropic": {
+      "types": "./dist/plugins/anthropic.d.ts",
+      "import": "./dist/plugins/anthropic.js"
+    },
+    "./plugins/mistral": {
+      "types": "./dist/plugins/mistral.d.ts",
+      "import": "./dist/plugins/mistral.js"
+    },
+    "./plugins/ollama": {
+      "types": "./dist/plugins/ollama.d.ts",
+      "import": "./dist/plugins/ollama.js"
+    },
+    "./plugins/e2b": {
+      "types": "./dist/plugins/e2b.d.ts",
+      "import": "./dist/plugins/e2b.js"
+    },
+    "./plugins/composio": {
+      "types": "./dist/plugins/composio.d.ts",
+      "import": "./dist/plugins/composio.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/fix-esm-imports.mjs",
+    "dev": "tsc --watch",
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "tsc"
+  },
+  "keywords": [
+    "ai-governance",
+    "agent-safety",
+    "typescript",
+    "policy-engine",
+    "ai-agents",
+    "compliance",
+    "audit",
+    "eu-ai-act"
+  ],
+  "author": "Lua <hello@heylua.ai> (https://heylua.ai)",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lua-ai-global/governance"
+  },
+  "homepage": "https://heylua.ai/governance",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.20.0",
+    "@aws-sdk/client-bedrock-agent-runtime": ">=3.0.0",
+    "@cloudflare/ai": ">=1.0.0",
+    "@composio/core": ">=0.6.0",
+    "@mastra/core": ">=1.0.0",
+    "@microsoft/semantic-kernel": ">=0.1.0",
+    "@mistralai/mistralai": ">=0.1.0",
+    "@modelcontextprotocol/sdk": ">=1.0.0",
+    "ai": ">=3.0.0",
+    "autogen": ">=0.1.0",
+    "crewai-js": ">=0.1.0",
+    "e2b": ">=0.16.0",
+    "genkit": ">=0.5.0",
+    "langchain": ">=0.1.0",
+    "llamaindex": ">=0.1.0",
+    "ollama": ">=0.5.0",
+    "openai-agents": ">=0.1.0",
+    "pg": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@mastra/core": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    },
+    "langchain": {
+      "optional": true
+    },
+    "openai-agents": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
+    "crewai-js": {
+      "optional": true
+    },
+    "@aws-sdk/client-bedrock-agent-runtime": {
+      "optional": true
+    },
+    "genkit": {
+      "optional": true
+    },
+    "@microsoft/semantic-kernel": {
+      "optional": true
+    },
+    "autogen": {
+      "optional": true
+    },
+    "llamaindex": {
+      "optional": true
+    },
+    "@cloudflare/ai": {
+      "optional": true
+    },
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@mistralai/mistralai": {
+      "optional": true
+    },
+    "ollama": {
+      "optional": true
+    },
+    "e2b": {
+      "optional": true
+    },
+    "@composio/core": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
