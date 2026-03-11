@@ -1,6 +1,6 @@
 {
   "name": "@lua-ai-global/governance-platform",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Platform storage layer for @lua-ai-global/governance — auto-migrating schema, typed queries for org settings and policy tiers",
   "type": "module",
   "main": "./dist/index.js",
