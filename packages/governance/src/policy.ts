@@ -20,7 +20,7 @@ export type PolicyAction =
   | "payment"
   | "custom";
 
-export type PolicyOutcome = "allow" | "block" | "require_approval";
+export type PolicyOutcome = "allow" | "block" | "warn" | "require_approval";
 
 export interface PolicyRule {
   id: string;
@@ -39,7 +39,6 @@ export type PolicyCondition =
   | { type: "token_limit"; maxTokens: number }
   | { type: "rate_limit"; maxActions: number; windowMs: number }
   | { type: "data_classification"; blocked: string[] }
-  | { type: "require_approval"; actions: PolicyAction[] }
   | { type: "agent_level"; minLevel: number }
   | { type: "tool_sequence"; tool: string; requiredPrior: string[] }
   | { type: "time_window"; allowedHours: { start: number; end: number } }
@@ -108,7 +107,7 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
     for (const rule of active) {
       if (evaluateCondition(rule.condition, ctx)) {
         return {
-          blocked: rule.outcome === "block",
+          blocked: rule.outcome === "block" || rule.outcome === "require_approval",
           reason: rule.reason,
           ruleId: rule.id,
           outcome: rule.outcome,
@@ -174,8 +173,6 @@ function evaluateCondition(condition: PolicyCondition, ctx: EnforcementContext):
       const inputStr = JSON.stringify(ctx.input).toLowerCase();
       return condition.blocked.some((b) => inputStr.includes(b.toLowerCase()));
     }
-    case "require_approval":
-      return condition.actions.includes(ctx.action);
     case "agent_level":
       return (ctx.agentLevel ?? 0) < condition.minLevel;
     case "tool_sequence":

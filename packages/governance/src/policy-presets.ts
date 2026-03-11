@@ -57,10 +57,11 @@ export function allowOnlyTools(tools: string[], reason?: string): PolicyRule {
 
 /**
  * Require human approval for specific action types.
+ * Uses the action_type condition with a require_approval outcome.
  *
  * @param actions - Action types that need human review (e.g., "payment", "external_request")
  * @param reason - Optional custom reason message
- * @returns A PolicyRule with outcome "require_approval" (not a block)
+ * @returns A PolicyRule with outcome "require_approval"
  *
  * @example
  * ```ts
@@ -71,7 +72,7 @@ export function requireApproval(actions: PolicyAction[], reason?: string): Polic
   return {
     id: `require-approval-${actions.join("-")}`,
     name: `Require approval: ${actions.join(", ")}`,
-    condition: { type: "require_approval", actions },
+    condition: { type: "action_type", actions },
     outcome: "require_approval",
     reason: reason ?? `Action requires human approval: ${actions.join(", ")}`,
     priority: 80,

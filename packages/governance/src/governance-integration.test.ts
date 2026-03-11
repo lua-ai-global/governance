@@ -140,7 +140,7 @@ describe("governance integration", () => {
     const agent = await gov.register({ name: "a", framework: "mastra", owner: "t" });
     const decision = await gov.enforce({ agentId: agent.id, agentName: "a", agentLevel: 0, action: "payment", tool: "stripe" });
     assert.equal(decision.outcome, "require_approval");
-    assert.equal(decision.blocked, false);
+    assert.equal(decision.blocked, true);
   });
 
   test("multiple rules with priority ordering", async () => {

@@ -368,16 +368,30 @@ describe("disabled rules", () => {
 });
 
 describe("require_approval outcome", () => {
-  test("require_approval is not blocked", () => {
+  test("require_approval uses action_type condition and blocks", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
         outcome: "require_approval",
-        condition: { type: "require_approval", actions: ["payment"] },
+        condition: { type: "action_type", actions: ["payment"] },
       })],
     });
     const d = engine.evaluate(makeCtx({ action: "payment" }));
-    assert.equal(d.blocked, false);
+    assert.equal(d.blocked, true);
     assert.equal(d.outcome, "require_approval");
+  });
+});
+
+describe("warn outcome", () => {
+  test("warn is not blocked", () => {
+    const engine = createPolicyEngine({
+      rules: [makeRule({
+        outcome: "warn",
+        condition: { type: "action_type", actions: ["data_access"] },
+      })],
+    });
+    const d = engine.evaluate(makeCtx({ action: "data_access" }));
+    assert.equal(d.blocked, false);
+    assert.equal(d.outcome, "warn");
   });
 });
 

@@ -77,6 +77,11 @@ describe("policy preset builders", () => {
       assert.equal(requireApproval(["payment"]).outcome, "require_approval");
     });
 
+    test("uses action_type condition", () => {
+      const rule = requireApproval(["payment"]);
+      assert.equal(rule.condition.type, "action_type");
+    });
+
     test("id includes action names", () => {
       const rule = requireApproval(["payment", "data_access"]);
       assert.equal(rule.id, "require-approval-payment-data_access");

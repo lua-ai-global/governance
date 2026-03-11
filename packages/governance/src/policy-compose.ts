@@ -195,8 +195,6 @@ function conditionKey(rule: PolicyRule): string {
       return `rate_limit`;
     case "data_classification":
       return `data_classification:${[...c.blocked].sort().join(",")}`;
-    case "require_approval":
-      return `require_approval:${[...c.actions].sort().join(",")}`;
     case "agent_level":
       return `agent_level`;
     case "tool_sequence":

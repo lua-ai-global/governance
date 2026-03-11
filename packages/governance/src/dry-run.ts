@@ -51,6 +51,7 @@ export interface DryRunSummary {
   wouldBlock: number;
   wouldAllow: number;
   wouldRequireApproval: number;
+  wouldWarn: number;
   blockRate: number;
   rulesTriggered: string[];
 }
@@ -117,6 +118,7 @@ export async function dryRun(
   let wouldBlock = 0;
   let wouldAllow = 0;
   let wouldRequireApproval = 0;
+  let wouldWarn = 0;
 
   for (const action of scenario.actions) {
     const decision = engine.evaluate({
@@ -137,10 +139,12 @@ export async function dryRun(
       rulesTriggered.add(decision.ruleId);
     }
 
-    if (decision.blocked) {
-      wouldBlock++;
-    } else if (decision.outcome === "require_approval") {
+    if (decision.outcome === "require_approval") {
       wouldRequireApproval++;
+    } else if (decision.outcome === "block") {
+      wouldBlock++;
+    } else if (decision.outcome === "warn") {
+      wouldWarn++;
     } else {
       wouldAllow++;
     }
@@ -158,6 +162,7 @@ export async function dryRun(
       wouldBlock,
       wouldAllow,
       wouldRequireApproval,
+      wouldWarn,
       blockRate: totalActions > 0 ? wouldBlock / totalActions : 0,
       rulesTriggered: [...rulesTriggered],
     },

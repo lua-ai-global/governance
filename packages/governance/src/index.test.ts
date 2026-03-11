@@ -123,7 +123,7 @@ describe("createGovernance", () => {
       action: "payment",
     });
     assert.equal(decision.outcome, "require_approval");
-    assert.equal(decision.blocked, false, "require_approval is not a block");
+    assert.equal(decision.blocked, true, "require_approval gates the action");
   });
 
   test("audit trail logs events", async () => {

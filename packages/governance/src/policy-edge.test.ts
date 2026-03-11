@@ -506,7 +506,7 @@ describe("custom condition", () => {
 });
 
 describe("require_approval outcome", () => {
-  test("require_approval is not blocked but has correct outcome", () => {
+  test("require_approval gates the action", () => {
     const engine = createPolicyEngine({
       rules: [requireApproval(["payment"])],
     });
@@ -516,9 +516,33 @@ describe("require_approval outcome", () => {
       action: "payment",
     });
 
-    // require_approval outcome does NOT set blocked=true
-    assert.equal(decision.blocked, false);
+    // require_approval outcome gates the action (blocked=true)
+    assert.equal(decision.blocked, true);
     assert.equal(decision.outcome, "require_approval");
+  });
+});
+
+describe("warn outcome", () => {
+  test("warn logs but does not block", () => {
+    const engine = createPolicyEngine({
+      rules: [{
+        id: "warn-data-access",
+        name: "Warn on data access",
+        condition: { type: "action_type", actions: ["data_access" as const] },
+        outcome: "warn" as const,
+        reason: "Data access should be monitored",
+        priority: 80,
+        enabled: true,
+      }],
+    });
+
+    const decision = engine.evaluate({
+      agentId: "a1",
+      action: "data_access",
+    });
+
+    assert.equal(decision.blocked, false);
+    assert.equal(decision.outcome, "warn");
   });
 });
 

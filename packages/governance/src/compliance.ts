@@ -173,7 +173,7 @@ async function assessRequirement(
 
     case "art14-intervention": {
       const rules = governance.policies.getRules();
-      if (rules.some((r) => r.condition.type === "require_approval")) return ok(req.id, "requireApproval() policy configured for human review");
+      if (rules.some((r) => r.outcome === "require_approval")) return ok(req.id, "requireApproval() policy configured for human review");
       if (config.humanOversight) return ok(req.id, "Human oversight mechanism confirmed");
       return fail(req.id, "No human oversight mechanism", "Add requireApproval() policy for sensitive operations");
     }
