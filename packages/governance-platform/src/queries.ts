@@ -113,19 +113,21 @@ export async function loadPolicyTiers(
   pool: PgPoolLike,
   orgId: string,
 ): Promise<{
+  plan: string;
   policyRules: StoredPolicyRule[];
   levelPolicies: Record<string, StoredPolicyRule[]>;
   agentOverrides: Record<string, StoredPolicyRule[]>;
   settings: OrgPreferences;
 }> {
   const result = await pool.query<OrgSettingsRow>(
-    `SELECT policy_rules, level_policies, agent_overrides, settings
+    `SELECT plan, policy_rules, level_policies, agent_overrides, settings
      FROM org_settings WHERE clerk_org_id = $1`,
     [orgId],
   );
 
   const row = result.rows[0];
   return {
+    plan: row?.plan ?? "free",
     policyRules: row?.policy_rules ?? [],
     levelPolicies: row?.level_policies ?? {},
     agentOverrides: row?.agent_overrides ?? {},
