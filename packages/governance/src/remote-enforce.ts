@@ -67,7 +67,11 @@ export function createRemoteEnforcer(config: RemoteConfig) {
       );
     }
 
-    return response.json() as Promise<EnforcementDecision>;
+    const body = await response.json() as { decision: EnforcementDecision } | EnforcementDecision;
+    // API returns { decision: {...}, duration, operationId } — unwrap if nested
+    return "decision" in body && body.decision && typeof body.decision === "object" && "blocked" in body.decision
+      ? body.decision
+      : body as EnforcementDecision;
   }
 
   async function remoteRegister(input: AgentRegistration): Promise<RemoteRegisterResult> {
