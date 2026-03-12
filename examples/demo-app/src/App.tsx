@@ -245,8 +245,13 @@ export default function App() {
       if (!policiesRes.ok) throw new Error(`Policies: ${policiesRes.status} ${policiesRes.statusText}`);
       const agentsData = await agentsRes.json();
       const policiesData = await policiesRes.json();
-      setRemoteAgents(agentsData.agents || []);
+      const agents = agentsData.agents || [];
+      setRemoteAgents(agents);
       setRemotePolicies(policiesData);
+      // Auto-select first agent if none selected
+      if (agents.length > 0 && !selectedRemoteAgentId) {
+        setSelectedRemoteAgentId(agents[0].id);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isCors = msg.includes("Failed to fetch") || msg.includes("CORS") || msg.includes("NetworkError");
@@ -254,7 +259,7 @@ export default function App() {
     } finally {
       setRemoteLoading(false);
     }
-  }, [hostedUrl, hostedKey]);
+  }, [hostedUrl, hostedKey, selectedRemoteAgentId]);
 
   const handleScan = useCallback(() => {
     if (!input.trim()) return;
@@ -414,18 +419,26 @@ export default function App() {
         <div className="sidebar-section">
           <span className="sidebar-label">Active Agent</span>
           <div className="config-summary">
-            <div className="summary-row">
-              <span className="key">Agent</span>
-              <span className="val">{activeAgent.name}</span>
-            </div>
-            <div className="summary-row">
-              <span className="key">Framework</span>
-              <span className="val">{activeAgent.framework}</span>
-            </div>
-            <div className="summary-row">
-              <span className="key">Level</span>
-              <span className={`val level-color level-${activeAgent.level}`}>{activeAgent.level}/5</span>
-            </div>
+            {mode === "hosted" && hostedAgentMode === "existing" && !selectedRemoteAgent ? (
+              <div className="summary-row">
+                <span className="val dim">No agent selected</span>
+              </div>
+            ) : (
+              <>
+                <div className="summary-row">
+                  <span className="key">Agent</span>
+                  <span className="val">{activeAgent.name}</span>
+                </div>
+                <div className="summary-row">
+                  <span className="key">Framework</span>
+                  <span className="val">{activeAgent.framework}</span>
+                </div>
+                <div className="summary-row">
+                  <span className="key">Level</span>
+                  <span className={`val level-color level-${activeAgent.level}`}>{activeAgent.level}/5</span>
+                </div>
+              </>
+            )}
             {mode === "local" && (
               <div className="summary-row">
                 <span className="key">Rules</span>
@@ -719,43 +732,74 @@ export default function App() {
                   )}
                 </section>
 
-                {/* Policies — link to dashboard */}
+                {/* Policies */}
                 <section className="panel">
                   <h3 className="panel-title">Active Policies</h3>
 
-                  {remotePolicies && (
-                    <div className="policy-overview">
-                      <div className="policy-summary-row">
+                  {!remotePolicies ? (
+                    <div className="empty-state">
+                      <p className="dim">Click "Fetch from API" to load policies.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="policy-plan-row">
                         <span className="policy-label">Plan</span>
                         <span className="badge accent">{remotePolicies.plan || "free"}</span>
                       </div>
-                      <div className="policy-summary-row">
-                        <span className="policy-label">Policy Rules</span>
-                        <span className="policy-count">{remotePolicies.policyRules.length}</span>
-                      </div>
-                      <div className="policy-summary-row">
-                        <span className="policy-label">Level Policies</span>
-                        <span className="policy-count">{remotePolicies.levelPolicies.length}</span>
-                      </div>
-                      {remotePolicies.agentOverrides.length > 0 && (
-                        <div className="policy-summary-row">
-                          <span className="policy-label">Agent Overrides</span>
-                          <span className="policy-count">{remotePolicies.agentOverrides.length}</span>
+
+                      {/* Policy Rule Sets */}
+                      {remotePolicies.policyRules.length > 0 && (
+                        <div className="field">
+                          <label>Policy Rules</label>
+                          <div className="policy-rule-list">
+                            {remotePolicies.policyRules.map((rule, i) => {
+                              const r = rule as Record<string, unknown>;
+                              return (
+                                <div key={i} className="policy-rule-card">
+                                  <div className="policy-rule-top">
+                                    <span className="policy-rule-name">{String(r.name || r.id || `Rule ${i + 1}`)}</span>
+                                    {r.status && <span className={`policy-rule-status status-${r.status}`}>{String(r.status)}</span>}
+                                    {r.version && <span className="policy-rule-version">v{String(r.version)}</span>}
+                                  </div>
+                                  {r.description && <div className="policy-rule-desc">{String(r.description)}</div>}
+                                  {r.ruleCount != null && <div className="policy-rule-meta">{String(r.ruleCount)} rules</div>}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
-                    </div>
-                  )}
 
-                  {remotePolicies && (remotePolicies.policyRules.length > 0 || remotePolicies.levelPolicies.length > 0) && (
-                    <details className="policy-details">
-                      <summary>View policy JSON</summary>
-                      <pre className="policy-json">{JSON.stringify({
-                        policyRules: remotePolicies.policyRules,
-                        levelPolicies: remotePolicies.levelPolicies,
-                        ...(remotePolicies.agentOverrides.length > 0 ? { agentOverrides: remotePolicies.agentOverrides } : {}),
-                        ...(Object.keys(remotePolicies.settings).length > 0 ? { settings: remotePolicies.settings } : {}),
-                      }, null, 2)}</pre>
-                    </details>
+                      {/* Level Policies */}
+                      {remotePolicies.levelPolicies.length > 0 && (
+                        <div className="field">
+                          <label>Governance Levels</label>
+                          <div className="level-policy-list">
+                            {remotePolicies.levelPolicies.map((lp, i) => {
+                              const l = lp as Record<string, unknown>;
+                              const lvl = Number(l.level ?? i);
+                              return (
+                                <div key={i} className="level-policy-row">
+                                  <span className={`level-pill level-${lvl}`}>L{lvl}</span>
+                                  <span className="level-policy-label">{String(l.label || l.name || `Level ${lvl}`)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Agent Overrides */}
+                      {remotePolicies.agentOverrides.length > 0 && (
+                        <div className="field">
+                          <label>Agent Overrides <span className="field-meta">{remotePolicies.agentOverrides.length}</span></label>
+                          <details className="policy-details">
+                            <summary>View details</summary>
+                            <pre className="policy-json">{JSON.stringify(remotePolicies.agentOverrides, null, 2)}</pre>
+                          </details>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <div className="dashboard-link-box">
