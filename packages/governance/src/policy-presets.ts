@@ -28,6 +28,7 @@ export function blockTools(tools: string[], reason?: string): PolicyRule {
     reason: reason ?? `Tool is on the blocked list: ${tools.join(", ")}`,
     priority: 100,
     enabled: true,
+    stage: "process",
   };
 }
 
@@ -52,6 +53,7 @@ export function allowOnlyTools(tools: string[], reason?: string): PolicyRule {
     reason: reason ?? `Tool is not on the approved list`,
     priority: 90,
     enabled: true,
+    stage: "process",
   };
 }
 
@@ -77,6 +79,7 @@ export function requireApproval(actions: PolicyAction[], reason?: string): Polic
     reason: reason ?? `Action requires human approval: ${actions.join(", ")}`,
     priority: 80,
     enabled: true,
+    stage: "process",
   };
 }
 
@@ -95,6 +98,7 @@ export function tokenBudget(maxTokens: number): PolicyRule {
     reason: `Session token budget exceeded (${maxTokens.toLocaleString()} max)`,
     priority: 70,
     enabled: true,
+    stage: "process",
   };
 }
 
@@ -114,6 +118,7 @@ export function rateLimit(maxActions: number, windowMs: number): PolicyRule {
     reason: `Rate limit exceeded (${maxActions} actions per ${windowMs / 1000}s window)`,
     priority: 60,
     enabled: true,
+    stage: "process",
   };
 }
 
@@ -132,6 +137,7 @@ export function requireLevel(minLevel: number): PolicyRule {
     reason: `Agent governance level below required minimum (L${minLevel})`,
     priority: 95,
     enabled: true,
+    stage: "process",
   };
 }
 
@@ -152,6 +158,7 @@ export function requireSequence(
     reason: reason ?? `${tool} requires prior call to: ${requiredPrior.join(", ")}`,
     priority: 85,
     enabled: true,
+    stage: "process",
   };
 }
 
@@ -169,5 +176,6 @@ export function timeWindow(
     reason: reason ?? `Action blocked outside allowed hours (${startHour}:00-${endHour}:00)`,
     priority: 50,
     enabled: true,
+    stage: "process",
   };
 }

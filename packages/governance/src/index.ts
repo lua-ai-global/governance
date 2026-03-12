@@ -29,7 +29,7 @@ import { createPolicyEngine } from "./policy.js";
 import { createMemoryStorage } from "./storage.js";
 import { createRemoteEnforcer, validateRemoteConfig } from "./remote-enforce.js";
 import type { AgentRegistration, GovernanceAssessment, FleetSummary } from "./types.js";
-import type { PolicyRule, PolicyEngine, EnforcementContext, EnforcementDecision } from "./policy.js";
+import type { PolicyRule, PolicyEngine, PolicyStage, EnforcementContext, EnforcementDecision } from "./policy.js";
 import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
 
 // Re-export storage types (other modules import from ./index)
@@ -52,7 +52,8 @@ export interface GovernanceConfig {
 /** Read-only view of the policy engine — addRule/removeRule are not exposed */
 export interface ReadonlyPolicyEngine {
   evaluate: (ctx: EnforcementContext) => EnforcementDecision;
-  getRules: () => PolicyRule[];
+  evaluateStage: (ctx: EnforcementContext, stage: PolicyStage) => EnforcementDecision;
+  getRules: (stage?: PolicyStage) => PolicyRule[];
   readonly ruleCount: number;
 }
 
@@ -63,6 +64,10 @@ export interface GovernanceInstance {
     assessment: GovernanceAssessment;
   }>;
   enforce: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
+  /** Evaluate only preprocess-stage rules */
+  enforcePreprocess: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
+  /** Evaluate only postprocess-stage rules */
+  enforcePostprocess: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
   audit: {
     log: (event: Omit<AuditEvent, "id" | "createdAt">) => Promise<AuditEvent>;
     query: (filters: AuditQueryFilters) => Promise<AuditEvent[]>;
@@ -222,10 +227,33 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     return assessFleet(registrations);
   }
 
+  async function enforceStage(ctx: EnforcementContext, stage: PolicyStage): Promise<EnforcementDecision> {
+    if (remote) return remote.enforce(ctx);
+
+    const decision = policies.evaluateStage(ctx, stage);
+
+    storage.createAuditEvent({
+      id: crypto.randomUUID(),
+      agentId: ctx.agentId,
+      eventType: `policy_evaluation_${stage}`,
+      outcome: decision.blocked ? "blocked" : "allowed",
+      severity: decision.blocked ? "warning" : "info",
+      detail: { action: ctx.action, tool: ctx.tool, ruleId: decision.ruleId, reason: decision.reason, stage },
+      policyRuleId: decision.ruleId ?? undefined,
+      createdAt: new Date().toISOString(),
+    }).catch(() => { /* audit failure must never block enforcement */ });
+
+    return decision;
+  }
+
+  const enforcePreprocess = (ctx: EnforcementContext) => enforceStage(ctx, "preprocess");
+  const enforcePostprocess = (ctx: EnforcementContext) => enforceStage(ctx, "postprocess");
+
   // Expose read-only policy view — mutations go through addRule/removeRule
   const readonlyPolicies: ReadonlyPolicyEngine = {
     evaluate: (ctx) => policies.evaluate(ctx),
-    getRules: () => policies.getRules(),
+    evaluateStage: (ctx, stage) => policies.evaluateStage(ctx, stage),
+    getRules: (stage?) => policies.getRules(stage),
     get ruleCount() { return policies.ruleCount; },
   };
 
@@ -237,7 +265,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     policies.removeRule(ruleId);
   }
 
-  return { register, enforce, audit, score: scoreAgentFn, scoreFleet: scoreFleetFn, policies: readonlyPolicies, storage, addRule, removeRule };
+  return { register, enforce, enforcePreprocess, enforcePostprocess, audit, score: scoreAgentFn, scoreFleet: scoreFleetFn, policies: readonlyPolicies, storage, addRule, removeRule };
 }
 
 // ─── Re-exports ─────────────────────────────────────────────────
@@ -245,7 +273,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 export { storedToRegistration };
 export { assessAgent, assessFleet, getGovernanceLevel } from "./scorer.js";
 export { createPolicyEngine, blockTools, allowOnlyTools, requireApproval, tokenBudget, rateLimit, requireLevel, requireSequence, timeWindow } from "./policy.js";
-export type { PolicyRule, PolicyEngine, PolicyAction, PolicyCondition, PolicyOutcome, EnforcementContext, EnforcementDecision, PolicyEngineConfig } from "./policy.js";
+export type { PolicyRule, PolicyEngine, PolicyAction, PolicyCondition, PolicyOutcome, PolicyStage, EnforcementContext, EnforcementDecision, PolicyEngineConfig } from "./policy.js";
 export type { AgentRegistration, AgentFramework, AgentStatus, GovernanceAssessment, GovernanceLevel, DimensionResult, ScoreDimension, FleetSummary } from "./types.js";
 export { detectInjection, createInjectionGuard, getBuiltinPatterns } from "./injection-detect.js";
 export type { InjectionPattern, InjectionCategory, InjectionResult, InjectionDetectorConfig } from "./injection-detect.js";
@@ -264,3 +292,7 @@ export type { AgentRoot } from "./monorepo-detect.js";
 export { RemoteEnforcementError } from "./remote-enforce.js";
 export { composePolicies, securityBaseline, complianceOverlay, platformDefaults } from "./policy-compose.js";
 export type { PolicySet, ConflictStrategy, ComposeConfig, ComposeResult, PolicyConflict } from "./policy-compose.js";
+export { getDefaultStage } from "./policy-stage-defaults.js";
+export { inputBlocklist, inputLength, inputPattern, networkAllowlist, scopeBoundary, costBudget, concurrentLimit, outputLength, outputPattern, sensitiveDataFilter } from "./policy-presets-extended.js";
+export { SENSITIVE_PATTERNS, getSensitivePatterns } from "./conditions/sensitive-patterns.js";
+export type { SensitivePattern } from "./conditions/sensitive-patterns.js";

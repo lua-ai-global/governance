@@ -7,6 +7,9 @@
 
 import { detectInjection } from "./injection-detect.js";
 import type { InjectionCategory } from "./injection-detect.js";
+import { evaluateBlocklist, evaluateInputLength, evaluateInputPattern } from "./conditions/preprocess.js";
+import { evaluateNetworkAllowlist, evaluateScopeBoundary, evaluateCostBudget, evaluateConcurrentLimit } from "./conditions/process.js";
+import { evaluateOutputLength, evaluateOutputPattern, evaluateSensitiveDataFilter } from "./conditions/postprocess.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -22,6 +25,8 @@ export type PolicyAction =
 
 export type PolicyOutcome = "allow" | "block" | "warn" | "require_approval";
 
+export type PolicyStage = "preprocess" | "process" | "postprocess";
+
 export interface PolicyRule {
   id: string;
   name: string;
@@ -30,6 +35,8 @@ export interface PolicyRule {
   reason: string;
   priority: number;
   enabled: boolean;
+  /** Pipeline stage — defaults to "process" when omitted */
+  stage?: PolicyStage;
 }
 
 export type PolicyCondition =
@@ -46,6 +53,16 @@ export type PolicyCondition =
   | { type: "all_of"; conditions: PolicyCondition[] }
   | { type: "not"; condition: PolicyCondition }
   | { type: "injection_guard"; threshold: number; skipCategories: string[] }
+  | { type: "blocklist"; terms: string[]; caseSensitive?: boolean }
+  | { type: "input_length"; maxChars?: number; maxTokens?: number }
+  | { type: "input_pattern"; pattern: string; flags?: string }
+  | { type: "network_allowlist"; allowedDomains: string[] }
+  | { type: "scope_boundary"; allowedPaths?: string[]; blockedPaths?: string[] }
+  | { type: "cost_budget"; maxCost: number; currency?: string }
+  | { type: "concurrent_limit"; maxConcurrent: number }
+  | { type: "output_length"; maxChars?: number; maxTokens?: number }
+  | { type: "output_pattern"; pattern: string; flags?: string }
+  | { type: "sensitive_data_filter"; patterns?: string[] }
   | { type: "custom"; evaluate: (ctx: EnforcementContext) => boolean };
 
 export interface EnforcementContext {
@@ -59,6 +76,20 @@ export interface EnforcementContext {
   sessionTokensUsed?: number;
   recentActionCount?: number;
   toolHistory?: string[];
+  /** Output text for postprocess evaluation */
+  outputText?: string;
+  /** Output token count for postprocess evaluation */
+  outputTokenCount?: number;
+  /** Execution duration in ms for postprocess evaluation */
+  executionDurationMs?: number;
+  /** Target URL/domain for network_allowlist evaluation */
+  targetUrl?: string;
+  /** Target file/resource path for scope_boundary evaluation */
+  targetPath?: string;
+  /** Session cost so far for cost_budget evaluation */
+  sessionCost?: number;
+  /** Current concurrent tool count for concurrent_limit evaluation */
+  concurrentCount?: number;
 }
 
 export interface EnforcementDecision {
@@ -74,9 +105,11 @@ export interface EnforcementDecision {
 
 export interface PolicyEngine {
   evaluate: (ctx: EnforcementContext) => EnforcementDecision;
+  /** Evaluate only rules matching the given stage */
+  evaluateStage: (ctx: EnforcementContext, stage: PolicyStage) => EnforcementDecision;
   addRule: (rule: PolicyRule) => void;
   removeRule: (ruleId: string) => void;
-  getRules: () => PolicyRule[];
+  getRules: (stage?: PolicyStage) => PolicyRule[];
   ruleCount: number;
 }
 
@@ -138,12 +171,42 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
     if (idx >= 0) rules.splice(idx, 1);
   }
 
-  function getRules(): PolicyRule[] {
+  function evaluateStage(ctx: EnforcementContext, stage: PolicyStage): EnforcementDecision {
+    const active = rules
+      .filter((r) => r.enabled && (r.stage ?? "process") === stage)
+      .sort((a, b) => b.priority - a.priority);
+
+    for (const rule of active) {
+      if (evaluateCondition(rule.condition, ctx)) {
+        return {
+          blocked: rule.outcome === "block" || rule.outcome === "require_approval",
+          reason: rule.reason,
+          ruleId: rule.id,
+          outcome: rule.outcome,
+          evaluatedAt: new Date().toISOString(),
+          rulesEvaluated: active.length,
+        };
+      }
+    }
+
+    return {
+      blocked: defaultOutcome === "block",
+      reason: "No policy rules matched",
+      ruleId: null,
+      outcome: defaultOutcome,
+      evaluatedAt: new Date().toISOString(),
+      rulesEvaluated: active.length,
+    };
+  }
+
+  function getRules(stage?: PolicyStage): PolicyRule[] {
+    if (stage) return rules.filter((r) => (r.stage ?? "process") === stage);
     return [...rules];
   }
 
   return {
     evaluate,
+    evaluateStage,
     addRule,
     removeRule,
     getRules,
@@ -193,44 +256,53 @@ function evaluateCondition(condition: PolicyCondition, ctx: EnforcementContext):
       return !evaluateCondition(condition.condition, ctx);
     case "injection_guard": {
       if (!ctx.input) return false;
-      const strings = extractStringsForInjection(ctx.input);
       const skip = condition.skipCategories as InjectionCategory[];
-      for (const str of strings) {
-        const result = detectInjection(str, {
-          threshold: condition.threshold,
-          skipCategories: skip.length > 0 ? skip : undefined,
-        });
-        if (result.detected) return true;
+      const opts = { threshold: condition.threshold, skipCategories: skip.length > 0 ? skip : undefined };
+      for (const str of extractStrings(ctx.input)) {
+        if (detectInjection(str, opts).detected) return true;
       }
       return false;
     }
+    case "blocklist":
+      return evaluateBlocklist(ctx, condition.terms, condition.caseSensitive);
+    case "input_length":
+      return evaluateInputLength(ctx, condition.maxChars, condition.maxTokens);
+    case "input_pattern":
+      return evaluateInputPattern(ctx, condition.pattern, condition.flags);
+    case "network_allowlist":
+      return evaluateNetworkAllowlist(ctx, condition.allowedDomains);
+    case "scope_boundary":
+      return evaluateScopeBoundary(ctx, condition.allowedPaths, condition.blockedPaths);
+    case "cost_budget":
+      return evaluateCostBudget(ctx, condition.maxCost);
+    case "concurrent_limit":
+      return evaluateConcurrentLimit(ctx, condition.maxConcurrent);
+    case "output_length":
+      return evaluateOutputLength(ctx, condition.maxChars, condition.maxTokens);
+    case "output_pattern":
+      return evaluateOutputPattern(ctx, condition.pattern, condition.flags);
+    case "sensitive_data_filter":
+      return evaluateSensitiveDataFilter(ctx, condition.patterns);
     case "custom": {
-      const result = condition.evaluate(ctx);
-      // Guard against async evaluators — they'd be truthy and silently always match
-      if (result !== null && typeof result === "object" && typeof (result as Promise<boolean>).then === "function") {
-        throw new Error(
-          "Custom policy evaluator returned a Promise — evaluators must be synchronous. " +
-          "Move async logic outside the policy engine or pre-compute the result.",
-        );
+      const r = condition.evaluate(ctx);
+      if (r && typeof r === "object" && typeof (r as Promise<boolean>).then === "function") {
+        throw new Error("Custom policy evaluator returned a Promise — evaluators must be synchronous.");
       }
-      return result;
+      return r;
     }
   }
 }
 
-/** Extract all string values from a nested object for injection scanning */
-function extractStringsForInjection(obj: Record<string, unknown>): string[] {
-  const strings: string[] = [];
-  function walk(value: unknown): void {
-    if (typeof value === "string") strings.push(value);
-    else if (Array.isArray(value)) value.forEach(walk);
-    else if (value !== null && typeof value === "object") {
-      Object.values(value as Record<string, unknown>).forEach(walk);
-    }
-  }
-  walk(obj);
-  if (strings.length > 1) strings.push(strings.join(" "));
-  return strings;
+/** Extract all string values from a nested object for scanning */
+function extractStrings(obj: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  (function walk(v: unknown) {
+    if (typeof v === "string") out.push(v);
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") Object.values(v as Record<string, unknown>).forEach(walk);
+  })(obj);
+  if (out.length > 1) out.push(out.join(" "));
+  return out;
 }
 
 // ─── Re-export presets ──────────────────────────────────────────
