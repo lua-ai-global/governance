@@ -948,6 +948,13 @@ body {
   gap: 0.35rem;
 }
 
+.policy-source-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
 .level-policy-row {
   display: flex;
   align-items: center;
@@ -956,6 +963,11 @@ body {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
+}
+
+.level-policy-row.active {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.06);
 }
 
 .level-policy-label {

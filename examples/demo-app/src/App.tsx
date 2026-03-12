@@ -215,6 +215,28 @@ export default function App() {
     return { id: newAgentName || "new-agent", name: newAgentName || "new-agent", framework: newAgentFramework, level: 0 };
   }, [mode, agentConfig, hostedAgentMode, selectedRemoteAgent, newAgentName, newAgentFramework]);
 
+  /** Resolve effective policies for the selected remote agent (3-tier merge) */
+  const resolvedPolicies = useMemo(() => {
+    if (!remotePolicies) return null;
+    const base = remotePolicies.policyRules;
+    const level = activeAgent.level;
+    const levelRules = remotePolicies.levelPolicies[String(level)] ?? [];
+    const agentRules = remotePolicies.agentOverrides[activeAgent.id] ?? [];
+
+    // Merge: base → level → agent (later overrides earlier by ID)
+    const map = new Map<string, RemotePolicyRule>();
+    for (const r of base) map.set(r.id, r);
+    for (const r of levelRules) map.set(r.id, r);
+    for (const r of agentRules) map.set(r.id, r);
+    return {
+      rules: Array.from(map.values()).sort((a, b) => b.priority - a.priority),
+      hasLevelRules: levelRules.length > 0,
+      hasAgentOverrides: agentRules.length > 0,
+      levelRuleCount: levelRules.length,
+      agentOverrideCount: agentRules.length,
+    };
+  }, [remotePolicies, activeAgent]);
+
   const codePreview = useMemo(
     () => buildCodePreview(agentConfig, policyConfig, mode),
     [agentConfig, policyConfig, mode],
@@ -750,6 +772,10 @@ export default function App() {
                     <div className="empty-state">
                       <p className="dim">Click "Fetch from API" to load policies.</p>
                     </div>
+                  ) : !resolvedPolicies ? (
+                    <div className="empty-state">
+                      <p className="dim">Select an agent to see resolved policies.</p>
+                    </div>
                   ) : (
                     <>
                       <div className="policy-plan-row">
@@ -757,54 +783,73 @@ export default function App() {
                         <span className="badge accent">{remotePolicies.plan || "free"}</span>
                       </div>
 
-                      {/* Policy Rule Sets */}
-                      {remotePolicies.policyRules.length > 0 && (
+                      {/* Resolved agent context */}
+                      <div className="policy-plan-row" style={{ marginTop: 8 }}>
+                        <span className="policy-label">Agent</span>
+                        <span className="policy-rule-name">{activeAgent.name}</span>
+                        <span className={`level-pill level-${activeAgent.level}`}>L{activeAgent.level}</span>
+                      </div>
+
+                      {/* Resolution source indicators */}
+                      <div className="policy-source-tags">
+                        <span className="badge dim">Org defaults: {remotePolicies.policyRules.length}</span>
+                        {resolvedPolicies.hasLevelRules && (
+                          <span className="badge accent">L{activeAgent.level} rules: +{resolvedPolicies.levelRuleCount}</span>
+                        )}
+                        {resolvedPolicies.hasAgentOverrides && (
+                          <span className="badge warning">Agent overrides: +{resolvedPolicies.agentOverrideCount}</span>
+                        )}
+                      </div>
+
+                      {/* Resolved rules */}
+                      {resolvedPolicies.rules.length > 0 ? (
                         <div className="field">
-                          <label>Policy Rules <span className="field-meta">{remotePolicies.policyRules.length}</span></label>
+                          <label>Effective Rules <span className="field-meta">{resolvedPolicies.rules.length}</span></label>
                           <div className="policy-rule-list">
-                            {remotePolicies.policyRules.map((rule) => (
-                              <div key={rule.id} className="policy-rule-card">
-                                <div className="policy-rule-top">
-                                  <span className="policy-rule-name">{rule.name}</span>
-                                  <span className={`badge ${rule.outcome === "block" ? "danger" : rule.outcome === "warn" ? "warning" : "accent"}`}>{rule.outcome}</span>
-                                  <span className="badge dim">p{rule.priority}</span>
+                            {resolvedPolicies.rules.map((rule) => {
+                              // Determine source for visual indicator
+                              const isAgentOverride = remotePolicies.agentOverrides[activeAgent.id]?.some((r) => r.id === rule.id);
+                              const isLevelRule = !isAgentOverride && remotePolicies.levelPolicies[String(activeAgent.level)]?.some((r) => r.id === rule.id);
+                              return (
+                                <div key={rule.id} className="policy-rule-card">
+                                  <div className="policy-rule-top">
+                                    <span className="policy-rule-name">{rule.name}</span>
+                                    <span className={`badge ${rule.outcome === "block" ? "danger" : rule.outcome === "warn" ? "warning" : "accent"}`}>{rule.outcome}</span>
+                                    <span className="badge dim">p{rule.priority}</span>
+                                    {isAgentOverride && <span className="badge warning" style={{ fontSize: 10 }}>override</span>}
+                                    {isLevelRule && <span className="badge accent" style={{ fontSize: 10 }}>L{activeAgent.level}</span>}
+                                  </div>
+                                  <div className="policy-rule-desc">
+                                    Condition: <code>{rule.condition}</code>
+                                    {Object.keys(rule.config).length > 0 && (
+                                      <> · Config: <code>{JSON.stringify(rule.config)}</code></>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="policy-rule-desc">
-                                  Condition: <code>{rule.condition}</code>
-                                  {Object.keys(rule.config).length > 0 && (
-                                    <> · Config: <code>{JSON.stringify(rule.config)}</code></>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
+                        </div>
+                      ) : (
+                        <div className="empty-state">
+                          <p className="dim">No policy rules configured for this org.</p>
                         </div>
                       )}
 
-                      {/* Level Policies */}
+                      {/* All levels overview (collapsible) */}
                       {Object.keys(remotePolicies.levelPolicies).length > 0 && (
-                        <div className="field">
-                          <label>Level Policies <span className="field-meta">{Object.keys(remotePolicies.levelPolicies).length} levels</span></label>
+                        <details className="policy-details" style={{ marginTop: 12 }}>
+                          <summary>All level policies ({Object.keys(remotePolicies.levelPolicies).length} levels)</summary>
                           <div className="level-policy-list">
                             {Object.entries(remotePolicies.levelPolicies).map(([level, rules]) => (
-                              <div key={level} className="level-policy-row">
+                              <div key={level} className={`level-policy-row ${String(activeAgent.level) === level ? "active" : ""}`}>
                                 <span className={`level-pill level-${level}`}>L{level}</span>
                                 <span className="level-policy-label">{rules.length} rule{rules.length !== 1 ? "s" : ""}</span>
+                                {String(activeAgent.level) === level && <span className="badge accent" style={{ fontSize: 10 }}>current</span>}
                               </div>
                             ))}
                           </div>
-                        </div>
-                      )}
-
-                      {/* Agent Overrides */}
-                      {Object.keys(remotePolicies.agentOverrides).length > 0 && (
-                        <div className="field">
-                          <label>Agent Overrides <span className="field-meta">{Object.keys(remotePolicies.agentOverrides).length}</span></label>
-                          <details className="policy-details">
-                            <summary>View details</summary>
-                            <pre className="policy-json">{JSON.stringify(remotePolicies.agentOverrides, null, 2)}</pre>
-                          </details>
-                        </div>
+                        </details>
                       )}
                     </>
                   )}
