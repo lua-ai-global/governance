@@ -233,28 +233,10 @@ describe("remote enforce", () => {
 
 // ─── Remote register ────────────────────────────────────────────
 
-describe("remote register", () => {
+describe("remote register (local no-op)", () => {
   const config = { serverUrl: "https://api.example.com", apiKey: "test-key" };
 
-  test("POSTs to /api/v1/agents with correct headers", async () => {
-    const expected = {
-      id: "remote-id-1",
-      score: 85,
-      level: 4,
-      status: "approved",
-      assessment: {
-        agentId: "remote-id-1",
-        agentName: "my-agent",
-        compositeScore: 85,
-        level: { level: 4, label: "Certified", autonomy: "Cross-team", minScore: 81, maxScore: 100 },
-        dimensions: [],
-        status: "approved",
-        assessedAt: "2026-03-10T00:00:00Z",
-        recommendations: [],
-      },
-    };
-    setupFetchMock(200, expected);
-
+  test("returns synthetic result using agent name as ID", async () => {
     const remote = createRemoteEnforcer(config);
     const result = await remote.register({
       name: "my-agent",
@@ -262,66 +244,17 @@ describe("remote register", () => {
       owner: "team-a",
     });
 
-    assert.equal(result.id, "remote-id-1");
-    assert.equal(result.score, 85);
-    assert.equal(result.level, 4);
-    assert.equal(result.status, "approved");
-
-    const call = mockFetch.mock.calls[0];
-    assert.equal(call.arguments[0], "https://api.example.com/api/v1/agents");
-    const body = JSON.parse(call.arguments[1].body as string);
-    assert.equal(body.name, "my-agent");
-    assert.equal(body.framework, "mastra");
+    assert.equal(result.id, "my-agent");
+    assert.equal(result.status, "registered");
+    assert.equal(result.assessment.agentName, "my-agent");
   });
 
-  test("throws RemoteEnforcementError on 401", async () => {
-    setupFetchMock(401, "Unauthorized", false);
-
+  test("does not call fetch — registration is handled by enforce endpoint", async () => {
+    setupFetchMock(200, {});
     const remote = createRemoteEnforcer(config);
-    await assert.rejects(
-      () => remote.register({ name: "a", framework: "mastra", owner: "t" }),
-      (err: RemoteEnforcementError) => {
-        assert.equal(err.statusCode, 401);
-        return true;
-      },
-    );
-  });
+    await remote.register({ name: "a", framework: "mastra", owner: "t" });
 
-  test("throws RemoteEnforcementError on 500", async () => {
-    setupFetchMock(500, "Server error", false);
-
-    const remote = createRemoteEnforcer(config);
-    await assert.rejects(
-      () => remote.register({ name: "a", framework: "mastra", owner: "t" }),
-      (err: RemoteEnforcementError) => {
-        assert.equal(err.statusCode, 500);
-        return true;
-      },
-    );
-  });
-
-  test("sends full registration payload", async () => {
-    setupFetchMock(200, { id: "x", score: 50, level: 2, status: "flagged", assessment: {} });
-
-    const remote = createRemoteEnforcer(config);
-    await remote.register({
-      name: "complex-agent",
-      framework: "langchain",
-      owner: "ml-team",
-      description: "ML research agent",
-      version: "2.0.0",
-      tools: ["web_search", "code_exec"],
-      channels: ["slack"],
-      hasAuth: true,
-      hasGuardrails: true,
-    });
-
-    const body = JSON.parse(mockFetch.mock.calls[0].arguments[1].body as string);
-    assert.equal(body.name, "complex-agent");
-    assert.equal(body.framework, "langchain");
-    assert.equal(body.description, "ML research agent");
-    assert.deepEqual(body.tools, ["web_search", "code_exec"]);
-    assert.equal(body.hasAuth, true);
+    assert.equal(mockFetch.mock.calls.length, 0);
   });
 });
 
@@ -355,14 +288,8 @@ describe("createGovernance remote integration", () => {
     assert.equal(mockFetch.mock.calls.length, 1);
   });
 
-  test("register delegates to remote when serverUrl is set", async () => {
-    setupFetchMock(200, {
-      id: "remote-id",
-      score: 90,
-      level: 4,
-      status: "approved",
-      assessment: { agentId: "remote-id", agentName: "test", compositeScore: 90, level: {}, dimensions: [], status: "approved", assessedAt: "", recommendations: [] },
-    });
+  test("register returns synthetic result when serverUrl is set (no fetch)", async () => {
+    setupFetchMock(200, {});
 
     const gov = createGovernance({
       serverUrl: "https://api.example.com",
@@ -375,8 +302,10 @@ describe("createGovernance remote integration", () => {
       owner: "team",
     });
 
-    assert.equal(result.id, "remote-id");
-    assert.equal(result.score, 90);
+    // Register is a local no-op — API auto-registers on enforce
+    assert.equal(result.id, "test");
+    assert.equal(result.status, "registered");
+    assert.equal(mockFetch.mock.calls.length, 0);
   });
 
   test("local methods still work when serverUrl is set", async () => {
