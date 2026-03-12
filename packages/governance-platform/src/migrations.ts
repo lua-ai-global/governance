@@ -41,4 +41,35 @@ export const MIGRATIONS: Migration[] = [
         WHERE NOT (settings ? 'autoRegisterAgents');
     `,
   },
+  {
+    id: 3,
+    name: "create-saved-policies",
+    sql: `
+      CREATE TABLE IF NOT EXISTS saved_policies (
+        id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        clerk_org_id    TEXT NOT NULL,
+        name            TEXT NOT NULL,
+        description     TEXT NOT NULL DEFAULT '',
+        rules           JSONB NOT NULL DEFAULT '[]'::jsonb,
+        version         INTEGER NOT NULL DEFAULT 1,
+        is_org_default  BOOLEAN NOT NULL DEFAULT false,
+        assigned_levels JSONB NOT NULL DEFAULT '[]'::jsonb,
+        assigned_agents JSONB NOT NULL DEFAULT '[]'::jsonb,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_saved_policies_org
+        ON saved_policies (clerk_org_id);
+
+      -- Backfill: if table already existed without is_org_default, add the column
+      ALTER TABLE saved_policies
+        ADD COLUMN IF NOT EXISTS is_org_default BOOLEAN NOT NULL DEFAULT false;
+
+      -- Policies with no level/agent assignments become org defaults
+      UPDATE saved_policies
+        SET is_org_default = true
+        WHERE assigned_levels = '[]'::jsonb
+          AND assigned_agents = '[]'::jsonb;
+    `,
+  },
 ];

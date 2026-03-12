@@ -15,16 +15,23 @@
 
 import type { PgPoolLike, PlatformStorageConfig } from "./types.js";
 import { runMigrations } from "./migrator.js";
-import { loadOrgSettings, saveOrgSettings, loadPolicyTiers } from "./queries.js";
-import type { StoredOrgSettings, OrgSettingsUpdate } from "./types.js";
+import {
+  loadOrgSettings,
+  saveOrgSettings,
+  loadPolicyTiers,
+  listSavedPolicies,
+} from "./queries.js";
+import type { StoredOrgSettings, StoredSavedPolicy, OrgSettingsUpdate } from "./types.js";
 
 export interface PlatformStorage {
   /** Load full org settings (returns defaults if no row exists) */
   loadOrgSettings: (orgId: string) => Promise<StoredOrgSettings>;
-  /** Save org settings (partial — only updates provided fields) */
+  /** Save org settings (plan + preferences only) */
   saveOrgSettings: (orgId: string, update: OrgSettingsUpdate) => Promise<void>;
-  /** Load just policy tiers for enforcement (lightweight) */
+  /** Load policy tiers for enforcement — reads directly from saved_policies */
   loadPolicyTiers: (orgId: string) => ReturnType<typeof loadPolicyTiers>;
+  /** List all saved policies for an org */
+  listSavedPolicies: (orgId: string) => Promise<StoredSavedPolicy[]>;
   /** Number of migrations applied on init (0 = already up to date) */
   migrationsApplied: number;
 }
@@ -48,6 +55,7 @@ export async function createPlatformStorage(
     loadOrgSettings: (orgId) => loadOrgSettings(pool, orgId),
     saveOrgSettings: (orgId, update) => saveOrgSettings(pool, orgId, update),
     loadPolicyTiers: (orgId) => loadPolicyTiers(pool, orgId),
+    listSavedPolicies: (orgId) => listSavedPolicies(pool, orgId),
     migrationsApplied,
   };
 }
@@ -58,10 +66,11 @@ export type {
   PlatformStorageConfig,
   StoredOrgSettings,
   StoredPolicyRule,
+  StoredSavedPolicy,
   OrgPreferences,
   OrgSettingsUpdate,
 } from "./types.js";
 
 export { runMigrations } from "./migrator.js";
 export { MIGRATIONS } from "./migrations.js";
-export { loadPolicyTiers } from "./queries.js";
+export { loadPolicyTiers, listSavedPolicies } from "./queries.js";

@@ -11,24 +11,37 @@ export interface PgPoolLike {
   ): Promise<{ rows: R[] }>;
 }
 
-/** A policy rule as stored in JSONB */
+/** A policy rule as stored in JSONB (matches DashboardRule shape) */
 export interface StoredPolicyRule {
   id: string;
   name: string;
   condition: string;
-  action: string;
-  priority?: number;
-  enabled?: boolean;
-  config?: Record<string, unknown>;
+  /** What happens when this rule triggers: "block" | "require_approval" | "warn" */
+  outcome: string;
+  priority: number;
+  enabled: boolean;
+  config: Record<string, unknown>;
+}
+
+/** A saved policy record from the saved_policies table */
+export interface StoredSavedPolicy {
+  id: string;
+  clerkOrgId: string;
+  name: string;
+  description: string;
+  rules: StoredPolicyRule[];
+  version: number;
+  isOrgDefault: boolean;
+  assignedLevels: number[];
+  assignedAgents: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Org settings as stored in the DB */
 export interface StoredOrgSettings {
   clerkOrgId: string;
   plan: string;
-  policyRules: StoredPolicyRule[];
-  levelPolicies: Record<string, StoredPolicyRule[]>;
-  agentOverrides: Record<string, StoredPolicyRule[]>;
   settings: OrgPreferences;
   createdAt: string;
   updatedAt: string;
@@ -41,9 +54,6 @@ export interface OrgPreferences {
 
 /** Partial update payload — each field is optional */
 export interface OrgSettingsUpdate {
-  policyRules?: StoredPolicyRule[];
-  levelPolicies?: Record<string, StoredPolicyRule[]>;
-  agentOverrides?: Record<string, StoredPolicyRule[]>;
   settings?: Partial<OrgPreferences>;
 }
 
