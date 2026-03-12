@@ -13,6 +13,7 @@ import type {
   StoredSavedPolicy,
   OrgPreferences,
   OrgSettingsUpdate,
+  KillSwitchState,
 } from "./types.js";
 
 /* ------------------------------------------------------------------ */
@@ -33,6 +34,7 @@ function rowToOrgSettings(row: OrgSettingsRow): StoredOrgSettings {
     plan: row.plan,
     settings: {
       autoRegisterAgents: row.settings?.autoRegisterAgents !== false,
+      killSwitch: (row.settings?.killSwitch as KillSwitchState | undefined) ?? null,
     },
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -42,7 +44,7 @@ function rowToOrgSettings(row: OrgSettingsRow): StoredOrgSettings {
 const DEFAULT_SETTINGS: StoredOrgSettings = {
   clerkOrgId: "",
   plan: "free",
-  settings: { autoRegisterAgents: true },
+  settings: { autoRegisterAgents: true, killSwitch: null },
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -186,6 +188,7 @@ export async function loadPolicyTiers(
     agentOverrides,
     settings: {
       autoRegisterAgents: orgRow?.settings?.autoRegisterAgents !== false,
+      killSwitch: (orgRow?.settings?.killSwitch as KillSwitchState | null | undefined) ?? null,
     },
   };
 }

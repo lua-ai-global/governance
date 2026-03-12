@@ -69,6 +69,7 @@ export type {
   StoredSavedPolicy,
   OrgPreferences,
   OrgSettingsUpdate,
+  KillSwitchState,
 } from "./types.js";
 
 export { runMigrations } from "./migrator.js";

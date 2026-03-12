@@ -47,9 +47,19 @@ export interface StoredOrgSettings {
   updatedAt: string;
 }
 
+/** Kill switch state persisted in org settings */
+export interface KillSwitchState {
+  reason: string;
+  killedAt: string;
+  killedBy?: string;
+  scope: "fleet" | "agent";
+  agentId?: string;
+}
+
 /** Org-level preferences stored in settings JSONB */
 export interface OrgPreferences {
   autoRegisterAgents: boolean;
+  killSwitch?: KillSwitchState | null;
 }
 
 /** Partial update payload — each field is optional */
