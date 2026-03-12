@@ -171,21 +171,17 @@ export function createInjectionGuard(config?: InjectionDetectorConfig & {
     id: "injection-guard",
     name: "Prompt Injection Guard",
     condition: {
-      type: "custom",
-      evaluate: (ctx) => {
-        if (!ctx.input) return false;
-        const strings = extractStrings(ctx.input);
-        for (const str of strings) {
-          const result = detectInjection(str, config);
-          if (result.detected) return true;
-        }
-        return false;
+      type: "injection_guard",
+      params: {
+        threshold,
+        skipCategories: config?.skipCategories ?? [],
       },
     },
     outcome: "block",
     reason: `Prompt injection detected (threshold: ${threshold})`,
     priority,
     enabled: true,
+    stage: "preprocess" as const,
   };
 }
 

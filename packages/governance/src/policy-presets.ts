@@ -23,7 +23,7 @@ export function blockTools(tools: string[], reason?: string): PolicyRule {
   return {
     id: `block-tools-${tools.join("-")}`,
     name: `Block tools: ${tools.join(", ")}`,
-    condition: { type: "tool_blocked", tools },
+    condition: { type: "tool_blocked", params: { tools } },
     outcome: "block",
     reason: reason ?? `Tool is on the blocked list: ${tools.join(", ")}`,
     priority: 100,
@@ -48,7 +48,7 @@ export function allowOnlyTools(tools: string[], reason?: string): PolicyRule {
   return {
     id: `allow-only-tools`,
     name: `Allow only: ${tools.join(", ")}`,
-    condition: { type: "tool_allowed", tools },
+    condition: { type: "tool_allowed", params: { tools } },
     outcome: "block",
     reason: reason ?? `Tool is not on the approved list`,
     priority: 90,
@@ -74,7 +74,7 @@ export function requireApproval(actions: PolicyAction[], reason?: string): Polic
   return {
     id: `require-approval-${actions.join("-")}`,
     name: `Require approval: ${actions.join(", ")}`,
-    condition: { type: "action_type", actions },
+    condition: { type: "action_type", params: { actions } },
     outcome: "require_approval",
     reason: reason ?? `Action requires human approval: ${actions.join(", ")}`,
     priority: 80,
@@ -93,7 +93,7 @@ export function tokenBudget(maxTokens: number): PolicyRule {
   return {
     id: `token-budget-${maxTokens}`,
     name: `Token budget: ${maxTokens.toLocaleString()}`,
-    condition: { type: "token_limit", maxTokens },
+    condition: { type: "token_limit", params: { maxTokens } },
     outcome: "block",
     reason: `Session token budget exceeded (${maxTokens.toLocaleString()} max)`,
     priority: 70,
@@ -113,7 +113,7 @@ export function rateLimit(maxActions: number, windowMs: number): PolicyRule {
   return {
     id: `rate-limit-${maxActions}-${windowMs}`,
     name: `Rate limit: ${maxActions} per ${windowMs}ms`,
-    condition: { type: "rate_limit", maxActions, windowMs },
+    condition: { type: "rate_limit", params: { maxActions, windowMs } },
     outcome: "block",
     reason: `Rate limit exceeded (${maxActions} actions per ${windowMs / 1000}s window)`,
     priority: 60,
@@ -132,7 +132,7 @@ export function requireLevel(minLevel: number): PolicyRule {
   return {
     id: `require-level-${minLevel}`,
     name: `Require governance level ${minLevel}+`,
-    condition: { type: "agent_level", minLevel },
+    condition: { type: "agent_level", params: { minLevel } },
     outcome: "block",
     reason: `Agent governance level below required minimum (L${minLevel})`,
     priority: 95,
@@ -153,7 +153,7 @@ export function requireSequence(
   return {
     id: `sequence-${tool}-requires-${requiredPrior.join("-")}`,
     name: `${tool} requires: ${requiredPrior.join(", ")}`,
-    condition: { type: "tool_sequence", tool, requiredPrior },
+    condition: { type: "tool_sequence", params: { tool, requiredPrior } },
     outcome: "block",
     reason: reason ?? `${tool} requires prior call to: ${requiredPrior.join(", ")}`,
     priority: 85,
@@ -171,7 +171,7 @@ export function timeWindow(
   return {
     id: `time-window-${startHour}-${endHour}`,
     name: `Allow ${startHour}:00-${endHour}:00 only`,
-    condition: { type: "time_window", allowedHours: { start: startHour, end: endHour } },
+    condition: { type: "time_window", params: { allowedHours: { start: startHour, end: endHour } } },
     outcome: "block",
     reason: reason ?? `Action blocked outside allowed hours (${startHour}:00-${endHour}:00)`,
     priority: 50,

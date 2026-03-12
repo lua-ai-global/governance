@@ -12,7 +12,7 @@ export function inputBlocklist(terms: string[], opts?: { caseSensitive?: boolean
   return {
     id: `blocklist-${terms.slice(0, 3).join("-")}`,
     name: `Term blocklist: ${terms.slice(0, 5).join(", ")}${terms.length > 5 ? "..." : ""}`,
-    condition: { type: "blocklist", terms, caseSensitive: opts?.caseSensitive },
+    condition: { type: "blocklist", params: { terms, caseSensitive: opts?.caseSensitive } },
     outcome: "block",
     reason: opts?.reason ?? `Input contains blocked term`,
     priority: 105,
@@ -26,7 +26,7 @@ export function inputLength(maxChars: number, maxTokens?: number, reason?: strin
   return {
     id: `input-length-${maxChars}`,
     name: `Input length limit: ${maxChars.toLocaleString()} chars`,
-    condition: { type: "input_length", maxChars, maxTokens },
+    condition: { type: "input_length", params: { maxChars, maxTokens } },
     outcome: "block",
     reason: reason ?? `Input exceeds length limit (${maxChars.toLocaleString()} chars)`,
     priority: 100,
@@ -40,7 +40,7 @@ export function inputPattern(pattern: string, flags?: string, reason?: string): 
   return {
     id: `input-pattern-${pattern.slice(0, 20).replace(/[^a-z0-9]/gi, "")}`,
     name: `Input pattern: /${pattern}/`,
-    condition: { type: "input_pattern", pattern, flags },
+    condition: { type: "input_pattern", params: { pattern, flags } },
     outcome: "block",
     reason: reason ?? `Input matches blocked pattern`,
     priority: 95,
@@ -54,7 +54,7 @@ export function networkAllowlist(domains: string[], reason?: string): PolicyRule
   return {
     id: `network-allowlist`,
     name: `Network allowlist: ${domains.join(", ")}`,
-    condition: { type: "network_allowlist", allowedDomains: domains },
+    condition: { type: "network_allowlist", params: { allowedDomains: domains } },
     outcome: "block",
     reason: reason ?? `Target domain not in allowlist`,
     priority: 85,
@@ -68,7 +68,7 @@ export function scopeBoundary(opts: { allowedPaths?: string[]; blockedPaths?: st
   return {
     id: `scope-boundary`,
     name: `Scope boundary`,
-    condition: { type: "scope_boundary", allowedPaths: opts.allowedPaths, blockedPaths: opts.blockedPaths },
+    condition: { type: "scope_boundary", params: { allowedPaths: opts.allowedPaths, blockedPaths: opts.blockedPaths } },
     outcome: "block",
     reason: opts.reason ?? `Path outside allowed scope`,
     priority: 80,
@@ -82,7 +82,7 @@ export function costBudget(maxCost: number, currency = "USD", reason?: string): 
   return {
     id: `cost-budget-${maxCost}`,
     name: `Cost budget: ${maxCost} ${currency}`,
-    condition: { type: "cost_budget", maxCost, currency },
+    condition: { type: "cost_budget", params: { maxCost, currency } },
     outcome: "block",
     reason: reason ?? `Session cost exceeded budget (${maxCost} ${currency})`,
     priority: 65,
@@ -96,7 +96,7 @@ export function concurrentLimit(max: number, reason?: string): PolicyRule {
   return {
     id: `concurrent-limit-${max}`,
     name: `Concurrency limit: ${max}`,
-    condition: { type: "concurrent_limit", maxConcurrent: max },
+    condition: { type: "concurrent_limit", params: { maxConcurrent: max } },
     outcome: "block",
     reason: reason ?? `Concurrent execution limit exceeded (max ${max})`,
     priority: 55,
@@ -110,7 +110,7 @@ export function outputLength(maxChars: number, maxTokens?: number, reason?: stri
   return {
     id: `output-length-${maxChars}`,
     name: `Output length limit: ${maxChars.toLocaleString()} chars`,
-    condition: { type: "output_length", maxChars, maxTokens },
+    condition: { type: "output_length", params: { maxChars, maxTokens } },
     outcome: "warn",
     reason: reason ?? `Output exceeds length limit (${maxChars.toLocaleString()} chars)`,
     priority: 75,
@@ -124,7 +124,7 @@ export function outputPattern(pattern: string, flags?: string, reason?: string):
   return {
     id: `output-pattern-${pattern.slice(0, 20).replace(/[^a-z0-9]/gi, "")}`,
     name: `Output pattern scan: /${pattern}/`,
-    condition: { type: "output_pattern", pattern, flags },
+    condition: { type: "output_pattern", params: { pattern, flags } },
     outcome: "block",
     reason: reason ?? `Output contains blocked pattern`,
     priority: 90,
@@ -138,7 +138,7 @@ export function sensitiveDataFilter(patterns?: string[], reason?: string): Polic
   return {
     id: `sensitive-data-filter`,
     name: `Sensitive data filter`,
-    condition: { type: "sensitive_data_filter", patterns },
+    condition: { type: "sensitive_data_filter", params: { patterns } },
     outcome: "block",
     reason: reason ?? `Output contains sensitive data (credentials, keys, or secrets)`,
     priority: 95,

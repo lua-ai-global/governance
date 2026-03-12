@@ -74,7 +74,7 @@ describe("injection detection edge cases", () => {
     const guard = createInjectionGuard({ threshold: 0.1 });
     // The guard's condition should be evaluatable
     assert.ok(guard.condition);
-    assert.equal(guard.condition.type, "custom");
+    assert.equal(guard.condition.type, "injection_guard");
   });
 
   test("detects data exfiltration attempts", () => {

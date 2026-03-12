@@ -152,7 +152,7 @@ describe("createGovernedTools (Vercel AI SDK)", () => {
         {
           id: "token-limit",
           name: "Token limit",
-          condition: { type: "token_limit", maxTokens: 1000 },
+          condition: { type: "token_limit", params: { maxTokens: 1000 } },
           outcome: "block" as const,
           reason: "Token budget exceeded",
           priority: 70,

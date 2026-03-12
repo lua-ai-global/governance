@@ -101,10 +101,12 @@ describe("any_of (OR combinator)", () => {
   it("matches when any sub-condition matches", () => {
     const condition: PolicyCondition = {
       type: "any_of",
-      conditions: [
-        { type: "tool_blocked", tools: ["shell_exec"] },
-        { type: "tool_blocked", tools: ["database_drop"] },
-      ],
+      params: {
+        conditions: [
+          { type: "tool_blocked", params: { tools: ["shell_exec"] } },
+          { type: "tool_blocked", params: { tools: ["database_drop"] } },
+        ],
+      },
     };
 
     const engine = createPolicyEngine({
@@ -134,10 +136,12 @@ describe("all_of (AND combinator)", () => {
   it("matches only when all sub-conditions match", () => {
     const condition: PolicyCondition = {
       type: "all_of",
-      conditions: [
-        { type: "tool_blocked", tools: ["payment_send"] },
-        { type: "agent_level", minLevel: 3 },
-      ],
+      params: {
+        conditions: [
+          { type: "tool_blocked", params: { tools: ["payment_send"] } },
+          { type: "agent_level", params: { minLevel: 3 } },
+        ],
+      },
     };
 
     const engine = createPolicyEngine({
@@ -170,7 +174,9 @@ describe("not combinator", () => {
   it("inverts a condition", () => {
     const condition: PolicyCondition = {
       type: "not",
-      condition: { type: "tool_allowed", tools: ["safe_tool", "read_only"] },
+      params: {
+        condition: { type: "tool_allowed", params: { tools: ["safe_tool", "read_only"] } },
+      },
     };
 
     const engine = createPolicyEngine({
@@ -197,16 +203,20 @@ describe("nested combinators", () => {
     // Block if: (tool is payment_send) AND (level < 3 OR no tool history)
     const condition: PolicyCondition = {
       type: "all_of",
-      conditions: [
-        { type: "tool_blocked", tools: ["payment_send"] },
-        {
-          type: "any_of",
-          conditions: [
-            { type: "agent_level", minLevel: 3 },
-            { type: "tool_sequence", tool: "payment_send", requiredPrior: ["verify_identity"] },
-          ],
-        },
-      ],
+      params: {
+        conditions: [
+          { type: "tool_blocked", params: { tools: ["payment_send"] } },
+          {
+            type: "any_of",
+            params: {
+              conditions: [
+                { type: "agent_level", params: { minLevel: 3 } },
+                { type: "tool_sequence", params: { tool: "payment_send", requiredPrior: ["verify_identity"] } },
+              ],
+            },
+          },
+        ],
+      },
     };
 
     const engine = createPolicyEngine({

@@ -166,7 +166,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level-check",
         name: "Require L2",
-        condition: { type: "agent_level", minLevel: 2 },
+        condition: { type: "agent_level", params: { minLevel: 2 } },
         outcome: "block",
         reason: "Too low",
         priority: 100,
@@ -180,7 +180,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level-override",
         name: "Allow L1",
-        condition: { type: "agent_level", minLevel: 1 },
+        condition: { type: "agent_level", params: { minLevel: 1 } },
         outcome: "allow",
         reason: "OK for dev",
         priority: 50,
@@ -201,7 +201,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Block",
-        condition: { type: "agent_level", minLevel: 3 },
+        condition: { type: "agent_level", params: { minLevel: 3 } },
         outcome: "block",
         reason: "Blocked",
         priority: 50,
@@ -215,7 +215,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Allow",
-        condition: { type: "agent_level", minLevel: 1 },
+        condition: { type: "agent_level", params: { minLevel: 1 } },
         outcome: "allow",
         reason: "Allowed",
         priority: 200,
@@ -238,7 +238,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Block",
-        condition: { type: "agent_level", minLevel: 3 },
+        condition: { type: "agent_level", params: { minLevel: 3 } },
         outcome: "block",
         reason: "Blocked",
         priority: 200,
@@ -252,7 +252,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Allow",
-        condition: { type: "agent_level", minLevel: 1 },
+        condition: { type: "agent_level", params: { minLevel: 1 } },
         outcome: "allow",
         reason: "Allowed",
         priority: 50,
@@ -276,7 +276,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Block L0",
-        condition: { type: "agent_level", minLevel: 1 },
+        condition: { type: "agent_level", params: { minLevel: 1 } },
         outcome: "block",
         reason: "Blocked",
         priority: 50,
@@ -291,7 +291,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Allow all",
-        condition: { type: "agent_level", minLevel: 1 },
+        condition: { type: "agent_level", params: { minLevel: 1 } },
         outcome: "allow",
         reason: "Allowed",
         priority: 50,
@@ -315,7 +315,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Block",
-        condition: { type: "agent_level", minLevel: 3 },
+        condition: { type: "agent_level", params: { minLevel: 3 } },
         outcome: "block",
         reason: "Blocked",
         priority: 200,
@@ -330,7 +330,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Allow",
-        condition: { type: "agent_level", minLevel: 1 },
+        condition: { type: "agent_level", params: { minLevel: 1 } },
         outcome: "allow",
         reason: "Allowed",
         priority: 50,
@@ -353,7 +353,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Block",
-        condition: { type: "agent_level", minLevel: 3 },
+        condition: { type: "agent_level", params: { minLevel: 3 } },
         outcome: "block",
         reason: "Blocked",
         priority: 100,
@@ -367,7 +367,7 @@ describe("conflict resolution", () => {
       rules: [{
         id: "level",
         name: "Allow",
-        condition: { type: "agent_level", minLevel: 1 },
+        condition: { type: "agent_level", params: { minLevel: 1 } },
         outcome: "allow",
         reason: "Allowed",
         priority: 50,

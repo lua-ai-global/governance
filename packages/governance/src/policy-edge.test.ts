@@ -28,7 +28,7 @@ describe("policy engine rule management", () => {
     engine.addRule({
       id: ruleId,
       name: "Updated block",
-      condition: { type: "tool_blocked", tools: ["new_tool"] },
+      condition: { type: "tool_blocked", params: { tools: ["new_tool"] } },
       outcome: "block",
       reason: "Updated reason",
       priority: 100,
@@ -97,7 +97,7 @@ describe("policy priority ordering", () => {
     const allow: PolicyRule = {
       id: "allow-all",
       name: "Allow everything",
-      condition: { type: "custom", evaluate: () => true },
+      condition: { type: "custom", params: { evaluate: () => true } },
       outcome: "allow",
       reason: "Allowed",
       priority: 200,
@@ -208,7 +208,7 @@ describe("tool_blocked edge cases", () => {
       rules: [{
         id: "empty-block",
         name: "Empty block",
-        condition: { type: "tool_blocked", tools: [] },
+        condition: { type: "tool_blocked", params: { tools: [] } },
         outcome: "block",
         reason: "Empty list",
         priority: 100,
@@ -256,7 +256,7 @@ describe("data_classification condition", () => {
       rules: [{
         id: "block-pii",
         name: "Block PII",
-        condition: { type: "data_classification", blocked: ["ssn", "credit_card"] },
+        condition: { type: "data_classification", params: { blocked: ["ssn", "credit_card"] } },
         outcome: "block",
         reason: "PII detected",
         priority: 100,
@@ -277,7 +277,7 @@ describe("data_classification condition", () => {
       rules: [{
         id: "block-pii",
         name: "Block PII",
-        condition: { type: "data_classification", blocked: ["ssn"] },
+        condition: { type: "data_classification", params: { blocked: ["ssn"] } },
         outcome: "block",
         reason: "PII detected",
         priority: 100,
@@ -298,7 +298,7 @@ describe("data_classification condition", () => {
       rules: [{
         id: "block-pii",
         name: "Block PII",
-        condition: { type: "data_classification", blocked: ["ssn"] },
+        condition: { type: "data_classification", params: { blocked: ["ssn"] } },
         outcome: "block",
         reason: "PII detected",
         priority: 100,
@@ -318,7 +318,7 @@ describe("data_classification condition", () => {
       rules: [{
         id: "block-pii",
         name: "Block PII",
-        condition: { type: "data_classification", blocked: ["SSN"] },
+        condition: { type: "data_classification", params: { blocked: ["SSN"] } },
         outcome: "block",
         reason: "PII detected",
         priority: 100,
@@ -458,9 +458,11 @@ describe("custom condition", () => {
         name: "Custom",
         condition: {
           type: "custom",
-          evaluate: (ctx) => {
-            receivedCtx = ctx;
-            return false;
+          params: {
+            evaluate: (ctx) => {
+              receivedCtx = ctx;
+              return false;
+            },
           },
         },
         outcome: "block",
@@ -489,7 +491,7 @@ describe("custom condition", () => {
       rules: [{
         id: "always-block",
         name: "Always block",
-        condition: { type: "custom", evaluate: () => true },
+        condition: { type: "custom", params: { evaluate: () => true } },
         outcome: "block",
         reason: "Always blocked",
         priority: 100,
@@ -528,7 +530,7 @@ describe("warn outcome", () => {
       rules: [{
         id: "warn-data-access",
         name: "Warn on data access",
-        condition: { type: "action_type", actions: ["data_access" as const] },
+        condition: { type: "action_type", params: { actions: ["data_access" as const] } },
         outcome: "warn" as const,
         reason: "Data access should be monitored",
         priority: 80,

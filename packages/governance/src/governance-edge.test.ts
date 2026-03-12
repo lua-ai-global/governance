@@ -395,7 +395,7 @@ describe("policy engine runtime mutations", () => {
       rules: [{
         id: "disabled",
         name: "Disabled rule",
-        condition: { type: "tool_blocked", tools: ["all"] },
+        condition: { type: "tool_blocked", params: { tools: ["all"] } },
         outcome: "block",
         reason: "Should not match",
         priority: 100,

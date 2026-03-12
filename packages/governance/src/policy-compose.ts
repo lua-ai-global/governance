@@ -182,25 +182,28 @@ export function composePolicies(
 
 function conditionKey(rule: PolicyRule): string {
   const c = rule.condition;
+  const p = c.params as Record<string, unknown> | undefined;
   switch (c.type) {
     case "tool_blocked":
-      return `tool_blocked:${[...c.tools].sort().join(",")}`;
+      return `tool_blocked:${[...(p?.tools as string[])].sort().join(",")}`;
     case "tool_allowed":
-      return `tool_allowed:${[...c.tools].sort().join(",")}`;
+      return `tool_allowed:${[...(p?.tools as string[])].sort().join(",")}`;
     case "action_type":
-      return `action_type:${[...c.actions].sort().join(",")}`;
+      return `action_type:${[...(p?.actions as string[])].sort().join(",")}`;
     case "token_limit":
       return `token_limit`;
     case "rate_limit":
       return `rate_limit`;
     case "data_classification":
-      return `data_classification:${[...c.blocked].sort().join(",")}`;
+      return `data_classification:${[...(p?.blocked as string[])].sort().join(",")}`;
     case "agent_level":
       return `agent_level`;
     case "tool_sequence":
-      return `tool_sequence:${c.tool}`;
-    case "time_window":
-      return `time_window:${c.allowedHours.start}-${c.allowedHours.end}`;
+      return `tool_sequence:${p?.tool}`;
+    case "time_window": {
+      const hours = p?.allowedHours as { start: number; end: number };
+      return `time_window:${hours.start}-${hours.end}`;
+    }
     default:
       return `${c.type}:${rule.id}`;
   }

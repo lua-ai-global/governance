@@ -7,7 +7,7 @@ function makeRule(overrides: Partial<PolicyRule> = {}): PolicyRule {
   return {
     id: overrides.id ?? "test-rule",
     name: overrides.name ?? "Test rule",
-    condition: overrides.condition ?? { type: "tool_blocked", tools: ["danger"] },
+    condition: overrides.condition ?? { type: "tool_blocked", params: { tools: ["danger"] } },
     outcome: overrides.outcome ?? "block",
     reason: overrides.reason ?? "Test reason",
     priority: overrides.priority ?? 100,
@@ -82,7 +82,7 @@ describe("engine.addRule / removeRule", () => {
 describe("condition: tool_blocked", () => {
   test("blocks listed tool", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_blocked", tools: ["rm_rf", "drop"] } })],
+      rules: [makeRule({ condition: { type: "tool_blocked", params: { tools: ["rm_rf", "drop"] } } })],
     });
     const d = engine.evaluate(makeCtx({ tool: "rm_rf" }));
     assert.equal(d.blocked, true);
@@ -90,7 +90,7 @@ describe("condition: tool_blocked", () => {
 
   test("allows unlisted tool", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_blocked", tools: ["rm_rf"] } })],
+      rules: [makeRule({ condition: { type: "tool_blocked", params: { tools: ["rm_rf"] } } })],
     });
     const d = engine.evaluate(makeCtx({ tool: "search" }));
     assert.equal(d.blocked, false);
@@ -98,7 +98,7 @@ describe("condition: tool_blocked", () => {
 
   test("allows when no tool in context", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_blocked", tools: ["rm_rf"] } })],
+      rules: [makeRule({ condition: { type: "tool_blocked", params: { tools: ["rm_rf"] } } })],
     });
     const d = engine.evaluate(makeCtx());
     assert.equal(d.blocked, false);
@@ -108,7 +108,7 @@ describe("condition: tool_blocked", () => {
 describe("condition: tool_allowed", () => {
   test("blocks tool not on allowlist", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_allowed", tools: ["search", "read"] } })],
+      rules: [makeRule({ condition: { type: "tool_allowed", params: { tools: ["search", "read"] } } })],
     });
     const d = engine.evaluate(makeCtx({ tool: "delete" }));
     assert.equal(d.blocked, true);
@@ -116,7 +116,7 @@ describe("condition: tool_allowed", () => {
 
   test("allows tool on allowlist", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_allowed", tools: ["search", "read"] } })],
+      rules: [makeRule({ condition: { type: "tool_allowed", params: { tools: ["search", "read"] } } })],
     });
     const d = engine.evaluate(makeCtx({ tool: "search" }));
     assert.equal(d.blocked, false);
@@ -126,7 +126,7 @@ describe("condition: tool_allowed", () => {
 describe("condition: action_type", () => {
   test("matches action in list", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "action_type", actions: ["payment", "file_write"] } })],
+      rules: [makeRule({ condition: { type: "action_type", params: { actions: ["payment", "file_write"] } } })],
     });
     const d = engine.evaluate(makeCtx({ action: "payment" }));
     assert.equal(d.blocked, true);
@@ -134,7 +134,7 @@ describe("condition: action_type", () => {
 
   test("does not match action not in list", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "action_type", actions: ["payment"] } })],
+      rules: [makeRule({ condition: { type: "action_type", params: { actions: ["payment"] } } })],
     });
     const d = engine.evaluate(makeCtx({ action: "tool_call" }));
     assert.equal(d.blocked, false);
@@ -144,7 +144,7 @@ describe("condition: action_type", () => {
 describe("condition: token_limit", () => {
   test("blocks when over limit", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "token_limit", maxTokens: 1000 } })],
+      rules: [makeRule({ condition: { type: "token_limit", params: { maxTokens: 1000 } } })],
     });
     const d = engine.evaluate(makeCtx({ sessionTokensUsed: 1500 }));
     assert.equal(d.blocked, true);
@@ -152,7 +152,7 @@ describe("condition: token_limit", () => {
 
   test("allows when under limit", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "token_limit", maxTokens: 1000 } })],
+      rules: [makeRule({ condition: { type: "token_limit", params: { maxTokens: 1000 } } })],
     });
     const d = engine.evaluate(makeCtx({ sessionTokensUsed: 500 }));
     assert.equal(d.blocked, false);
@@ -160,7 +160,7 @@ describe("condition: token_limit", () => {
 
   test("defaults to 0 tokens when not provided", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "token_limit", maxTokens: 1000 } })],
+      rules: [makeRule({ condition: { type: "token_limit", params: { maxTokens: 1000 } } })],
     });
     const d = engine.evaluate(makeCtx());
     assert.equal(d.blocked, false);
@@ -170,7 +170,7 @@ describe("condition: token_limit", () => {
 describe("condition: rate_limit", () => {
   test("blocks when over rate", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "rate_limit", maxActions: 10, windowMs: 60000 } })],
+      rules: [makeRule({ condition: { type: "rate_limit", params: { maxActions: 10, windowMs: 60000 } } })],
     });
     const d = engine.evaluate(makeCtx({ recentActionCount: 15 }));
     assert.equal(d.blocked, true);
@@ -178,7 +178,7 @@ describe("condition: rate_limit", () => {
 
   test("allows when under rate", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "rate_limit", maxActions: 10, windowMs: 60000 } })],
+      rules: [makeRule({ condition: { type: "rate_limit", params: { maxActions: 10, windowMs: 60000 } } })],
     });
     const d = engine.evaluate(makeCtx({ recentActionCount: 5 }));
     assert.equal(d.blocked, false);
@@ -188,7 +188,7 @@ describe("condition: rate_limit", () => {
 describe("condition: agent_level", () => {
   test("blocks agent below required level", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "agent_level", minLevel: 3 } })],
+      rules: [makeRule({ condition: { type: "agent_level", params: { minLevel: 3 } } })],
     });
     const d = engine.evaluate(makeCtx({ agentLevel: 1 }));
     assert.equal(d.blocked, true);
@@ -196,7 +196,7 @@ describe("condition: agent_level", () => {
 
   test("allows agent at required level", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "agent_level", minLevel: 2 } })],
+      rules: [makeRule({ condition: { type: "agent_level", params: { minLevel: 2 } } })],
     });
     const d = engine.evaluate(makeCtx({ agentLevel: 2 }));
     assert.equal(d.blocked, false);
@@ -204,7 +204,7 @@ describe("condition: agent_level", () => {
 
   test("defaults to level 0 when not provided", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "agent_level", minLevel: 1 } })],
+      rules: [makeRule({ condition: { type: "agent_level", params: { minLevel: 1 } } })],
     });
     const d = engine.evaluate(makeCtx());
     assert.equal(d.blocked, true);
@@ -214,7 +214,7 @@ describe("condition: agent_level", () => {
 describe("condition: tool_sequence", () => {
   test("blocks when required prior tool not in history", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_sequence", tool: "delete", requiredPrior: ["backup"] } })],
+      rules: [makeRule({ condition: { type: "tool_sequence", params: { tool: "delete", requiredPrior: ["backup"] } } })],
     });
     const d = engine.evaluate(makeCtx({ tool: "delete", toolHistory: ["search"] }));
     assert.equal(d.blocked, true);
@@ -222,7 +222,7 @@ describe("condition: tool_sequence", () => {
 
   test("allows when required prior tool is in history", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_sequence", tool: "delete", requiredPrior: ["backup"] } })],
+      rules: [makeRule({ condition: { type: "tool_sequence", params: { tool: "delete", requiredPrior: ["backup"] } } })],
     });
     const d = engine.evaluate(makeCtx({ tool: "delete", toolHistory: ["backup", "search"] }));
     assert.equal(d.blocked, false);
@@ -230,7 +230,7 @@ describe("condition: tool_sequence", () => {
 
   test("blocks when tool has no history", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_sequence", tool: "delete", requiredPrior: ["backup"] } })],
+      rules: [makeRule({ condition: { type: "tool_sequence", params: { tool: "delete", requiredPrior: ["backup"] } } })],
     });
     const d = engine.evaluate(makeCtx({ tool: "delete" }));
     assert.equal(d.blocked, true);
@@ -238,7 +238,7 @@ describe("condition: tool_sequence", () => {
 
   test("does not match different tool", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "tool_sequence", tool: "delete", requiredPrior: ["backup"] } })],
+      rules: [makeRule({ condition: { type: "tool_sequence", params: { tool: "delete", requiredPrior: ["backup"] } } })],
     });
     const d = engine.evaluate(makeCtx({ tool: "search" }));
     assert.equal(d.blocked, false);
@@ -248,7 +248,7 @@ describe("condition: tool_sequence", () => {
 describe("condition: data_classification", () => {
   test("blocks when input contains blocked data", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "data_classification", blocked: ["ssn", "phi"] } })],
+      rules: [makeRule({ condition: { type: "data_classification", params: { blocked: ["ssn", "phi"] } } })],
     });
     const d = engine.evaluate(makeCtx({ input: { field: "contains SSN data" } }));
     assert.equal(d.blocked, true);
@@ -256,7 +256,7 @@ describe("condition: data_classification", () => {
 
   test("case-insensitive matching", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "data_classification", blocked: ["PHI"] } })],
+      rules: [makeRule({ condition: { type: "data_classification", params: { blocked: ["PHI"] } } })],
     });
     const d = engine.evaluate(makeCtx({ input: { note: "patient phi records" } }));
     assert.equal(d.blocked, true);
@@ -264,7 +264,7 @@ describe("condition: data_classification", () => {
 
   test("allows when input has no blocked data", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "data_classification", blocked: ["ssn"] } })],
+      rules: [makeRule({ condition: { type: "data_classification", params: { blocked: ["ssn"] } } })],
     });
     const d = engine.evaluate(makeCtx({ input: { query: "search for products" } }));
     assert.equal(d.blocked, false);
@@ -272,7 +272,7 @@ describe("condition: data_classification", () => {
 
   test("allows when no input", () => {
     const engine = createPolicyEngine({
-      rules: [makeRule({ condition: { type: "data_classification", blocked: ["ssn"] } })],
+      rules: [makeRule({ condition: { type: "data_classification", params: { blocked: ["ssn"] } } })],
     });
     const d = engine.evaluate(makeCtx());
     assert.equal(d.blocked, false);
@@ -285,10 +285,12 @@ describe("condition: combinators", () => {
       rules: [makeRule({
         condition: {
           type: "any_of",
-          conditions: [
-            { type: "tool_blocked", tools: ["a"] },
-            { type: "tool_blocked", tools: ["b"] },
-          ],
+          params: {
+            conditions: [
+              { type: "tool_blocked", params: { tools: ["a"] } },
+              { type: "tool_blocked", params: { tools: ["b"] } },
+            ],
+          },
         },
       })],
     });
@@ -301,10 +303,12 @@ describe("condition: combinators", () => {
       rules: [makeRule({
         condition: {
           type: "all_of",
-          conditions: [
-            { type: "action_type", actions: ["payment"] },
-            { type: "agent_level", minLevel: 3 },
-          ],
+          params: {
+            conditions: [
+              { type: "action_type", params: { actions: ["payment"] } },
+              { type: "agent_level", params: { minLevel: 3 } },
+            ],
+          },
         },
       })],
     });
@@ -318,7 +322,7 @@ describe("condition: combinators", () => {
       rules: [makeRule({
         condition: {
           type: "not",
-          condition: { type: "tool_blocked", tools: ["safe"] },
+          params: { condition: { type: "tool_blocked", params: { tools: ["safe"] } } },
         },
       })],
     });
@@ -327,13 +331,15 @@ describe("condition: combinators", () => {
   });
 });
 
-describe("condition: custom", () => {
-  test("evaluates custom function", () => {
+describe("condition: custom (backwards compat)", () => {
+  test("evaluates custom function via params.evaluate", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
         condition: {
           type: "custom",
-          evaluate: (ctx) => ctx.metadata?.isTest === true,
+          params: {
+            evaluate: (ctx: EnforcementContext) => ctx.metadata?.isTest === true,
+          },
         },
       })],
     });
@@ -346,8 +352,8 @@ describe("priority ordering", () => {
   test("higher priority rules evaluate first", () => {
     const engine = createPolicyEngine({
       rules: [
-        makeRule({ id: "low", priority: 10, condition: { type: "tool_blocked", tools: ["x"] }, outcome: "allow", reason: "low" }),
-        makeRule({ id: "high", priority: 100, condition: { type: "tool_blocked", tools: ["x"] }, outcome: "block", reason: "high" }),
+        makeRule({ id: "low", priority: 10, condition: { type: "tool_blocked", params: { tools: ["x"] } }, outcome: "allow", reason: "low" }),
+        makeRule({ id: "high", priority: 100, condition: { type: "tool_blocked", params: { tools: ["x"] } }, outcome: "block", reason: "high" }),
       ],
     });
     const d = engine.evaluate(makeCtx({ tool: "x" }));
@@ -372,7 +378,7 @@ describe("require_approval outcome", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
         outcome: "require_approval",
-        condition: { type: "action_type", actions: ["payment"] },
+        condition: { type: "action_type", params: { actions: ["payment"] } },
       })],
     });
     const d = engine.evaluate(makeCtx({ action: "payment" }));
@@ -386,7 +392,7 @@ describe("warn outcome", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
         outcome: "warn",
-        condition: { type: "action_type", actions: ["data_access"] },
+        condition: { type: "action_type", params: { actions: ["data_access"] } },
       })],
     });
     const d = engine.evaluate(makeCtx({ action: "data_access" }));
@@ -399,7 +405,7 @@ describe("condition: injection_guard", () => {
   test("blocks injection in input", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
-        condition: { type: "injection_guard", threshold: 0.5, skipCategories: [] },
+        condition: { type: "injection_guard", params: { threshold: 0.5, skipCategories: [] } },
       })],
     });
     const d = engine.evaluate(makeCtx({
@@ -411,7 +417,7 @@ describe("condition: injection_guard", () => {
   test("allows clean input", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
-        condition: { type: "injection_guard", threshold: 0.5, skipCategories: [] },
+        condition: { type: "injection_guard", params: { threshold: 0.5, skipCategories: [] } },
       })],
     });
     const d = engine.evaluate(makeCtx({
@@ -423,7 +429,7 @@ describe("condition: injection_guard", () => {
   test("allows when no input", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
-        condition: { type: "injection_guard", threshold: 0.5, skipCategories: [] },
+        condition: { type: "injection_guard", params: { threshold: 0.5, skipCategories: [] } },
       })],
     });
     const d = engine.evaluate(makeCtx());
@@ -433,7 +439,7 @@ describe("condition: injection_guard", () => {
   test("respects higher threshold", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
-        condition: { type: "injection_guard", threshold: 0.99, skipCategories: [] },
+        condition: { type: "injection_guard", params: { threshold: 0.99, skipCategories: [] } },
       })],
     });
     const d = engine.evaluate(makeCtx({
@@ -447,8 +453,7 @@ describe("condition: injection_guard", () => {
       rules: [makeRule({
         condition: {
           type: "injection_guard",
-          threshold: 0.5,
-          skipCategories: ["instruction_override"],
+          params: { threshold: 0.5, skipCategories: ["instruction_override"] },
         },
       })],
     });
@@ -461,7 +466,7 @@ describe("condition: injection_guard", () => {
   test("detects data exfiltration", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
-        condition: { type: "injection_guard", threshold: 0.5, skipCategories: [] },
+        condition: { type: "injection_guard", params: { threshold: 0.5, skipCategories: [] } },
       })],
     });
     const d = engine.evaluate(makeCtx({

@@ -11,16 +11,16 @@ export interface PgPoolLike {
   ): Promise<{ rows: R[] }>;
 }
 
-/** A policy rule as stored in JSONB (matches DashboardRule shape) */
+/** A policy rule as stored in JSONB — aligned with SDK PolicyRule */
 export interface StoredPolicyRule {
   id: string;
   name: string;
-  condition: string;
-  /** What happens when this rule triggers: "block" | "require_approval" | "warn" */
+  condition: { type: string; params: Record<string, unknown> };
   outcome: string;
+  reason: string;
   priority: number;
   enabled: boolean;
-  config: Record<string, unknown>;
+  stage?: string;
 }
 
 /** A saved policy record from the saved_policies table */

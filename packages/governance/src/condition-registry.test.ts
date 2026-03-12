@@ -18,7 +18,7 @@ function makeRule(overrides: Partial<PolicyRule> = {}): PolicyRule {
   return {
     id: overrides.id ?? "test-rule",
     name: overrides.name ?? "Test rule",
-    condition: overrides.condition ?? { type: "tool_blocked", tools: ["danger"] },
+    condition: overrides.condition ?? { type: "tool_blocked", params: { tools: ["danger"] } },
     outcome: overrides.outcome ?? "block",
     reason: overrides.reason ?? "Test reason",
     priority: overrides.priority ?? 100,
@@ -96,7 +96,7 @@ describe("Condition Registry", () => {
 
 describe("Registered condition evaluation", () => {
   beforeEach(() => {
-    clearConditionRegistry();
+    clearConditionRegistry({ keepBuiltins: true });
   });
 
   test("evaluates a registered condition that triggers", () => {
@@ -112,7 +112,7 @@ describe("Registered condition evaluation", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
         id: "cost-check",
-        condition: { type: "registered", name: "high_cost", params: { maxCost: 10 } },
+        condition: { type: "high_cost", params: { maxCost: 10 } },
       })],
     });
 
@@ -138,7 +138,7 @@ describe("Registered condition evaluation", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
         id: "geo-rule",
-        condition: { type: "registered", name: "geo_fence", params: { allowedRegions: ["us", "eu"] } },
+        condition: { type: "geo_fence", params: { allowedRegions: ["us", "eu"] } },
       })],
     });
 
@@ -149,16 +149,17 @@ describe("Registered condition evaluation", () => {
     assert.equal(allowed.blocked, false);
   });
 
-  test("throws when condition name is not registered", () => {
+  test("throws when condition type is not registered", () => {
+    clearConditionRegistry();
     const engine = createPolicyEngine({
       rules: [makeRule({
-        condition: { type: "registered", name: "nonexistent", params: {} },
+        condition: { type: "nonexistent", params: {} },
       })],
     });
 
     assert.throws(
       () => engine.evaluate(makeCtx()),
-      /Unknown registered condition type "nonexistent"/,
+      /Unknown condition type "nonexistent"/,
     );
   });
 
@@ -174,10 +175,12 @@ describe("Registered condition evaluation", () => {
         id: "combo",
         condition: {
           type: "any_of",
-          conditions: [
-            { type: "tool_blocked", tools: ["danger"] },
-            { type: "registered", name: "is_weekend", params: {} },
-          ],
+          params: {
+            conditions: [
+              { type: "tool_blocked", params: { tools: ["danger"] } },
+              { type: "is_weekend", params: {} },
+            ],
+          },
         },
       })],
     });
@@ -202,7 +205,7 @@ describe("Registered condition evaluation", () => {
     const engine = createPolicyEngine({
       rules: [makeRule({
         id: "non-vip-block",
-        condition: { type: "not", condition: { type: "registered", name: "vip_user", params: {} } },
+        condition: { type: "not", params: { condition: { type: "vip_user", params: {} } } },
       })],
     });
 
@@ -227,7 +230,7 @@ describe("Registered condition evaluation", () => {
       rules: [makeRule({
         id: "post-check",
         stage: "postprocess",
-        condition: { type: "registered", name: "output_check", params: { forbidden: "SECRET" } },
+        condition: { type: "output_check", params: { forbidden: "SECRET" } },
       })],
     });
 
@@ -250,7 +253,7 @@ describe("Registered condition evaluation", () => {
 
     engine.addRule(makeRule({
       id: "dynamic",
-      condition: { type: "registered", name: "always_block", params: {} },
+      condition: { type: "always_block", params: {} },
     }));
 
     assert.equal(engine.evaluate(makeCtx()).blocked, true);

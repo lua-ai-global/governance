@@ -27,7 +27,7 @@ describe("priority tie determinism", () => {
     const blockRule: PolicyRule = {
       id: "block-first",
       name: "Block shell",
-      condition: { type: "tool_blocked", tools: ["shell_exec"] },
+      condition: { type: "tool_blocked", params: { tools: ["shell_exec"] } },
       outcome: "block",
       reason: "Blocked by first rule",
       priority: 10,
@@ -37,7 +37,7 @@ describe("priority tie determinism", () => {
     const allowRule: PolicyRule = {
       id: "allow-second",
       name: "Allow shell",
-      condition: { type: "tool_blocked", tools: ["shell_exec"] },
+      condition: { type: "tool_blocked", params: { tools: ["shell_exec"] } },
       outcome: "allow",
       reason: "Allowed by second rule",
       priority: 10,
@@ -70,7 +70,7 @@ describe("kill switch + policy engine race", () => {
       name: "Sneaky adder",
       condition: {
         type: "custom",
-        evaluate: () => false, // Does not match
+        params: { evaluate: () => false }, // Does not match
       },
       outcome: "allow",
       reason: "Sneaky",
@@ -84,7 +84,7 @@ describe("kill switch + policy engine race", () => {
     const killRule: PolicyRule = {
       id: "kill",
       name: "Kill switch",
-      condition: { type: "tool_blocked", tools: ["shell_exec"] },
+      condition: { type: "tool_blocked", params: { tools: ["shell_exec"] } },
       outcome: "block",
       reason: "Emergency kill",
       priority: 999,
@@ -98,10 +98,12 @@ describe("kill switch + policy engine race", () => {
         priority: 1000, // Evaluated first (highest priority)
         condition: {
           type: "custom",
-          evaluate: () => {
-            // Side effect: add kill rule during evaluation
-            engine.addRule(killRule);
-            return false;
+          params: {
+            evaluate: () => {
+              // Side effect: add kill rule during evaluation
+              engine.addRule(killRule);
+              return false;
+            },
           },
         },
       }],
@@ -122,7 +124,7 @@ describe("performance with 1000+ rules", () => {
     const rules: PolicyRule[] = Array.from({ length: 1000 }, (_, i) => ({
       id: `rule-${i}`,
       name: `Rule ${i}`,
-      condition: { type: "tool_blocked" as const, tools: [`tool_${i}`] },
+      condition: { type: "tool_blocked" as const, params: { tools: [`tool_${i}`] } },
       outcome: "block" as const,
       reason: `Blocked by rule ${i}`,
       priority: i,
@@ -145,7 +147,7 @@ describe("performance with 1000+ rules", () => {
     const rules: PolicyRule[] = Array.from({ length: 999 }, (_, i) => ({
       id: `rule-${i}`,
       name: `Rule ${i}`,
-      condition: { type: "tool_blocked" as const, tools: [`tool_${i}`] },
+      condition: { type: "tool_blocked" as const, params: { tools: [`tool_${i}`] } },
       outcome: "allow" as const,
       reason: `No match ${i}`,
       priority: 1000 - i,
@@ -156,7 +158,7 @@ describe("performance with 1000+ rules", () => {
     rules.push({
       id: "final-block",
       name: "Final block",
-      condition: { type: "tool_blocked", tools: ["shell_exec"] },
+      condition: { type: "tool_blocked", params: { tools: ["shell_exec"] } },
       outcome: "block",
       reason: "Caught at end",
       priority: 0,
@@ -184,7 +186,7 @@ describe("custom evaluator error handling", () => {
       name: "Throws",
       condition: {
         type: "custom",
-        evaluate: () => { throw new Error("evaluator broke"); },
+        params: { evaluate: () => { throw new Error("evaluator broke"); } },
       },
       outcome: "block",
       reason: "Should not reach",
@@ -202,7 +204,7 @@ describe("custom evaluator error handling", () => {
       name: "Throws",
       condition: {
         type: "custom",
-        evaluate: () => { throw new Error("boom"); },
+        params: { evaluate: () => { throw new Error("boom"); } },
       },
       outcome: "block",
       reason: "N/A",
@@ -213,7 +215,7 @@ describe("custom evaluator error handling", () => {
     const safeRule: PolicyRule = {
       id: "safe",
       name: "Safe block",
-      condition: { type: "tool_blocked", tools: ["shell_exec"] },
+      condition: { type: "tool_blocked", params: { tools: ["shell_exec"] } },
       outcome: "block",
       reason: "Safe block",
       priority: 5,
@@ -238,7 +240,7 @@ describe("custom evaluator error handling", () => {
       name: "Async eval",
       condition: {
         type: "custom",
-        evaluate: (() => Promise.resolve(true)) as unknown as (ctx: EnforcementContext) => boolean,
+        params: { evaluate: (() => Promise.resolve(true)) as unknown as (ctx: EnforcementContext) => boolean },
       },
       outcome: "block",
       reason: "Async",
@@ -258,7 +260,7 @@ describe("removeRule during iteration", () => {
     const rules: PolicyRule[] = Array.from({ length: 5 }, (_, i) => ({
       id: `rule-${i}`,
       name: `Rule ${i}`,
-      condition: { type: "tool_blocked" as const, tools: [`tool_${i}`] },
+      condition: { type: "tool_blocked" as const, params: { tools: [`tool_${i}`] } },
       outcome: "block" as const,
       reason: `Blocked by ${i}`,
       priority: i,
@@ -292,7 +294,7 @@ describe("removeRule during iteration", () => {
       rules: [{
         id: "only",
         name: "Only rule",
-        condition: { type: "tool_blocked", tools: ["shell_exec"] },
+        condition: { type: "tool_blocked", params: { tools: ["shell_exec"] } },
         outcome: "block",
         reason: "Blocked",
         priority: 1,
@@ -312,7 +314,7 @@ describe("addRule with duplicate ID", () => {
     const original: PolicyRule = {
       id: "dup",
       name: "Original",
-      condition: { type: "tool_blocked", tools: ["shell_exec"] },
+      condition: { type: "tool_blocked", params: { tools: ["shell_exec"] } },
       outcome: "block",
       reason: "Original block",
       priority: 10,
@@ -322,7 +324,7 @@ describe("addRule with duplicate ID", () => {
     const replacement: PolicyRule = {
       id: "dup",
       name: "Replacement",
-      condition: { type: "tool_blocked", tools: ["shell_exec"] },
+      condition: { type: "tool_blocked", params: { tools: ["shell_exec"] } },
       outcome: "allow",
       reason: "Replaced to allow",
       priority: 10,
@@ -345,7 +347,7 @@ describe("addRule with duplicate ID", () => {
       rules: [{
         id: "r1",
         name: "V1",
-        condition: { type: "tool_blocked", tools: ["x"] },
+        condition: { type: "tool_blocked", params: { tools: ["x"] } },
         outcome: "block",
         reason: "v1",
         priority: 1,
@@ -356,7 +358,7 @@ describe("addRule with duplicate ID", () => {
     engine.addRule({
       id: "r1",
       name: "V2",
-      condition: { type: "tool_blocked", tools: ["y"] },
+      condition: { type: "tool_blocked", params: { tools: ["y"] } },
       outcome: "allow",
       reason: "v2",
       priority: 1,

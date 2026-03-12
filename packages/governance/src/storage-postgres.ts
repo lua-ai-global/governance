@@ -34,6 +34,13 @@ export interface PostgresStorage extends GovernanceStorage {
 // ─── Implementation ─────────────────────────────────────────────
 
 /**
+ * In-flight migration promise per table prefix.
+ * Serializes CREATE TABLE so concurrent callers for the same prefix don't race
+ * and hit "duplicate key pg_type_typname_nsp_index" when creating composite types.
+ */
+const migrationByPrefix = new Map<string, Promise<void>>();
+
+/**
  * Create a PostgreSQL-backed storage adapter.
  *
  * @param config - Pool instance, optional table prefix, auto-migrate flag
@@ -57,7 +64,14 @@ export async function createPostgresStorage(
   let migrated = false;
 
   async function migrate(): Promise<void> {
-    await pool.query(getSchemaSQL(prefix));
+    let p = migrationByPrefix.get(prefix);
+    if (!p) {
+      p = pool.query(getSchemaSQL(prefix)).then(() => {
+        migrationByPrefix.delete(prefix);
+      });
+      migrationByPrefix.set(prefix, p);
+    }
+    await p;
     migrated = true;
   }
 

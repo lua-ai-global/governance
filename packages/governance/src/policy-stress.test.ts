@@ -19,8 +19,8 @@ describe("conflicting policy rules", () => {
   test("same priority rules: first matching wins", () => {
     const engine = createPolicyEngine({
       rules: [
-        { id: "r1", name: "Allow", condition: { type: "tool_blocked", tools: ["test"] }, outcome: "allow", reason: "Allowed", priority: 100, enabled: true },
-        { id: "r2", name: "Block", condition: { type: "tool_blocked", tools: ["test"] }, outcome: "block", reason: "Blocked", priority: 100, enabled: true },
+        { id: "r1", name: "Allow", condition: { type: "tool_blocked", params: { tools: ["test"] } }, outcome: "allow", reason: "Allowed", priority: 100, enabled: true },
+        { id: "r2", name: "Block", condition: { type: "tool_blocked", params: { tools: ["test"] } }, outcome: "block", reason: "Blocked", priority: 100, enabled: true },
       ],
     });
     // Both match, same priority — first in sort order wins (stable sort)
@@ -31,8 +31,8 @@ describe("conflicting policy rules", () => {
   test("higher priority rule wins over lower", () => {
     const engine = createPolicyEngine({
       rules: [
-        { id: "low", name: "Low", condition: { type: "tool_blocked", tools: ["test"] }, outcome: "allow", reason: "Allowed", priority: 10, enabled: true },
-        { id: "high", name: "High", condition: { type: "tool_blocked", tools: ["test"] }, outcome: "block", reason: "Blocked", priority: 200, enabled: true },
+        { id: "low", name: "Low", condition: { type: "tool_blocked", params: { tools: ["test"] } }, outcome: "allow", reason: "Allowed", priority: 10, enabled: true },
+        { id: "high", name: "High", condition: { type: "tool_blocked", params: { tools: ["test"] } }, outcome: "block", reason: "Blocked", priority: 200, enabled: true },
       ],
     });
     const decision = engine.evaluate({ agentId: "x", action: "tool_call", tool: "test" });
@@ -43,8 +43,8 @@ describe("conflicting policy rules", () => {
   test("kill switch priority (999) overrides everything", () => {
     const engine = createPolicyEngine({
       rules: [
-        { id: "allow-all", name: "Allow All", condition: { type: "custom", evaluate: () => true }, outcome: "allow", reason: "All allowed", priority: 998, enabled: true },
-        { id: "kill", name: "Kill Switch", condition: { type: "custom", evaluate: () => true }, outcome: "block", reason: "KILLED", priority: 999, enabled: true },
+        { id: "allow-all", name: "Allow All", condition: { type: "custom", params: { evaluate: () => true } }, outcome: "allow", reason: "All allowed", priority: 998, enabled: true },
+        { id: "kill", name: "Kill Switch", condition: { type: "custom", params: { evaluate: () => true } }, outcome: "block", reason: "KILLED", priority: 999, enabled: true },
       ],
     });
     const decision = engine.evaluate({ agentId: "x", action: "tool_call" });
@@ -60,7 +60,7 @@ describe("large rule lists", () => {
     const rules = Array.from({ length: 150 }, (_, i) => ({
       id: `rule-${i}`,
       name: `Rule ${i}`,
-      condition: { type: "tool_blocked" as const, tools: [`tool_${i}`] },
+      condition: { type: "tool_blocked" as const, params: { tools: [`tool_${i}`] } },
       outcome: "block" as const,
       reason: `Blocked tool_${i}`,
       priority: i,
@@ -77,7 +77,7 @@ describe("large rule lists", () => {
     const rules = Array.from({ length: 50 }, (_, i) => ({
       id: `rule-${i}`,
       name: `Rule ${i}`,
-      condition: { type: "tool_blocked" as const, tools: [`tool_${i}`] },
+      condition: { type: "tool_blocked" as const, params: { tools: [`tool_${i}`] } },
       outcome: "block" as const,
       reason: `Blocked`,
       priority: i,
@@ -98,10 +98,12 @@ describe("combinator conditions", () => {
         name: "Any of",
         condition: {
           type: "any_of",
-          conditions: [
-            { type: "tool_blocked", tools: ["a"] },
-            { type: "tool_blocked", tools: ["b"] },
-          ],
+          params: {
+            conditions: [
+              { type: "tool_blocked", params: { tools: ["a"] } },
+              { type: "tool_blocked", params: { tools: ["b"] } },
+            ],
+          },
         },
         outcome: "block",
         reason: "Either a or b",
@@ -121,10 +123,12 @@ describe("combinator conditions", () => {
         name: "All of",
         condition: {
           type: "all_of",
-          conditions: [
-            { type: "action_type", actions: ["payment"] },
-            { type: "agent_level", minLevel: 3 },
-          ],
+          params: {
+            conditions: [
+              { type: "action_type", params: { actions: ["payment"] } },
+              { type: "agent_level", params: { minLevel: 3 } },
+            ],
+          },
         },
         outcome: "block",
         reason: "Payment + low level",
@@ -147,7 +151,9 @@ describe("combinator conditions", () => {
         name: "Not allowed tool",
         condition: {
           type: "not",
-          condition: { type: "tool_allowed", tools: ["web_search", "email_read"] },
+          params: {
+            condition: { type: "tool_allowed", params: { tools: ["web_search", "email_read"] } },
+          },
         },
         outcome: "block",
         reason: "Only web_search and email_read allowed (via not)",
@@ -167,16 +173,20 @@ describe("combinator conditions", () => {
         name: "Nested",
         condition: {
           type: "any_of",
-          conditions: [
-            {
-              type: "all_of",
-              conditions: [
-                { type: "action_type", actions: ["payment"] },
-                { type: "token_limit", maxTokens: 10000 },
-              ],
-            },
-            { type: "tool_blocked", tools: ["nuclear_launch"] },
-          ],
+          params: {
+            conditions: [
+              {
+                type: "all_of",
+                params: {
+                  conditions: [
+                    { type: "action_type", params: { actions: ["payment"] } },
+                    { type: "token_limit", params: { maxTokens: 10000 } },
+                  ],
+                },
+              },
+              { type: "tool_blocked", params: { tools: ["nuclear_launch"] } },
+            ],
+          },
         },
         outcome: "block",
         reason: "Complex nested rule",
@@ -224,7 +234,7 @@ describe("policy composition edge cases", () => {
       rules: Array.from({ length: 25 }, (_, j) => ({
         id: `rule-${i}-${j}`,
         name: `R${i}${j}`,
-        condition: { type: "tool_blocked" as const, tools: [`tool_${i}_${j}`] },
+        condition: { type: "tool_blocked" as const, params: { tools: [`tool_${i}_${j}`] } },
         outcome: "block" as const,
         reason: "test",
         priority: j,
@@ -243,7 +253,7 @@ describe("policy composition edge cases", () => {
         rules: [{
           id: "block-level",
           name: "Block low",
-          condition: { type: "agent_level", minLevel: 3 },
+          condition: { type: "agent_level", params: { minLevel: 3 } },
           outcome: "block",
           reason: "Blocked",
           priority: 100,
@@ -256,7 +266,7 @@ describe("policy composition edge cases", () => {
         rules: [{
           id: "allow-level",
           name: "Allow all levels",
-          condition: { type: "agent_level", minLevel: 3 },
+          condition: { type: "agent_level", params: { minLevel: 3 } },
           outcome: "allow",
           reason: "Allowed",
           priority: 100,
@@ -282,9 +292,11 @@ describe("custom condition evaluator", () => {
         name: "Spy rule",
         condition: {
           type: "custom",
-          evaluate: (ctx) => {
-            receivedCtx = ctx as unknown as Record<string, unknown>;
-            return false;
+          params: {
+            evaluate: (ctx) => {
+              receivedCtx = ctx as unknown as Record<string, unknown>;
+              return false;
+            },
           },
         },
         outcome: "block",
@@ -315,7 +327,7 @@ describe("data classification rules", () => {
       rules: [{
         id: "classify",
         name: "PII Block",
-        condition: { type: "data_classification", blocked: ["ssn", "credit_card"] },
+        condition: { type: "data_classification", params: { blocked: ["ssn", "credit_card"] } },
         outcome: "block",
         reason: "PII detected",
         priority: 100,

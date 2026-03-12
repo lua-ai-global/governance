@@ -66,7 +66,9 @@ describe("custom evaluator Promise guard", () => {
         name: "Bad async rule",
         condition: {
           type: "custom",
-          evaluate: (() => Promise.resolve(true)) as unknown as (ctx: import("./policy").EnforcementContext) => boolean,
+          params: {
+            evaluate: (() => Promise.resolve(true)) as unknown as (ctx: import("./policy").EnforcementContext) => boolean,
+          },
         },
         outcome: "block",
         reason: "Should never match",
@@ -88,7 +90,9 @@ describe("custom evaluator Promise guard", () => {
         name: "Good sync rule",
         condition: {
           type: "custom",
-          evaluate: (ctx) => ctx.agentId === "blocked-agent",
+          params: {
+            evaluate: (ctx: import("./policy").EnforcementContext) => ctx.agentId === "blocked-agent",
+          },
         },
         outcome: "block",
         reason: "Blocked by custom rule",

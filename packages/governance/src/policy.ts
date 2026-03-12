@@ -5,11 +5,7 @@
  * Preset builders are in policy-presets.ts.
  */
 
-import { detectInjection } from "./injection-detect.js";
-import type { InjectionCategory } from "./injection-detect.js";
-import { evaluateBlocklist, evaluateInputLength, evaluateInputPattern } from "./conditions/preprocess.js";
-import { evaluateNetworkAllowlist, evaluateScopeBoundary, evaluateCostBudget, evaluateConcurrentLimit } from "./conditions/process.js";
-import { evaluateOutputLength, evaluateOutputPattern, evaluateSensitiveDataFilter } from "./conditions/postprocess.js";
+import { getBuiltinConditions } from "./conditions/builtins.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -39,32 +35,15 @@ export interface PolicyRule {
   stage?: PolicyStage;
 }
 
-export type PolicyCondition =
-  | { type: "tool_blocked"; tools: string[] }
-  | { type: "tool_allowed"; tools: string[] }
-  | { type: "action_type"; actions: PolicyAction[] }
-  | { type: "token_limit"; maxTokens: number }
-  | { type: "rate_limit"; maxActions: number; windowMs: number }
-  | { type: "data_classification"; blocked: string[] }
-  | { type: "agent_level"; minLevel: number }
-  | { type: "tool_sequence"; tool: string; requiredPrior: string[] }
-  | { type: "time_window"; allowedHours: { start: number; end: number } }
-  | { type: "any_of"; conditions: PolicyCondition[] }
-  | { type: "all_of"; conditions: PolicyCondition[] }
-  | { type: "not"; condition: PolicyCondition }
-  | { type: "injection_guard"; threshold: number; skipCategories: string[] }
-  | { type: "blocklist"; terms: string[]; caseSensitive?: boolean }
-  | { type: "input_length"; maxChars?: number; maxTokens?: number }
-  | { type: "input_pattern"; pattern: string; flags?: string }
-  | { type: "network_allowlist"; allowedDomains: string[] }
-  | { type: "scope_boundary"; allowedPaths?: string[]; blockedPaths?: string[] }
-  | { type: "cost_budget"; maxCost: number; currency?: string }
-  | { type: "concurrent_limit"; maxConcurrent: number }
-  | { type: "output_length"; maxChars?: number; maxTokens?: number }
-  | { type: "output_pattern"; pattern: string; flags?: string }
-  | { type: "sensitive_data_filter"; patterns?: string[] }
-  | { type: "custom"; evaluate: (ctx: EnforcementContext) => boolean }
-  | { type: "registered"; name: string; params: Record<string, unknown> };
+/**
+ * A policy condition — built-in or plugin-provided.
+ * `type` identifies the evaluator (looked up in the condition registry).
+ * `params` holds the configuration for that evaluator.
+ */
+export interface PolicyCondition {
+  type: string;
+  params: Record<string, unknown>;
+}
 
 export interface EnforcementContext {
   agentId: string;
@@ -119,13 +98,11 @@ export interface RegisteredConditionType {
 const conditionRegistry = new Map<string, RegisteredConditionType>();
 
 /**
- * Register a custom condition type that can be used in policy rules via `{ type: "registered", name, params }`.
- *
- * Registered conditions are serializable (unlike `custom`) — the evaluator lives in the registry,
- * while the rule itself is pure data. This enables visual builders, remote policy storage, and plugin distribution.
+ * Register a condition type. The evaluator lives in the registry while
+ * the rule itself (`{ type, params }`) is pure data — serializable, storable, transportable.
  *
  * @param entry - Name, description, evaluator function, and optional param schema
- * @throws If a condition with the same name is already registered
+ * @param opts - Set `override: true` to replace an existing condition (e.g., override a built-in)
  *
  * @example
  * ```ts
@@ -141,9 +118,9 @@ const conditionRegistry = new Map<string, RegisteredConditionType>();
  * });
  * ```
  */
-export function registerCondition(entry: RegisteredConditionType): void {
-  if (conditionRegistry.has(entry.name)) {
-    throw new Error(`Condition type "${entry.name}" is already registered`);
+export function registerCondition(entry: RegisteredConditionType, opts?: { override?: boolean }): void {
+  if (conditionRegistry.has(entry.name) && !opts?.override) {
+    throw new Error(`Condition type "${entry.name}" is already registered. Use { override: true } to replace.`);
   }
   conditionRegistry.set(entry.name, entry);
 }
@@ -163,9 +140,11 @@ export function getRegisteredConditions(): RegisteredConditionType[] {
   return [...conditionRegistry.values()];
 }
 
-/** Clear all registered conditions (primarily for testing) */
-export function clearConditionRegistry(): void {
+/** Clear all registered conditions (primarily for testing). Set `keepBuiltins: true` to re-register built-ins after clearing. */
+export function clearConditionRegistry(opts?: { keepBuiltins?: boolean }): void {
   conditionRegistry.clear();
+  builtinsRegistered = false;
+  if (opts?.keepBuiltins) registerBuiltinConditions();
 }
 
 // ─── Policy Engine ──────────────────────────────────────────────
@@ -198,6 +177,7 @@ export interface PolicyEngineConfig {
  * ```
  */
 export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngine {
+  registerBuiltinConditions();
   const rules: PolicyRule[] = [...(config.rules ?? [])];
   const defaultOutcome = config.defaultOutcome ?? "allow";
 
@@ -281,102 +261,39 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
   };
 }
 
-// ─── Condition Evaluators ───────────────────────────────────────
+// ─── Built-in Registration ──────────────────────────────────────
 
-function evaluateCondition(condition: PolicyCondition, ctx: EnforcementContext): boolean {
-  switch (condition.type) {
-    case "tool_blocked":
-      return !!ctx.tool && condition.tools.includes(ctx.tool);
-    case "tool_allowed":
-      return !!ctx.tool && !condition.tools.includes(ctx.tool);
-    case "action_type":
-      return condition.actions.includes(ctx.action);
-    case "token_limit":
-      return (ctx.sessionTokensUsed ?? 0) > condition.maxTokens;
-    case "rate_limit":
-      // Note: This is a declarative threshold check on caller-supplied recentActionCount.
-      // The SDK does NOT track action counts — the caller must provide accurate counts.
-      // For server-side rate limiting, use Upstash/Redis in the API layer.
-      return (ctx.recentActionCount ?? 0) > condition.maxActions;
-    case "data_classification": {
-      if (!ctx.input) return false;
-      const inputStr = JSON.stringify(ctx.input).toLowerCase();
-      return condition.blocked.some((b) => inputStr.includes(b.toLowerCase()));
-    }
-    case "agent_level":
-      return (ctx.agentLevel ?? 0) < condition.minLevel;
-    case "tool_sequence":
-      if (ctx.tool !== condition.tool) return false;
-      if (!ctx.toolHistory || ctx.toolHistory.length === 0) return true;
-      return !condition.requiredPrior.every((t) => ctx.toolHistory!.includes(t));
-    case "time_window": {
-      const hour = new Date().getHours();
-      const { start, end } = condition.allowedHours;
-      if (start <= end) return hour < start || hour >= end;
-      return hour < start && hour >= end;
-    }
-    case "any_of":
-      return condition.conditions.some((c) => evaluateCondition(c, ctx));
-    case "all_of":
-      return condition.conditions.every((c) => evaluateCondition(c, ctx));
-    case "not":
-      return !evaluateCondition(condition.condition, ctx);
-    case "injection_guard": {
-      if (!ctx.input) return false;
-      const skip = condition.skipCategories as InjectionCategory[];
-      const opts = { threshold: condition.threshold, skipCategories: skip.length > 0 ? skip : undefined };
-      for (const str of extractStrings(ctx.input)) {
-        if (detectInjection(str, opts).detected) return true;
-      }
-      return false;
-    }
-    case "blocklist":
-      return evaluateBlocklist(ctx, condition.terms, condition.caseSensitive);
-    case "input_length":
-      return evaluateInputLength(ctx, condition.maxChars, condition.maxTokens);
-    case "input_pattern":
-      return evaluateInputPattern(ctx, condition.pattern, condition.flags);
-    case "network_allowlist":
-      return evaluateNetworkAllowlist(ctx, condition.allowedDomains);
-    case "scope_boundary":
-      return evaluateScopeBoundary(ctx, condition.allowedPaths, condition.blockedPaths);
-    case "cost_budget":
-      return evaluateCostBudget(ctx, condition.maxCost);
-    case "concurrent_limit":
-      return evaluateConcurrentLimit(ctx, condition.maxConcurrent);
-    case "output_length":
-      return evaluateOutputLength(ctx, condition.maxChars, condition.maxTokens);
-    case "output_pattern":
-      return evaluateOutputPattern(ctx, condition.pattern, condition.flags);
-    case "sensitive_data_filter":
-      return evaluateSensitiveDataFilter(ctx, condition.patterns);
-    case "custom": {
-      const r = condition.evaluate(ctx);
-      if (r && typeof r === "object" && typeof (r as Promise<boolean>).then === "function") {
-        throw new Error("Custom policy evaluator returned a Promise — evaluators must be synchronous.");
-      }
-      return r;
-    }
-    case "registered": {
-      const entry = conditionRegistry.get(condition.name);
-      if (!entry) {
-        throw new Error(`Unknown registered condition type "${condition.name}" — did you forget to call registerCondition()?`);
-      }
-      return entry.evaluator(ctx, condition.params);
+let builtinsRegistered = false;
+
+/** Register all 25 built-in condition evaluators. Idempotent. */
+export function registerBuiltinConditions(): void {
+  if (builtinsRegistered) return;
+  for (const def of getBuiltinConditions(evaluateCondition)) {
+    if (!conditionRegistry.has(def.name)) {
+      conditionRegistry.set(def.name, def);
     }
   }
+  builtinsRegistered = true;
 }
 
-/** Extract all string values from a nested object for scanning */
-function extractStrings(obj: Record<string, unknown>): string[] {
-  const out: string[] = [];
-  (function walk(v: unknown) {
-    if (typeof v === "string") out.push(v);
-    else if (Array.isArray(v)) v.forEach(walk);
-    else if (v && typeof v === "object") Object.values(v as Record<string, unknown>).forEach(walk);
-  })(obj);
-  if (out.length > 1) out.push(out.join(" "));
-  return out;
+// ─── Condition Evaluator ────────────────────────────────────────
+
+function evaluateCondition(condition: PolicyCondition, ctx: EnforcementContext): boolean {
+  // Backwards compat: inline custom evaluators (params.evaluate is a function)
+  const evalFn = condition.params?.evaluate;
+  if (typeof evalFn === "function") {
+    const r = (evalFn as (ctx: EnforcementContext) => boolean)(ctx);
+    if (r && typeof r === "object" && typeof (r as Promise<boolean>).then === "function") {
+      throw new Error("Custom policy evaluator returned a Promise — evaluators must be synchronous.");
+    }
+    return r;
+  }
+
+  const entry = conditionRegistry.get(condition.type);
+  if (!entry) {
+    throw new Error(`Unknown condition type "${condition.type}" — register it via registerCondition()`);
+  }
+  return entry.evaluator(ctx, condition.params);
 }
 
 // ─── Re-export presets ──────────────────────────────────────────

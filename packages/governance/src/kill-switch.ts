@@ -68,7 +68,7 @@ function makeAgentKillRule(agentId: string, reason: string): PolicyRule {
     name: `Kill switch: ${agentId}`,
     condition: {
       type: "custom",
-      evaluate: (ctx: EnforcementContext) => ctx.agentId === agentId,
+      params: { evaluate: (ctx: EnforcementContext) => ctx.agentId === agentId },
     },
     outcome: "block",
     reason: `[KILL SWITCH] ${reason}`,
@@ -83,7 +83,7 @@ function makeFleetKillRule(reason: string): PolicyRule {
     name: "Kill switch: ALL AGENTS",
     condition: {
       type: "custom",
-      evaluate: () => true, // matches everything
+      params: { evaluate: () => true }, // matches everything
     },
     outcome: "block",
     reason: `[FLEET KILL SWITCH] ${reason}`,

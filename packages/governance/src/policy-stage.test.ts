@@ -35,7 +35,7 @@ describe("PolicyEngine.evaluateStage", () => {
     const rule: PolicyRule = {
       id: "no-stage",
       name: "No stage set",
-      condition: { type: "tool_blocked", tools: ["rm"] },
+      condition: { type: "tool_blocked", params: { tools: ["rm"] } },
       outcome: "block",
       reason: "blocked",
       priority: 100,
