@@ -44,6 +44,8 @@ interface AgentConfig {
   level: number;
 }
 
+type HostedAgentMode = "existing" | "new";
+
 interface RemoteAgent {
   id: string;
   name: string;
@@ -168,6 +170,10 @@ export default function App() {
   const [remotePolicies, setRemotePolicies] = useState<RemotePolicies | null>(null);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [hostedAgentMode, setHostedAgentMode] = useState<HostedAgentMode>("existing");
+  const [selectedRemoteAgentId, setSelectedRemoteAgentId] = useState<string | null>(null);
+  const [newAgentName, setNewAgentName] = useState("");
+  const [newAgentFramework, setNewAgentFramework] = useState<AgentFramework>("vercel-ai");
 
   const [agentConfig, setAgentConfig] = useState<AgentConfig>({
     name: "My Agent",
@@ -182,6 +188,22 @@ export default function App() {
     injectionGuardEnabled: true,
     injectionThreshold: 0.4,
   });
+
+  const selectedRemoteAgent = useMemo(
+    () => remoteAgents.find((a) => a.id === selectedRemoteAgentId) ?? null,
+    [remoteAgents, selectedRemoteAgentId],
+  );
+
+  /** The agent identity used for enforcement — differs by mode */
+  const activeAgent = useMemo(() => {
+    if (mode === "local") {
+      return { id: agentConfig.name, name: agentConfig.name, framework: agentConfig.framework, level: agentConfig.level };
+    }
+    if (hostedAgentMode === "existing" && selectedRemoteAgent) {
+      return { id: selectedRemoteAgent.id, name: selectedRemoteAgent.name, framework: selectedRemoteAgent.framework, level: selectedRemoteAgent.governanceLevel };
+    }
+    return { id: newAgentName || "new-agent", name: newAgentName || "new-agent", framework: newAgentFramework, level: 0 };
+  }, [mode, agentConfig, hostedAgentMode, selectedRemoteAgent, newAgentName, newAgentFramework]);
 
   const codePreview = useMemo(
     () => buildCodePreview(agentConfig, policyConfig, mode),
@@ -280,11 +302,11 @@ export default function App() {
       // In local mode, we register explicitly to get an agent ID.
       let agentId: string;
       if (mode === "hosted") {
-        agentId = agentConfig.name;
+        agentId = activeAgent.id;
       } else {
         const agent = await gov.register({
-          name: agentConfig.name,
-          framework: agentConfig.framework,
+          name: activeAgent.name,
+          framework: activeAgent.framework as AgentFramework,
           owner: "demo-app",
         });
         agentId = agent.id;
@@ -294,8 +316,8 @@ export default function App() {
       for (const toolName of selectedTools) {
         const decision = await gov.enforce({
           agentId,
-          agentName: agentConfig.name,
-          agentLevel: agentConfig.level,
+          agentName: activeAgent.name,
+          agentLevel: activeAgent.level,
           action: "tool_call",
           tool: toolName,
           input: input ? { message: input } : undefined,
@@ -319,7 +341,7 @@ export default function App() {
     } finally {
       setEnforcing(false);
     }
-  }, [selectedTools, agentConfig, policyConfig, input, mode, hostedUrl, hostedKey, addAudit]);
+  }, [selectedTools, activeAgent, policyConfig, input, mode, hostedUrl, hostedKey, addAudit]);
 
   const toggleTool = (name: string) => {
     setSelectedTools((prev) => {
@@ -390,24 +412,32 @@ export default function App() {
 
         {/* Quick Summary */}
         <div className="sidebar-section">
-          <span className="sidebar-label">Current Config</span>
+          <span className="sidebar-label">Active Agent</span>
           <div className="config-summary">
             <div className="summary-row">
               <span className="key">Agent</span>
-              <span className="val">{agentConfig.name}</span>
+              <span className="val">{activeAgent.name}</span>
             </div>
             <div className="summary-row">
               <span className="key">Framework</span>
-              <span className="val">{agentConfig.framework}</span>
+              <span className="val">{activeAgent.framework}</span>
             </div>
             <div className="summary-row">
               <span className="key">Level</span>
-              <span className={`val level-color level-${agentConfig.level}`}>{agentConfig.level}/5</span>
+              <span className={`val level-color level-${activeAgent.level}`}>{activeAgent.level}/5</span>
             </div>
-            <div className="summary-row">
-              <span className="key">Rules</span>
-              <span className="val">{ruleCount} active</span>
-            </div>
+            {mode === "local" && (
+              <div className="summary-row">
+                <span className="key">Rules</span>
+                <span className="val">{ruleCount} active</span>
+              </div>
+            )}
+            {mode === "hosted" && remotePolicies && (
+              <div className="summary-row">
+                <span className="key">Plan</span>
+                <span className="val">{remotePolicies.plan || "free"}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -419,104 +449,12 @@ export default function App() {
       {/* ─── Main ─── */}
       <main className="main">
         {/* ═══ CONFIGURE TAB ═══ */}
-        {tab === "configure" && (
+        {tab === "configure" && mode === "local" && (
           <>
             <div className="page-header">
               <h2>Policy Configuration</h2>
-              <p>
-                {mode === "hosted"
-                  ? "View your remote org's policy config and registered agents, or configure locally below."
-                  : "Set up your agent registration and policy rules. Changes are reflected in the live code preview below."}
-              </p>
+              <p>Set up your agent registration and policy rules. Changes are reflected in the live code preview below.</p>
             </div>
-
-            {/* Remote Config Panel (hosted mode only) */}
-            {mode === "hosted" && (
-              <section className="panel" style={{ marginBottom: "1.5rem" }}>
-                <div className="panel-header-row">
-                  <h3 className="panel-title" style={{ border: "none", paddingBottom: 0 }}>Remote Configuration</h3>
-                  <button className="btn primary sm" onClick={fetchRemoteConfig} disabled={remoteLoading}>
-                    {remoteLoading ? "Loading..." : "Fetch from API"}
-                  </button>
-                </div>
-
-                {remoteError && (
-                  <div className="error-card" style={{ marginTop: "0.75rem" }}>
-                    <span className="error-label">Error</span>
-                    <p>{remoteError}</p>
-                  </div>
-                )}
-
-                {remotePolicies && (
-                  <div style={{ marginTop: "1rem" }}>
-                    <div className="field">
-                      <label>Plan</label>
-                      <span className="badge accent">{remotePolicies.plan || "free"}</span>
-                    </div>
-
-                    {remotePolicies.policyRules.length > 0 && (
-                      <div className="field">
-                        <label>Policy Rules <span className="field-meta">{remotePolicies.policyRules.length}</span></label>
-                        <div className="remote-data-list">
-                          {remotePolicies.policyRules.map((rule, i) => (
-                            <div key={i} className="remote-data-item">
-                              <pre className="code-inline">{JSON.stringify(rule, null, 2)}</pre>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {remotePolicies.levelPolicies.length > 0 && (
-                      <div className="field">
-                        <label>Level Policies <span className="field-meta">{remotePolicies.levelPolicies.length}</span></label>
-                        <div className="remote-data-list">
-                          {remotePolicies.levelPolicies.map((lp, i) => (
-                            <div key={i} className="remote-data-item">
-                              <pre className="code-inline">{JSON.stringify(lp, null, 2)}</pre>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {Object.keys(remotePolicies.settings).length > 0 && (
-                      <div className="field">
-                        <label>Settings</label>
-                        <pre className="code-inline">{JSON.stringify(remotePolicies.settings, null, 2)}</pre>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {remoteAgents.length > 0 && (
-                  <div style={{ marginTop: "1rem" }}>
-                    <div className="field">
-                      <label>Registered Agents <span className="field-meta">{remoteAgents.length}</span></label>
-                      <div className="remote-agents-grid">
-                        {remoteAgents.map((a) => (
-                          <div key={a.id} className="remote-agent-card">
-                            <div className="remote-agent-name">{a.name}</div>
-                            <div className="remote-agent-meta">
-                              <span>{a.framework}</span>
-                              <span className={`level-color level-${a.governanceLevel}`}>L{a.governanceLevel}</span>
-                              <span>Score: {a.compositeScore}</span>
-                              <span className={`status-${a.status}`}>{a.status}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {!remotePolicies && remoteAgents.length === 0 && !remoteError && !remoteLoading && (
-                  <div className="empty-state" style={{ marginTop: "0.75rem" }}>
-                    <p className="dim">Click "Fetch from API" to load your org's policy config and agents.</p>
-                  </div>
-                )}
-              </section>
-            )}
 
             <div className="config-grid">
               {/* Agent Registration */}
@@ -672,6 +610,177 @@ export default function App() {
           </>
         )}
 
+        {/* ═══ CONFIGURE TAB — HOSTED ═══ */}
+        {tab === "configure" && mode === "hosted" && (
+          <>
+            <div className="page-header">
+              <div className="page-header-row">
+                <h2>Remote Configuration</h2>
+                <button className="btn primary sm" onClick={fetchRemoteConfig} disabled={remoteLoading || !hostedKey.trim()}>
+                  {remoteLoading ? "Loading..." : "Fetch from API"}
+                </button>
+              </div>
+              <p>Connect to your governance API to load your org's agents and policies, then select an agent to test.</p>
+            </div>
+
+            {remoteError && (
+              <div className="error-card">
+                <span className="error-label">Error</span>
+                <p>{remoteError}</p>
+              </div>
+            )}
+
+            {!hostedKey.trim() && (
+              <section className="panel">
+                <div className="empty-state">
+                  <p>Enter your API key in the sidebar to get started.</p>
+                </div>
+              </section>
+            )}
+
+            {hostedKey.trim() && (
+              <div className="config-grid">
+                {/* Agent Selection */}
+                <section className="panel">
+                  <h3 className="panel-title">Select Agent</h3>
+
+                  <div className="field">
+                    <div className="mode-toggle">
+                      <button className={hostedAgentMode === "existing" ? "active" : ""} onClick={() => setHostedAgentMode("existing")}>
+                        Use Existing
+                      </button>
+                      <button className={hostedAgentMode === "new" ? "active" : ""} onClick={() => setHostedAgentMode("new")}>
+                        Register New
+                      </button>
+                    </div>
+                  </div>
+
+                  {hostedAgentMode === "existing" && (
+                    <>
+                      {remoteAgents.length === 0 ? (
+                        <div className="empty-state">
+                          <p className="dim">No agents loaded yet. Click "Fetch from API" above.</p>
+                          <p className="dim">Agents are auto-registered on first enforce call.</p>
+                        </div>
+                      ) : (
+                        <div className="remote-agent-list">
+                          {remoteAgents.map((a) => (
+                            <button
+                              key={a.id}
+                              className={`remote-agent-option ${selectedRemoteAgentId === a.id ? "selected" : ""}`}
+                              onClick={() => setSelectedRemoteAgentId(a.id)}
+                            >
+                              <div className="remote-agent-option-top">
+                                <span className="remote-agent-name">{a.name}</span>
+                                <span className={`level-pill level-${a.governanceLevel}`}>L{a.governanceLevel}</span>
+                              </div>
+                              <div className="remote-agent-option-meta">
+                                <span>{a.framework}</span>
+                                <span>Score: {a.compositeScore}</span>
+                                <span className={`status-${a.status}`}>{a.status}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {hostedAgentMode === "new" && (
+                    <>
+                      <div className="field">
+                        <label>Agent Name</label>
+                        <input
+                          type="text"
+                          value={newAgentName}
+                          onChange={(e) => setNewAgentName(e.target.value)}
+                          placeholder="my-new-agent"
+                          className="config-input"
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Framework</label>
+                        <div className="chip-grid">
+                          {FRAMEWORKS.map((f) => (
+                            <button
+                              key={f.id}
+                              className={`chip ${newAgentFramework === f.id ? "active" : ""}`}
+                              onClick={() => setNewAgentFramework(f.id)}
+                            >
+                              {f.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="hint">
+                        The agent will be auto-registered on the remote API when you run your first enforce call.
+                      </div>
+                    </>
+                  )}
+                </section>
+
+                {/* Policies — link to dashboard */}
+                <section className="panel">
+                  <h3 className="panel-title">Active Policies</h3>
+
+                  {remotePolicies && (
+                    <div className="policy-overview">
+                      <div className="policy-summary-row">
+                        <span className="policy-label">Plan</span>
+                        <span className="badge accent">{remotePolicies.plan || "free"}</span>
+                      </div>
+                      <div className="policy-summary-row">
+                        <span className="policy-label">Policy Rules</span>
+                        <span className="policy-count">{remotePolicies.policyRules.length}</span>
+                      </div>
+                      <div className="policy-summary-row">
+                        <span className="policy-label">Level Policies</span>
+                        <span className="policy-count">{remotePolicies.levelPolicies.length}</span>
+                      </div>
+                      {remotePolicies.agentOverrides.length > 0 && (
+                        <div className="policy-summary-row">
+                          <span className="policy-label">Agent Overrides</span>
+                          <span className="policy-count">{remotePolicies.agentOverrides.length}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {remotePolicies && (remotePolicies.policyRules.length > 0 || remotePolicies.levelPolicies.length > 0) && (
+                    <details className="policy-details">
+                      <summary>View policy JSON</summary>
+                      <pre className="policy-json">{JSON.stringify({
+                        policyRules: remotePolicies.policyRules,
+                        levelPolicies: remotePolicies.levelPolicies,
+                        ...(remotePolicies.agentOverrides.length > 0 ? { agentOverrides: remotePolicies.agentOverrides } : {}),
+                        ...(Object.keys(remotePolicies.settings).length > 0 ? { settings: remotePolicies.settings } : {}),
+                      }, null, 2)}</pre>
+                    </details>
+                  )}
+
+                  <div className="dashboard-link-box">
+                    <p>Configure your policies from the governance dashboard.</p>
+                    <a href="https://governance.heylua.ai" target="_blank" rel="noopener noreferrer" className="btn outline">
+                      Open Dashboard
+                    </a>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* Code Preview */}
+            <section className="panel code-panel">
+              <div className="code-header">
+                <h3 className="panel-title" style={{ border: "none", paddingBottom: 0 }}>Generated Code</h3>
+                <button className="copy-btn" onClick={() => { navigator.clipboard.writeText(codePreview); }}>
+                  Copy
+                </button>
+              </div>
+              <pre className="code-block"><code>{codePreview}</code></pre>
+            </section>
+          </>
+        )}
+
         {/* ═══ TEST TAB ═══ */}
         {tab === "test" && (
           <>
@@ -793,7 +902,7 @@ export default function App() {
                   {enforcing ? "Enforcing..." : `Enforce ${selectedTools.size} tool${selectedTools.size !== 1 ? "s" : ""}`}
                 </button>
                 <span className="enforce-meta">
-                  {agentConfig.name} ({agentConfig.framework}) — Level {agentConfig.level}
+                  {activeAgent.name} ({activeAgent.framework}) — Level {activeAgent.level}
                 </span>
               </div>
 
