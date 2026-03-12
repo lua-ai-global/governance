@@ -327,7 +327,6 @@ export default function App() {
           tool: toolName,
           input: input ? { message: input } : undefined,
         });
-        console.log(`[enforce] ${toolName} raw response:`, JSON.stringify(decision));
         results.push({ ...decision, tool: toolName });
         addAudit(
           "enforce",
