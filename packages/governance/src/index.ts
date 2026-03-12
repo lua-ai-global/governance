@@ -272,8 +272,8 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 
 export { storedToRegistration };
 export { assessAgent, assessFleet, getGovernanceLevel } from "./scorer.js";
-export { createPolicyEngine, blockTools, allowOnlyTools, requireApproval, tokenBudget, rateLimit, requireLevel, requireSequence, timeWindow } from "./policy.js";
-export type { PolicyRule, PolicyEngine, PolicyAction, PolicyCondition, PolicyOutcome, PolicyStage, EnforcementContext, EnforcementDecision, PolicyEngineConfig } from "./policy.js";
+export { createPolicyEngine, blockTools, allowOnlyTools, requireApproval, tokenBudget, rateLimit, requireLevel, requireSequence, timeWindow, registerCondition, unregisterCondition, getRegisteredCondition, getRegisteredConditions, clearConditionRegistry } from "./policy.js";
+export type { PolicyRule, PolicyEngine, PolicyAction, PolicyCondition, PolicyOutcome, PolicyStage, EnforcementContext, EnforcementDecision, PolicyEngineConfig, ConditionEvaluator, RegisteredConditionType } from "./policy.js";
 export type { AgentRegistration, AgentFramework, AgentStatus, GovernanceAssessment, GovernanceLevel, DimensionResult, ScoreDimension, FleetSummary } from "./types.js";
 export { detectInjection, createInjectionGuard, getBuiltinPatterns } from "./injection-detect.js";
 export type { InjectionPattern, InjectionCategory, InjectionResult, InjectionDetectorConfig } from "./injection-detect.js";

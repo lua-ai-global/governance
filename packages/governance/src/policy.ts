@@ -63,7 +63,8 @@ export type PolicyCondition =
   | { type: "output_length"; maxChars?: number; maxTokens?: number }
   | { type: "output_pattern"; pattern: string; flags?: string }
   | { type: "sensitive_data_filter"; patterns?: string[] }
-  | { type: "custom"; evaluate: (ctx: EnforcementContext) => boolean };
+  | { type: "custom"; evaluate: (ctx: EnforcementContext) => boolean }
+  | { type: "registered"; name: string; params: Record<string, unknown> };
 
 export interface EnforcementContext {
   agentId: string;
@@ -99,6 +100,72 @@ export interface EnforcementDecision {
   outcome: PolicyOutcome;
   evaluatedAt: string;
   rulesEvaluated: number;
+}
+
+// ─── Condition Registry ─────────────────────────────────────────
+
+/** Evaluator function for a registered condition type */
+export type ConditionEvaluator = (ctx: EnforcementContext, params: Record<string, unknown>) => boolean;
+
+/** Metadata for a registered condition type */
+export interface RegisteredConditionType {
+  name: string;
+  description: string;
+  evaluator: ConditionEvaluator;
+  /** JSON Schema for params — enables visual builders to render config UIs */
+  paramSchema?: Record<string, unknown>;
+}
+
+const conditionRegistry = new Map<string, RegisteredConditionType>();
+
+/**
+ * Register a custom condition type that can be used in policy rules via `{ type: "registered", name, params }`.
+ *
+ * Registered conditions are serializable (unlike `custom`) — the evaluator lives in the registry,
+ * while the rule itself is pure data. This enables visual builders, remote policy storage, and plugin distribution.
+ *
+ * @param entry - Name, description, evaluator function, and optional param schema
+ * @throws If a condition with the same name is already registered
+ *
+ * @example
+ * ```ts
+ * registerCondition({
+ *   name: 'geo_fence',
+ *   description: 'Block actions outside allowed regions',
+ *   evaluator: (ctx, params) => {
+ *     const region = ctx.metadata?.region as string;
+ *     const allowed = params.allowedRegions as string[];
+ *     return !region || !allowed.includes(region);
+ *   },
+ *   paramSchema: { type: 'object', properties: { allowedRegions: { type: 'array', items: { type: 'string' } } } },
+ * });
+ * ```
+ */
+export function registerCondition(entry: RegisteredConditionType): void {
+  if (conditionRegistry.has(entry.name)) {
+    throw new Error(`Condition type "${entry.name}" is already registered`);
+  }
+  conditionRegistry.set(entry.name, entry);
+}
+
+/** Unregister a previously registered condition type */
+export function unregisterCondition(name: string): boolean {
+  return conditionRegistry.delete(name);
+}
+
+/** Get a registered condition type by name */
+export function getRegisteredCondition(name: string): RegisteredConditionType | undefined {
+  return conditionRegistry.get(name);
+}
+
+/** List all registered condition types */
+export function getRegisteredConditions(): RegisteredConditionType[] {
+  return [...conditionRegistry.values()];
+}
+
+/** Clear all registered conditions (primarily for testing) */
+export function clearConditionRegistry(): void {
+  conditionRegistry.clear();
 }
 
 // ─── Policy Engine ──────────────────────────────────────────────
@@ -289,6 +356,13 @@ function evaluateCondition(condition: PolicyCondition, ctx: EnforcementContext):
         throw new Error("Custom policy evaluator returned a Promise — evaluators must be synchronous.");
       }
       return r;
+    }
+    case "registered": {
+      const entry = conditionRegistry.get(condition.name);
+      if (!entry) {
+        throw new Error(`Unknown registered condition type "${condition.name}" — did you forget to call registerCondition()?`);
+      }
+      return entry.evaluator(ctx, condition.params);
     }
   }
 }
