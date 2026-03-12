@@ -55,11 +55,21 @@ interface RemoteAgent {
   status: string;
 }
 
+interface RemotePolicyRule {
+  id: string;
+  name: string;
+  condition: string;
+  outcome: string;
+  priority: number;
+  enabled: boolean;
+  config: Record<string, unknown>;
+}
+
 interface RemotePolicies {
   plan: string;
-  policyRules: Record<string, unknown>[];
-  levelPolicies: Record<string, unknown>[];
-  agentOverrides: Record<string, unknown>[];
+  policyRules: RemotePolicyRule[];
+  levelPolicies: Record<string, RemotePolicyRule[]>;
+  agentOverrides: Record<string, RemotePolicyRule[]>;
   settings: Record<string, unknown>;
 }
 
@@ -750,49 +760,46 @@ export default function App() {
                       {/* Policy Rule Sets */}
                       {remotePolicies.policyRules.length > 0 && (
                         <div className="field">
-                          <label>Policy Rules</label>
+                          <label>Policy Rules <span className="field-meta">{remotePolicies.policyRules.length}</span></label>
                           <div className="policy-rule-list">
-                            {remotePolicies.policyRules.map((rule, i) => {
-                              const r = rule as Record<string, unknown>;
-                              return (
-                                <div key={i} className="policy-rule-card">
-                                  <div className="policy-rule-top">
-                                    <span className="policy-rule-name">{String(r.name || r.id || `Rule ${i + 1}`)}</span>
-                                    {r.status && <span className={`policy-rule-status status-${r.status}`}>{String(r.status)}</span>}
-                                    {r.version && <span className="policy-rule-version">v{String(r.version)}</span>}
-                                  </div>
-                                  {r.description && <div className="policy-rule-desc">{String(r.description)}</div>}
-                                  {r.ruleCount != null && <div className="policy-rule-meta">{String(r.ruleCount)} rules</div>}
+                            {remotePolicies.policyRules.map((rule) => (
+                              <div key={rule.id} className="policy-rule-card">
+                                <div className="policy-rule-top">
+                                  <span className="policy-rule-name">{rule.name}</span>
+                                  <span className={`badge ${rule.outcome === "block" ? "danger" : rule.outcome === "warn" ? "warning" : "accent"}`}>{rule.outcome}</span>
+                                  <span className="badge dim">p{rule.priority}</span>
                                 </div>
-                              );
-                            })}
+                                <div className="policy-rule-desc">
+                                  Condition: <code>{rule.condition}</code>
+                                  {Object.keys(rule.config).length > 0 && (
+                                    <> · Config: <code>{JSON.stringify(rule.config)}</code></>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
 
                       {/* Level Policies */}
-                      {remotePolicies.levelPolicies.length > 0 && (
+                      {Object.keys(remotePolicies.levelPolicies).length > 0 && (
                         <div className="field">
-                          <label>Governance Levels</label>
+                          <label>Level Policies <span className="field-meta">{Object.keys(remotePolicies.levelPolicies).length} levels</span></label>
                           <div className="level-policy-list">
-                            {remotePolicies.levelPolicies.map((lp, i) => {
-                              const l = lp as Record<string, unknown>;
-                              const lvl = Number(l.level ?? i);
-                              return (
-                                <div key={i} className="level-policy-row">
-                                  <span className={`level-pill level-${lvl}`}>L{lvl}</span>
-                                  <span className="level-policy-label">{String(l.label || l.name || `Level ${lvl}`)}</span>
-                                </div>
-                              );
-                            })}
+                            {Object.entries(remotePolicies.levelPolicies).map(([level, rules]) => (
+                              <div key={level} className="level-policy-row">
+                                <span className={`level-pill level-${level}`}>L{level}</span>
+                                <span className="level-policy-label">{rules.length} rule{rules.length !== 1 ? "s" : ""}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
 
                       {/* Agent Overrides */}
-                      {remotePolicies.agentOverrides.length > 0 && (
+                      {Object.keys(remotePolicies.agentOverrides).length > 0 && (
                         <div className="field">
-                          <label>Agent Overrides <span className="field-meta">{remotePolicies.agentOverrides.length}</span></label>
+                          <label>Agent Overrides <span className="field-meta">{Object.keys(remotePolicies.agentOverrides).length}</span></label>
                           <details className="policy-details">
                             <summary>View details</summary>
                             <pre className="policy-json">{JSON.stringify(remotePolicies.agentOverrides, null, 2)}</pre>
