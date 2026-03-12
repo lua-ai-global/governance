@@ -996,13 +996,19 @@ export default function App() {
                 </div>
               ) : (
                 <div className="audit-list">
-                  {auditLog.map((entry) => (
-                    <div key={entry.id} className="audit-row">
-                      <span className="audit-time">{entry.time}</span>
-                      <span className={`audit-type ${entry.type}`}>{entry.type.toUpperCase()}</span>
-                      <span className="audit-msg">{entry.message}</span>
-                    </div>
-                  ))}
+                  {auditLog.map((entry) => {
+                    const isBlocked = entry.message.includes("BLOCKED");
+                    const isAllowed = entry.message.includes("ALLOWED");
+                    const isError = entry.message.includes("ERROR");
+                    const outcomeClass = isBlocked ? "blocked" : isAllowed ? "allowed" : isError ? "error" : "";
+                    return (
+                      <div key={entry.id} className={`audit-row ${outcomeClass}`}>
+                        <span className="audit-time">{entry.time}</span>
+                        <span className={`audit-type ${entry.type}`}>{entry.type.toUpperCase()}</span>
+                        <span className={`audit-msg ${outcomeClass}`}>{entry.message}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </section>

@@ -688,6 +688,11 @@ body {
 .audit-type.enforce { color: var(--purple); background: rgba(168, 85, 247, 0.08); }
 
 .audit-msg { color: var(--text-dim); flex: 1; }
+.audit-msg.blocked { color: var(--red); }
+.audit-msg.allowed { color: var(--green); }
+.audit-msg.error { color: var(--orange, #f59e0b); }
+.audit-row.blocked { background: var(--red-bg); }
+.audit-row.allowed { background: var(--green-bg); }
 
 .empty-state {
   text-align: center;
