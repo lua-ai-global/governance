@@ -1,12 +1,19 @@
 # Changelog
 
+## [0.3.2] - 2026-03-11
+
+### Added
+- `behavioral-scorer` export path — behavioral signal scoring adjustments
+- `repo-patterns` export path — repository capability detection and scanning
+- 35 export paths total
+
 ## [0.3.0] - 2026-03-10
 
 ### Changed
 - **Thin-client positioning** — SDK handles local policy evaluation, scoring, injection detection, and adapters. Stateful operations (rate limiting, distributed kill switch, durable audit) are the API layer's responsibility.
 - Enterprise modules extracted to separate `@lua-ai-global/governance-enterprise` package (585 tests)
-- Expanded from 20 to 33 export paths (15 new framework adapters)
-- OSS test count: 935 tests across the governance package
+- 35 export paths (20 framework adapters + behavioral-scorer + repo-patterns + core modules)
+- 935 tests across the governance package
 - Removed dead `verbose` flag from `PolicyEngineConfig`
 
 ### Fixed
@@ -33,15 +40,15 @@
 - Policy suggestion engine with fleet analysis
 - Kill switch with priority 999
 - 5 framework adapters (Mastra MW, Mastra Processor, Vercel AI, LangChain, OpenAI Agents)
-- Prompt injection detection (22 patterns, 6 categories)
+- Prompt injection detection (64+ patterns, 7 categories)
 - HMAC hash-chained audit trail
 - EU AI Act compliance mapping (6 articles)
 - PostgreSQL storage adapter
 - Cloud/remote enforcement via `serverUrl` config
 
 ### Changed
-- Expanded from 5 to 18 export paths
-- Test count: 600 -> 935
+- 18 export paths
+- 935 tests
 
 ## [0.1.0] - 2026-02-15
 

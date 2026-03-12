@@ -2,7 +2,7 @@
 
 ## WHAT THIS IS
 Public SDK monorepo for AI Agent Governance for TypeScript. Two packages:
-- `packages/governance/` — Core SDK (0 runtime deps, 33 exports, 945+ tests)
+- `packages/governance/` — Core SDK (0 runtime deps, 35 exports, 945+ tests)
 - `packages/governance-platform/` — Shared PostgreSQL storage layer
 
 ## STRUCTURE

@@ -4,12 +4,12 @@
 The first standalone governance SDK for TypeScript AI agents. Zero runtime dependencies. MIT license. Thin client — local policy evaluation, scoring, injection detection, and adapters. Stateful operations (rate limiting, distributed kill switch, durable audit) belong in the API layer.
 
 ## CURRENT STATE (Post-Audit)
-- **935 tests, 0 failures** — run with `npm test` (enterprise tests are in `packages/governance-enterprise/`)
+- **945+ tests, 0 failures** — run with `npm test` (enterprise tests are in `packages/governance-enterprise/`)
 - **0 runtime dependencies** — only devDependencies (tsx, typescript)
-- **33 export paths** — core, policy, scorer, 20 framework adapters, suggest, policy-compose, events, metrics, dry-run, audit-integrity, compliance, kill-switch, storage-postgres, injection-detect
+- **35 export paths** — core, policy, scorer, 20 framework adapters, suggest, policy-compose, events, metrics, dry-run, audit-integrity, compliance, kill-switch, storage-postgres, storage-postgres-schema, injection-detect, behavioral-scorer, repo-patterns
 - **20 framework adapters**: Mastra, Mastra Processor, Vercel AI, LangChain, OpenAI Agents, Anthropic, MCP, CrewAI, Bedrock, Genkit, Semantic Kernel, AutoGen, A2A, LlamaIndex, Cloudflare AI, Deno, Mistral, Ollama, E2B, Composio
 - **Enterprise is a separate package** — `packages/governance-enterprise/` (585 tests, 29 modules)
-- **Version: 0.3.0**
+- **Version: 0.3.2**
 
 ## ABSOLUTE RULES
 - **Zero runtime dependencies** — NEVER add a `dependency`. Framework imports go in `peerDependencies` (optional).
@@ -28,9 +28,18 @@ src/
   types.ts              # Shared TypeScript types
   kill-switch.ts        # Emergency agent shutdown (priority 999)
   storage-postgres.ts   # PostgreSQL storage adapter (PgPoolLike interface)
-  injection-detect.ts   # Prompt injection detection (22 patterns, 6 categories)
+  storage-postgres-schema.ts # PostgreSQL schema DDL
+  injection-detect.ts   # Prompt injection detection (64+ patterns, 7 categories)
+  injection-patterns.ts # Core injection pattern definitions
+  injection-patterns-ext.ts # Extended injection patterns
   audit-integrity.ts    # HMAC hash-chained audit verification
   compliance.ts         # EU AI Act compliance assessment (6 articles)
+  compliance-articles.ts # EU AI Act article data with deadlines and fines
+  behavioral-scorer.ts  # Behavioral signal scoring adjustments
+  scorer-dimensions.ts  # 7-dimension scorer implementations (split from scorer.ts)
+  policy-presets.ts     # Policy preset builder functions
+  repo-patterns.ts      # Repository capability detection
+  monorepo-detect.ts    # Monorepo root detection
   plugins/
     mastra.ts           # Mastra middleware adapter
     mastra-processor.ts # Mastra Processor adapter

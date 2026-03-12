@@ -3,7 +3,7 @@
 AI Agent Governance for TypeScript -- policy enforcement, behavioral scoring, compliance, and tamper-evident audit for AI agents. Zero runtime dependencies.
 
 [![npm version](https://img.shields.io/npm/v/@lua-ai-global/governance)](https://github.com/lua-ai-global/governance/packages)
-[![tests](https://img.shields.io/badge/tests-940%2B%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-945%2B%20passing-brightgreen)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 ---
@@ -91,21 +91,25 @@ Define rules that govern agent behavior at runtime. Policies return one of four 
 
 Policies compose with `policy-compose` for complex rule sets.
 
-### Behavioral Scoring
+### Governance Scoring
 
 7-dimension scoring model that quantifies agent trustworthiness:
 
 ```typescript
-import { createGovernance } from '@lua-ai-global/governance';
+import { assessAgent, getGovernanceLevel } from '@lua-ai-global/governance/scorer';
 
-const gov = createGovernance({ policies: [] });
-const score = await gov.score({ agentId: 'my-agent', history: events });
-// => { overall: 82, dimensions: { compliance, safety, efficiency, ... } }
+const assessment = assessAgent('my-agent', {
+  name: 'my-agent', framework: 'mastra', owner: 'platform-team',
+  hasAuth: true, hasGuardrails: true, hasObservability: true, hasAuditLog: true,
+});
+// => { compositeScore: 87, level: 4, dimensions: { identity, permissions, ... } }
+const level = getGovernanceLevel(assessment.compositeScore);
+// => { level: 4, label: 'Certified', description: '...' }
 ```
 
 ### Injection Detection
 
-22 patterns across 6 categories to detect prompt injection attacks at the input layer.
+64+ patterns across 7 categories to detect prompt injection attacks at the input layer.
 
 ```typescript
 import { detectInjection } from '@lua-ai-global/governance/injection-detect';
@@ -123,18 +127,24 @@ Emergency halt for any agent, enforced at priority 999 (overrides all other poli
 ```typescript
 import { createKillSwitch } from '@lua-ai-global/governance/kill-switch';
 
-const killSwitch = createKillSwitch();
-await killSwitch.activate('rogue-agent', { reason: 'Unauthorized data access' });
+const killSwitch = createKillSwitch(gov);
+await killSwitch.kill('rogue-agent', 'Unauthorized data access');
 ```
 
 ### Compliance
 
-EU AI Act coverage with structured article mapping.
+EU AI Act coverage with structured article mapping (6 articles, deadline tracking).
 
 ```typescript
-import { checkCompliance } from '@lua-ai-global/governance/compliance';
+import { assessCompliance, getDaysUntilDeadline } from '@lua-ai-global/governance/compliance';
 
-const report = await checkCompliance({ agentId: 'hiring-bot', framework: 'eu-ai-act' });
+const daysLeft = getDaysUntilDeadline();
+const report = await assessCompliance({
+  governance: gov,
+  agents: [agent],
+  auditIntegrity: true,
+  humanOversight: true,
+});
 ```
 
 ### Tamper-Evident Audit Trail
@@ -149,13 +159,13 @@ const valid = await verifyAuditIntegrity(auditLog, secret);
 
 ### Dry-Run Simulation
 
-Test policies against historical data without affecting production.
+Test policies against scenarios without affecting production.
 
 ```typescript
-import { dryRun } from '@lua-ai-global/governance/dry-run';
+import { fleetDryRun } from '@lua-ai-global/governance/dry-run';
 
-const results = await dryRun({ policies, events: historicalEvents });
-// => summary of what would have been blocked, warned, etc.
+const result = await fleetDryRun(gov, scenarios);
+// => { fleetSummary: { agentsAffected: 11, blockRate: 0.12 }, results: [...] }
 ```
 
 ## Framework Adapters
@@ -189,7 +199,7 @@ All framework dependencies are optional peer dependencies -- install only what y
 
 ## Export Paths
 
-The SDK ships 33+ targeted exports so you can import only what you need:
+The SDK ships 35 targeted exports so you can import only what you need:
 
 ```
 @lua-ai-global/governance            # core: createGovernance, enforce, presets
@@ -219,7 +229,7 @@ npm install
 # Build all packages
 npm run build
 
-# Run tests (940+ tests, 0 failures)
+# Run tests (945+ tests, 0 failures)
 npm test
 
 # Type-check without emitting
