@@ -604,6 +604,26 @@ body {
 .tool-name { color: var(--text); }
 .tool-desc { font-size: 11px; color: var(--text-muted); }
 
+.tool-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.tool-expand-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ─── Enforce Results ─── */
 .enforce-row {
   display: flex;
@@ -1028,4 +1048,103 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+/* ─── Pipeline Demo ─── */
+.pipeline-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pipeline-timeline {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pipeline-stage {
+  position: relative;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.pipeline-stage.pass { border-color: var(--green-border); background: var(--green-bg); }
+.pipeline-stage.blocked { border-color: var(--red-border); background: var(--red-bg); }
+.pipeline-stage.error { border-color: var(--red-border); background: var(--red-bg); }
+.pipeline-stage.running { border-color: var(--accent); background: rgba(99, 102, 241, 0.04); }
+
+.pipeline-stage-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pipeline-stage-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.pipeline-stage.pass .pipeline-stage-num { background: var(--green); color: #000; }
+.pipeline-stage.blocked .pipeline-stage-num { background: var(--red); color: #fff; }
+.pipeline-stage.running .pipeline-stage-num { background: var(--accent); color: #fff; }
+
+.pipeline-stage-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.pipeline-stage-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.pipeline-stage-badge.pass { color: var(--green); }
+.pipeline-stage-badge.blocked { color: var(--red); }
+.pipeline-stage-badge.error { color: var(--red); }
+.pipeline-stage-badge.running { color: var(--accent); }
+.pipeline-stage-badge.pending { color: var(--text-dim); }
+
+.pipeline-stage-ms {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+
+.pipeline-stage-reason {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.35rem;
+  padding-left: 1.75rem;
+}
+
+.pipeline-connector {
+  width: 2px;
+  height: 12px;
+  background: var(--border-bright);
+  margin-left: 1.55rem;
+}
+
+.pipeline-connector.halted {
+  background: var(--red);
+  opacity: 0.3;
 }
