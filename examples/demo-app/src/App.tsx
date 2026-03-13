@@ -459,12 +459,12 @@ export default function App() {
 
     const toolList = [...pipelineTools];
     const stages: { stage: "preprocess" | "process" | "postprocess"; url: string; body: Record<string, unknown>; label: string }[] = [
-      { stage: "preprocess", label: "Input Guard", url: `${base}/api/v1/enforce/preprocess`, body: { ...baseBody, action: "message", input: { message: pipelineInput } } },
+      { stage: "preprocess", label: "Input Guard", url: `${base}/api/v1/enforce/preprocess`, body: { ...baseBody, action: "message_send", input: { message: pipelineInput } } },
       ...toolList.map((tool) => ({
         stage: "process" as const, label: `Tool: ${tool}`, url: `${base}/api/v1/enforce`,
         body: { ...baseBody, action: "tool_call", tool, stage: "process", input: pipelineInput ? { message: pipelineInput } : undefined },
       })),
-      { stage: "postprocess", label: "Output Guard", url: `${base}/api/v1/enforce/postprocess`, body: { ...baseBody, action: "output", outputText: pipelineOutput } },
+      { stage: "postprocess", label: "Output Guard", url: `${base}/api/v1/enforce/postprocess`, body: { ...baseBody, action: "custom", outputText: pipelineOutput } },
     ];
 
     const results: PipelineStageResult[] = [];
