@@ -269,7 +269,7 @@ export const BUILTIN_PATTERNS: InjectionPattern[] = [
   {
     id: "exfil_url",
     category: "data_exfiltration",
-    pattern: /\b(?:send|post|transmit|upload|fetch|request)\s+(?:this|the|all|my|our|your)\s+(?:data|information|conversation|messages?|context|history)\s+(?:to|at|via)\s+|send\s+all\s+this\s+data\s+to\b/i,
+    pattern: /\b(?:send|post|transmit|upload|fetch|request)\s+(?:(?:all|every)\s+)?(?:(?:this|the|my|our|your)\s+)?(?:data|information|conversation|messages?|context|history|content)\s+(?:to|at|via)\s+/i,
     weight: 0.85,
     description: "Attempts to exfiltrate data to external URL",
   },
