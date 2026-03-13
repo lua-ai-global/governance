@@ -6,6 +6,7 @@
  */
 
 import { getBuiltinConditions } from "./conditions/builtins.js";
+import { getDefaultStage } from "./policy-stage-defaults.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -220,7 +221,7 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
 
   function evaluateStage(ctx: EnforcementContext, stage: PolicyStage): EnforcementDecision {
     const active = rules
-      .filter((r) => r.enabled && (r.stage ?? "process") === stage)
+      .filter((r) => r.enabled && (r.stage ?? getDefaultStage(r.condition.type)) === stage)
       .sort((a, b) => b.priority - a.priority);
 
     for (const rule of active) {
@@ -247,7 +248,7 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
   }
 
   function getRules(stage?: PolicyStage): PolicyRule[] {
-    if (stage) return rules.filter((r) => (r.stage ?? "process") === stage);
+    if (stage) return rules.filter((r) => (r.stage ?? getDefaultStage(r.condition.type)) === stage);
     return [...rules];
   }
 
