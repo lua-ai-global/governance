@@ -48,8 +48,14 @@ export function createRemoteEnforcer(config: RemoteConfig) {
   const { serverUrl, apiKey } = config;
   const baseUrl = serverUrl.replace(/\/$/, "");
 
-  async function remoteEnforce(ctx: EnforcementContext): Promise<EnforcementDecision> {
-    const response = await fetch(`${baseUrl}/api/v1/enforce`, {
+  async function remoteEnforce(
+    ctx: EnforcementContext,
+    stage?: "preprocess" | "process" | "postprocess",
+  ): Promise<EnforcementDecision> {
+    const endpoint = stage
+      ? `${baseUrl}/api/v1/enforce/${stage}`
+      : `${baseUrl}/api/v1/enforce`;
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

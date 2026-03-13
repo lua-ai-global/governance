@@ -10,6 +10,7 @@ import type { GovernanceInstance, StoredAgent } from "./index.js";
 import type {
   PolicyRule,
   PolicyAction,
+  PolicyStage,
   EnforcementDecision,
 } from "./policy.js";
 import { createPolicyEngine } from "./policy.js";
@@ -28,9 +29,18 @@ export interface DryRunAction {
   action: PolicyAction;
   tool?: string;
   input?: Record<string, unknown>;
+  /** Pipeline stage to scope evaluation (omit for all-rules evaluation) */
+  stage?: PolicyStage;
+  /** Agent output text for postprocess evaluation */
+  outputText?: string;
+  outputTokenCount?: number;
   sessionTokensUsed?: number;
   recentActionCount?: number;
   toolHistory?: string[];
+  targetUrl?: string;
+  targetPath?: string;
+  sessionCost?: number;
+  concurrentCount?: number;
 }
 
 export interface DryRunResult {
@@ -121,17 +131,26 @@ export async function dryRun(
   let wouldWarn = 0;
 
   for (const action of scenario.actions) {
-    const decision = engine.evaluate({
+    const ctx = {
       agentId: agent.id,
       agentName: agent.name,
       agentLevel: agent.governanceLevel,
       action: action.action,
       tool: action.tool,
       input: action.input,
+      outputText: action.outputText,
+      outputTokenCount: action.outputTokenCount,
       sessionTokensUsed: action.sessionTokensUsed,
       recentActionCount: action.recentActionCount,
       toolHistory: action.toolHistory,
-    });
+      targetUrl: action.targetUrl,
+      targetPath: action.targetPath,
+      sessionCost: action.sessionCost,
+      concurrentCount: action.concurrentCount,
+    };
+    const decision = action.stage
+      ? engine.evaluateStage(ctx, action.stage)
+      : engine.evaluate(ctx);
 
     decisions.push({ action, decision });
 

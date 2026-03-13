@@ -228,7 +228,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   }
 
   async function enforceStage(ctx: EnforcementContext, stage: PolicyStage): Promise<EnforcementDecision> {
-    if (remote) return remote.enforce(ctx);
+    if (remote) return remote.enforce(ctx, stage);
 
     const decision = policies.evaluateStage(ctx, stage);
 
