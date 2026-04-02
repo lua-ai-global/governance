@@ -28,6 +28,7 @@ export function getSchemaSQL(prefix: string): string {
       composite_score REAL NOT NULL DEFAULT 0,
       governance_level INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'registered',
+      organization_id TEXT,
       registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -40,6 +41,7 @@ export function getSchemaSQL(prefix: string): string {
       severity TEXT NOT NULL DEFAULT 'info',
       detail JSONB,
       policy_rule_id TEXT,
+      organization_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
@@ -52,8 +54,17 @@ export function getSchemaSQL(prefix: string): string {
     CREATE INDEX IF NOT EXISTS idx_${prefix}_audit_created_at
       ON ${prefix}_audit_events (created_at DESC);
 
+    CREATE INDEX IF NOT EXISTS idx_${prefix}_audit_composite
+      ON ${prefix}_audit_events (agent_id, event_type, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_${prefix}_audit_org
+      ON ${prefix}_audit_events (organization_id) WHERE organization_id IS NOT NULL;
+
     CREATE INDEX IF NOT EXISTS idx_${prefix}_agents_name_owner
       ON ${prefix}_agents (name, owner);
+
+    CREATE INDEX IF NOT EXISTS idx_${prefix}_agents_org
+      ON ${prefix}_agents (organization_id) WHERE organization_id IS NOT NULL;
   `;
 }
 
@@ -73,6 +84,7 @@ export interface AgentRow {
   composite_score: number;
   governance_level: number;
   status: string;
+  organization_id: string | null;
   registered_at: string | Date;
   updated_at: string | Date;
 }
@@ -85,6 +97,7 @@ export interface AuditRow {
   severity: string;
   detail: Record<string, unknown> | null;
   policy_rule_id: string | null;
+  organization_id: string | null;
   created_at: string | Date;
   integrity_hash?: string | null;
   integrity_previous_hash?: string | null;
@@ -114,6 +127,7 @@ export function rowToAgent(row: AgentRow): StoredAgent {
     compositeScore: row.composite_score,
     governanceLevel: row.governance_level,
     status: row.status,
+    organizationId: row.organization_id ?? undefined,
     registeredAt: toISOString(row.registered_at),
     updatedAt: toISOString(row.updated_at),
   };
@@ -128,6 +142,7 @@ export function rowToEvent(row: AuditRow): AuditEvent {
     severity: row.severity,
     detail: row.detail ?? undefined,
     policyRuleId: row.policy_rule_id ?? undefined,
+    organizationId: row.organization_id ?? undefined,
     createdAt: toISOString(row.created_at),
   };
 }

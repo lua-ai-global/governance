@@ -34,14 +34,14 @@ export function evaluateScopeBoundary(
   blockedPaths?: string[],
 ): boolean {
   if (!ctx.targetPath) return false;
-  const p = ctx.targetPath;
+  const p = normalizePath(ctx.targetPath);
 
   if (blockedPaths && blockedPaths.length > 0) {
-    if (blockedPaths.some((bp) => pathMatches(p, bp))) return true;
+    if (blockedPaths.some((bp) => pathMatches(p, normalizePath(bp)))) return true;
   }
 
   if (allowedPaths && allowedPaths.length > 0) {
-    if (!allowedPaths.some((ap) => pathMatches(p, ap))) return true;
+    if (!allowedPaths.some((ap) => pathMatches(p, normalizePath(ap)))) return true;
   }
 
   return false;
@@ -61,6 +61,27 @@ export function evaluateConcurrentLimit(
   maxConcurrent: number,
 ): boolean {
   return (ctx.concurrentCount ?? 0) > maxConcurrent;
+}
+
+/**
+ * Normalize a path by resolving `.` and `..` segments to prevent traversal bypass.
+ * Does not touch the filesystem — pure string manipulation.
+ */
+function normalizePath(p: string): string {
+  const isAbsolute = p.startsWith("/");
+  const parts = p.split("/");
+  const out: string[] = [];
+  for (const seg of parts) {
+    if (seg === "." || seg === "") continue;
+    if (seg === "..") {
+      // Don't pop above root for absolute paths
+      if (out.length > 0 && out[out.length - 1] !== "..") out.pop();
+      else if (!isAbsolute) out.push(seg);
+    } else {
+      out.push(seg);
+    }
+  }
+  return (isAbsolute ? "/" : "") + out.join("/");
 }
 
 /** Simple path matching — supports trailing wildcard (*) */

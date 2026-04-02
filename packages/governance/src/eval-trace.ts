@@ -32,17 +32,20 @@ import type {
 export interface TraceCollectorConfig {
   /** Maximum traces to keep in memory (default: 100). Oldest evicted first. */
   maxTraces?: number;
+  /** Maximum age in ms for pending (in-flight) traces before cleanup (default: 300000 / 5 min) */
+  pendingTimeoutMs?: number;
 }
 
 // ─── Implementation ────────────────────────────────────────────
 
 export function createTraceCollector(config: TraceCollectorConfig = {}): TraceCollector {
   const maxTraces = config.maxTraces ?? 100;
+  const pendingTimeoutMs = config.pendingTimeoutMs ?? 300_000; // 5 minutes
 
   /** All completed traces, keyed by agentId → traces[] */
   const store = new Map<string, EvalTrace[]>();
   /** In-flight traces, keyed by traceId */
-  const pending = new Map<string, { trace: EvalTrace; agentId: string }>();
+  const pending = new Map<string, { trace: EvalTrace; agentId: string; createdAt: number }>();
 
   function generateId(): string {
     const bytes = new Uint8Array(16);
@@ -62,8 +65,20 @@ export function createTraceCollector(config: TraceCollectorConfig = {}): TraceCo
     }
   }
 
+  /** Evict pending traces that have been in-flight longer than pendingTimeoutMs */
+  function evictStalePending(): void {
+    const now = Date.now();
+    for (const [traceId, entry] of pending) {
+      if (now - entry.createdAt > pendingTimeoutMs) {
+        pending.delete(traceId);
+      }
+    }
+  }
+
   return {
     startTrace(agentId: string, input?: string, metadata?: Record<string, unknown>): TraceContext {
+      evictStalePending();
+
       const traceId = generateId();
       const trace: EvalTrace = {
         traceId,
@@ -74,7 +89,7 @@ export function createTraceCollector(config: TraceCollectorConfig = {}): TraceCo
         metadata,
       };
 
-      pending.set(traceId, { trace, agentId });
+      pending.set(traceId, { trace, agentId, createdAt: Date.now() });
       let ended = false;
 
       return {

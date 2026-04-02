@@ -34,11 +34,13 @@ export interface PostgresStorage extends GovernanceStorage {
 // ─── Implementation ─────────────────────────────────────────────
 
 /**
- * In-flight migration promise per table prefix.
- * Serializes CREATE TABLE so concurrent callers for the same prefix don't race
+ * In-flight migration promise per (pool, prefix) pair.
+ * Serializes CREATE TABLE so concurrent callers for the same pool+prefix don't race
  * and hit "duplicate key pg_type_typname_nsp_index" when creating composite types.
+ * Uses a WeakMap keyed by pool object so different pools with the same prefix
+ * each run their own migration, and entries are GC'd when the pool is released.
  */
-const migrationByPrefix = new Map<string, Promise<void>>();
+const migrationByPool = new WeakMap<object, Map<string, Promise<void>>>();
 
 /**
  * Create a PostgreSQL-backed storage adapter.
@@ -64,12 +66,17 @@ export async function createPostgresStorage(
   let migrated = false;
 
   async function migrate(): Promise<void> {
-    let p = migrationByPrefix.get(prefix);
+    let prefixMap = migrationByPool.get(pool);
+    if (!prefixMap) {
+      prefixMap = new Map();
+      migrationByPool.set(pool, prefixMap);
+    }
+    let p = prefixMap.get(prefix);
     if (!p) {
       p = pool.query(getSchemaSQL(prefix)).then(() => {
-        migrationByPrefix.delete(prefix);
+        prefixMap!.delete(prefix);
       });
-      migrationByPrefix.set(prefix, p);
+      prefixMap.set(prefix, p);
     }
     await p;
     migrated = true;
@@ -100,8 +107,12 @@ export async function createPostgresStorage(
     return result.rows[0] ? rowToAgent(result.rows[0]) : null;
   }
 
-  async function listAgents(): Promise<StoredAgent[]> {
+  async function listAgents(organizationId?: string): Promise<StoredAgent[]> {
     await ensureMigrated();
+    if (organizationId) {
+      const result = await pool.query<AgentRow>(`SELECT * FROM ${prefix}_agents WHERE organization_id = $1 ORDER BY registered_at DESC`, [organizationId]);
+      return result.rows.map(rowToAgent);
+    }
     const result = await pool.query<AgentRow>(`SELECT * FROM ${prefix}_agents ORDER BY registered_at DESC`);
     return result.rows.map(rowToAgent);
   }
@@ -184,6 +195,7 @@ function buildAuditWhere(filters: AuditQueryFilters): { clauses: string[]; value
   const clauses: string[] = [];
   const values: unknown[] = [];
   let paramIdx = 1;
+  if (filters.organizationId) { clauses.push(`organization_id = $${paramIdx++}`); values.push(filters.organizationId); }
   if (filters.agentId) { clauses.push(`agent_id = $${paramIdx++}`); values.push(filters.agentId); }
   if (filters.eventType) { clauses.push(`event_type = $${paramIdx++}`); values.push(filters.eventType); }
   if (filters.outcome) { clauses.push(`outcome = $${paramIdx++}`); values.push(filters.outcome); }

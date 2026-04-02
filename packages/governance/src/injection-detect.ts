@@ -46,10 +46,15 @@ export interface InjectionResult {
   inputLength: number;
 }
 
+/** Default max input length: 100KB */
+const DEFAULT_MAX_INPUT_LENGTH = 100_000;
+
 export interface InjectionDetectorConfig {
   threshold?: number;
   customPatterns?: InjectionPattern[];
   skipCategories?: InjectionCategory[];
+  /** Maximum input length in characters. Inputs exceeding this are flagged as detected. Default: 100000 */
+  maxInputLength?: number;
 }
 
 // ─── Detection Engine ───────────────────────────────────────────
@@ -89,6 +94,18 @@ export function detectInjection(
   input: string,
   config: InjectionDetectorConfig = {},
 ): InjectionResult {
+  const maxLen = config.maxInputLength ?? DEFAULT_MAX_INPUT_LENGTH;
+  if (input.length > maxLen) {
+    return {
+      detected: true,
+      score: 1,
+      patterns: ["input_too_large"],
+      categories: ["system_prompt" as InjectionCategory],
+      summary: `Input exceeds maximum length (${input.length} > ${maxLen})`,
+      inputLength: input.length,
+    };
+  }
+
   const threshold = config.threshold ?? 0.5;
   const skipCategories = new Set(config.skipCategories ?? []);
 

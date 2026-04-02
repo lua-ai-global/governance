@@ -50,6 +50,35 @@ describe("validateRemoteConfig", () => {
   test("does not throw when only apiKey is set (no serverUrl)", () => {
     assert.doesNotThrow(() => validateRemoteConfig(undefined, "key-123"));
   });
+
+  test("throws on invalid URL format", () => {
+    assert.throws(
+      () => validateRemoteConfig("not-a-url", "key-123"),
+      /Invalid serverUrl/,
+    );
+  });
+
+  test("throws on non-http protocol (file://)", () => {
+    assert.throws(
+      () => validateRemoteConfig("file:///etc/passwd", "key-123"),
+      /only http: and https: are allowed/,
+    );
+  });
+
+  test("throws on non-http protocol (ftp://)", () => {
+    assert.throws(
+      () => validateRemoteConfig("ftp://example.com", "key-123"),
+      /only http: and https: are allowed/,
+    );
+  });
+
+  test("allows http:// URLs (for localhost dev)", () => {
+    assert.doesNotThrow(() => validateRemoteConfig("http://localhost:4000", "key-123"));
+  });
+
+  test("allows https:// URLs", () => {
+    assert.doesNotThrow(() => validateRemoteConfig("https://api.example.com", "key-123"));
+  });
 });
 
 // ─── createGovernance with serverUrl ────────────────────────────

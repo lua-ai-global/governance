@@ -53,6 +53,10 @@ export interface GovernanceConfig {
   serverUrl?: string;
   /** Bearer token for remote calls — required when serverUrl is set */
   apiKey?: string;
+  /** Request timeout in ms for remote calls (default: 30000) */
+  timeout?: number;
+  /** Called when a fire-and-forget audit write fails. Audit errors never block enforcement. */
+  onAuditError?: (error: unknown) => void;
 }
 
 /** Read-only view of the policy engine — addRule/removeRule are not exposed */
@@ -135,6 +139,7 @@ function storedToRegistration(agent: StoredAgent): AgentRegistration {
 export function createGovernance(config: GovernanceConfig = {}): GovernanceInstance {
   validateRemoteConfig(config.serverUrl, config.apiKey);
 
+  const onAuditError = config.onAuditError;
   const storage = config.storage ?? createMemoryStorage();
   const policies = createPolicyEngine({
     rules: config.rules,
@@ -142,13 +147,14 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   });
 
   const remote = config.serverUrl
-    ? createRemoteEnforcer({ serverUrl: config.serverUrl, apiKey: config.apiKey! })
+    ? createRemoteEnforcer({ serverUrl: config.serverUrl, apiKey: config.apiKey!, timeout: config.timeout })
     : null;
 
-  // Eval stores — in-memory, capped per agent
+  // Eval stores — in-memory, capped per agent and total agents
   const evalResultStore = new Map<string, EvalResult[]>();
   const traceCollector = createTraceCollector({ maxTraces: 200 });
   const MAX_EVAL_RESULTS_PER_AGENT = 100;
+  const MAX_EVAL_AGENTS = 1000;
 
   async function register(input: AgentRegistration) {
     if (remote) {
@@ -193,7 +199,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       severity: "info",
       detail: { score: assessment.compositeScore, level: assessment.level.level, status: assessment.status },
       createdAt: new Date().toISOString(),
-    }).catch(() => { /* audit failure must never block registration */ });
+    }).catch((err: unknown) => { onAuditError?.(err); });
 
     return { id: stored.id, score: assessment.compositeScore, level: assessment.level.level, status: assessment.status, assessment };
   }
@@ -215,7 +221,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       detail: { action: ctx.action, tool: ctx.tool, ruleId: decision.ruleId, reason: decision.reason, rulesEvaluated: decision.rulesEvaluated },
       policyRuleId: decision.ruleId ?? undefined,
       createdAt: new Date().toISOString(),
-    }).catch(() => { /* audit failure must never block enforcement */ });
+    }).catch((err: unknown) => { onAuditError?.(err); });
 
     return decision;
   }
@@ -298,7 +304,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       detail: { action: ctx.action, tool: ctx.tool, ruleId: decision.ruleId, reason: decision.reason, stage },
       policyRuleId: decision.ruleId ?? undefined,
       createdAt: new Date().toISOString(),
-    }).catch(() => { /* audit failure must never block enforcement */ });
+    }).catch((err: unknown) => { onAuditError?.(err); });
 
     return decision;
   }
@@ -324,7 +330,14 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 
   const evalApi = {
     submit(result: EvalResult): void {
-      if (!evalResultStore.has(result.agentId)) evalResultStore.set(result.agentId, []);
+      if (!evalResultStore.has(result.agentId)) {
+        // Evict oldest agent entry when at capacity
+        if (evalResultStore.size >= MAX_EVAL_AGENTS) {
+          const oldest = evalResultStore.keys().next().value!;
+          evalResultStore.delete(oldest);
+        }
+        evalResultStore.set(result.agentId, []);
+      }
       const results = evalResultStore.get(result.agentId)!;
       results.push(result);
       if (results.length > MAX_EVAL_RESULTS_PER_AGENT) {
@@ -357,7 +370,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 
 export { storedToRegistration };
 export { assessAgent, assessFleet, getGovernanceLevel } from "./scorer.js";
-export { createPolicyEngine, blockTools, allowOnlyTools, requireApproval, tokenBudget, rateLimit, requireLevel, requireSequence, timeWindow, registerCondition, unregisterCondition, getRegisteredCondition, getRegisteredConditions, clearConditionRegistry, registerBuiltinConditions } from "./policy.js";
+export { createPolicyEngine, blockTools, allowOnlyTools, requireApproval, tokenBudget, rateLimit, requireLevel, requireSequence, timeWindow } from "./policy.js";
 export type { PolicyRule, PolicyEngine, PolicyAction, PolicyCondition, PolicyOutcome, PolicyStage, EnforcementContext, EnforcementDecision, PolicyEngineConfig, ConditionEvaluator, RegisteredConditionType } from "./policy.js";
 export type { AgentRegistration, AgentFramework, AgentStatus, GovernanceAssessment, GovernanceLevel, DimensionResult, ScoreDimension, FleetSummary } from "./types.js";
 export { detectInjection, createInjectionGuard, getBuiltinPatterns } from "./injection-detect.js";

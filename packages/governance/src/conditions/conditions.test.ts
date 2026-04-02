@@ -162,6 +162,27 @@ describe("scope_boundary condition", () => {
     const r = evalRule(scopeBoundary({ blockedPaths: ["/etc/*"] }), base);
     assert.equal(r.blocked, false);
   });
+
+  it("blocks path traversal via ../ that escapes allowedPaths", () => {
+    const r = evalRule(scopeBoundary({ allowedPaths: ["/home/user/*"] }), {
+      ...base, targetPath: "/home/user/../../etc/passwd",
+    });
+    assert.equal(r.blocked, true);
+  });
+
+  it("blocks path traversal into blockedPaths via ../", () => {
+    const r = evalRule(scopeBoundary({ blockedPaths: ["/etc/*"] }), {
+      ...base, targetPath: "/home/user/../../etc/passwd",
+    });
+    assert.equal(r.blocked, true);
+  });
+
+  it("normalizes . segments in paths", () => {
+    const r = evalRule(scopeBoundary({ allowedPaths: ["/data/*"] }), {
+      ...base, targetPath: "/data/./report.csv",
+    });
+    assert.equal(r.blocked, false);
+  });
 });
 
 describe("cost_budget condition", () => {

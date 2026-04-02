@@ -96,58 +96,6 @@ export interface RegisteredConditionType {
   paramSchema?: Record<string, unknown>;
 }
 
-const conditionRegistry = new Map<string, RegisteredConditionType>();
-
-/**
- * Register a condition type. The evaluator lives in the registry while
- * the rule itself (`{ type, params }`) is pure data — serializable, storable, transportable.
- *
- * @param entry - Name, description, evaluator function, and optional param schema
- * @param opts - Set `override: true` to replace an existing condition (e.g., override a built-in)
- *
- * @example
- * ```ts
- * registerCondition({
- *   name: 'geo_fence',
- *   description: 'Block actions outside allowed regions',
- *   evaluator: (ctx, params) => {
- *     const region = ctx.metadata?.region as string;
- *     const allowed = params.allowedRegions as string[];
- *     return !region || !allowed.includes(region);
- *   },
- *   paramSchema: { type: 'object', properties: { allowedRegions: { type: 'array', items: { type: 'string' } } } },
- * });
- * ```
- */
-export function registerCondition(entry: RegisteredConditionType, opts?: { override?: boolean }): void {
-  if (conditionRegistry.has(entry.name) && !opts?.override) {
-    throw new Error(`Condition type "${entry.name}" is already registered. Use { override: true } to replace.`);
-  }
-  conditionRegistry.set(entry.name, entry);
-}
-
-/** Unregister a previously registered condition type */
-export function unregisterCondition(name: string): boolean {
-  return conditionRegistry.delete(name);
-}
-
-/** Get a registered condition type by name */
-export function getRegisteredCondition(name: string): RegisteredConditionType | undefined {
-  return conditionRegistry.get(name);
-}
-
-/** List all registered condition types */
-export function getRegisteredConditions(): RegisteredConditionType[] {
-  return [...conditionRegistry.values()];
-}
-
-/** Clear all registered conditions (primarily for testing). Set `keepBuiltins: true` to re-register built-ins after clearing. */
-export function clearConditionRegistry(opts?: { keepBuiltins?: boolean }): void {
-  conditionRegistry.clear();
-  builtinsRegistered = false;
-  if (opts?.keepBuiltins) registerBuiltinConditions();
-}
-
 // ─── Policy Engine ──────────────────────────────────────────────
 
 export interface PolicyEngine {
@@ -158,27 +106,76 @@ export interface PolicyEngine {
   removeRule: (ruleId: string) => void;
   getRules: (stage?: PolicyStage) => PolicyRule[];
   ruleCount: number;
+  /** Register a custom condition type on this engine instance */
+  registerCondition: (entry: RegisteredConditionType, opts?: { override?: boolean }) => void;
+  /** Unregister a condition type by name */
+  unregisterCondition: (name: string) => boolean;
+  /** Get a registered condition type by name */
+  getRegisteredCondition: (name: string) => RegisteredConditionType | undefined;
+  /** List all registered condition types */
+  getRegisteredConditions: () => RegisteredConditionType[];
+  /** Clear all registered conditions. Set `keepBuiltins: true` to re-register built-ins after clearing. */
+  clearConditionRegistry: (opts?: { keepBuiltins?: boolean }) => void;
 }
 
 export interface PolicyEngineConfig {
   rules?: PolicyRule[];
   defaultOutcome?: PolicyOutcome;
+  /** Custom condition types to register on this engine instance */
+  conditions?: RegisteredConditionType[];
 }
 
 /**
  * Create a standalone policy engine for before-action enforcement.
  *
- * @param config - Rules and default outcome options
- * @returns A PolicyEngine with evaluate, addRule, removeRule, and getRules
+ * Each engine has its own isolated condition registry — built-in conditions
+ * are registered automatically, and custom conditions can be added via
+ * `config.conditions` or `engine.registerCondition()`.
+ *
+ * @param config - Rules, default outcome, and custom conditions
+ * @returns A PolicyEngine with evaluate, addRule, removeRule, getRules, and condition management
  *
  * @example
  * ```ts
- * const engine = createPolicyEngine({ rules: [blockTools(['shell_exec'])] });
+ * const engine = createPolicyEngine({
+ *   rules: [blockTools(['shell_exec'])],
+ *   conditions: [{ name: 'geo_fence', description: 'Block by region', evaluator: myEval }],
+ * });
  * const decision = engine.evaluate({ agentId: 'a1', action: 'tool_call', tool: 'shell_exec' });
  * ```
  */
 export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngine {
-  registerBuiltinConditions();
+  // Instance-scoped condition registry — fully isolated per engine
+  const registry = new Map<string, RegisteredConditionType>();
+
+  function evaluateCondition(condition: PolicyCondition, ctx: EnforcementContext): boolean {
+    // Inline custom evaluators (params.evaluate is a function)
+    const evalFn = condition.params?.evaluate;
+    if (typeof evalFn === "function") {
+      const r = (evalFn as (ctx: EnforcementContext) => boolean)(ctx);
+      if (r && typeof r === "object" && typeof (r as Promise<boolean>).then === "function") {
+        throw new Error("Custom policy evaluator returned a Promise — evaluators must be synchronous.");
+      }
+      return r;
+    }
+
+    const entry = registry.get(condition.type);
+    if (!entry) {
+      throw new Error(`Unknown condition type "${condition.type}" — register it via engine.registerCondition()`);
+    }
+    return entry.evaluator(ctx, condition.params);
+  }
+
+  // Register built-in conditions
+  for (const def of getBuiltinConditions(evaluateCondition)) {
+    registry.set(def.name, def);
+  }
+
+  // Register any custom conditions from config
+  for (const entry of config.conditions ?? []) {
+    registry.set(entry.name, entry);
+  }
+
   const rules: PolicyRule[] = [...(config.rules ?? [])];
   const defaultOutcome = config.defaultOutcome ?? "allow";
 
@@ -252,6 +249,34 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
     return [...rules];
   }
 
+  function registerCondition(entry: RegisteredConditionType, opts?: { override?: boolean }): void {
+    if (registry.has(entry.name) && !opts?.override) {
+      throw new Error(`Condition type "${entry.name}" is already registered. Use { override: true } to replace.`);
+    }
+    registry.set(entry.name, entry);
+  }
+
+  function unregisterCondition(name: string): boolean {
+    return registry.delete(name);
+  }
+
+  function getRegisteredCondition(name: string): RegisteredConditionType | undefined {
+    return registry.get(name);
+  }
+
+  function getRegisteredConditions(): RegisteredConditionType[] {
+    return [...registry.values()];
+  }
+
+  function clearConditionRegistry(opts?: { keepBuiltins?: boolean }): void {
+    registry.clear();
+    if (opts?.keepBuiltins) {
+      for (const def of getBuiltinConditions(evaluateCondition)) {
+        registry.set(def.name, def);
+      }
+    }
+  }
+
   return {
     evaluate,
     evaluateStage,
@@ -259,42 +284,12 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
     removeRule,
     getRules,
     get ruleCount() { return rules.filter((r) => r.enabled).length; },
+    registerCondition,
+    unregisterCondition,
+    getRegisteredCondition,
+    getRegisteredConditions,
+    clearConditionRegistry,
   };
-}
-
-// ─── Built-in Registration ──────────────────────────────────────
-
-let builtinsRegistered = false;
-
-/** Register all 25 built-in condition evaluators. Idempotent. */
-export function registerBuiltinConditions(): void {
-  if (builtinsRegistered) return;
-  for (const def of getBuiltinConditions(evaluateCondition)) {
-    if (!conditionRegistry.has(def.name)) {
-      conditionRegistry.set(def.name, def);
-    }
-  }
-  builtinsRegistered = true;
-}
-
-// ─── Condition Evaluator ────────────────────────────────────────
-
-function evaluateCondition(condition: PolicyCondition, ctx: EnforcementContext): boolean {
-  // Backwards compat: inline custom evaluators (params.evaluate is a function)
-  const evalFn = condition.params?.evaluate;
-  if (typeof evalFn === "function") {
-    const r = (evalFn as (ctx: EnforcementContext) => boolean)(ctx);
-    if (r && typeof r === "object" && typeof (r as Promise<boolean>).then === "function") {
-      throw new Error("Custom policy evaluator returned a Promise — evaluators must be synchronous.");
-    }
-    return r;
-  }
-
-  const entry = conditionRegistry.get(condition.type);
-  if (!entry) {
-    throw new Error(`Unknown condition type "${condition.type}" — register it via registerCondition()`);
-  }
-  return entry.evaluator(ctx, condition.params);
 }
 
 // ─── Re-export presets ──────────────────────────────────────────

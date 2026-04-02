@@ -14,6 +14,8 @@ import type { AgentRegistration, GovernanceAssessment } from "./types.js";
 export interface RemoteConfig {
   serverUrl: string;
   apiKey: string;
+  /** Request timeout in milliseconds (default: 30000) */
+  timeout?: number;
 }
 
 export interface RemoteRegisterResult {
@@ -46,6 +48,7 @@ export class RemoteEnforcementError extends Error {
  */
 export function createRemoteEnforcer(config: RemoteConfig) {
   const { serverUrl, apiKey } = config;
+  const timeout = config.timeout ?? 30_000;
   const baseUrl = serverUrl.replace(/\/$/, "");
 
   async function remoteEnforce(
@@ -62,6 +65,7 @@ export function createRemoteEnforcer(config: RemoteConfig) {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify(ctx),
+      signal: AbortSignal.timeout(timeout),
     });
 
     if (!response.ok) {
@@ -108,10 +112,21 @@ export function createRemoteEnforcer(config: RemoteConfig) {
 }
 
 /**
- * Validate remote config — throws if serverUrl is set but apiKey is missing.
+ * Validate remote config — throws if serverUrl is set but apiKey is missing,
+ * or if serverUrl is not a valid http/https URL.
  */
 export function validateRemoteConfig(serverUrl?: string, apiKey?: string): void {
-  if (serverUrl && !apiKey) {
+  if (!serverUrl) return;
+  if (!apiKey) {
     throw new Error("apiKey is required when serverUrl is configured");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(serverUrl);
+  } catch {
+    throw new Error(`Invalid serverUrl: "${serverUrl}" is not a valid URL`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Invalid serverUrl protocol "${parsed.protocol}" — only http: and https: are allowed`);
   }
 }

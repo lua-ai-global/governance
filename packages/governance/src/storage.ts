@@ -12,7 +12,7 @@ export interface GovernanceStorage {
   createAgent(data: StoredAgent): Promise<StoredAgent>;
   getAgent(id: string): Promise<StoredAgent | null>;
   getAgentByName(name: string, owner: string): Promise<StoredAgent | null>;
-  listAgents(): Promise<StoredAgent[]>;
+  listAgents(organizationId?: string): Promise<StoredAgent[]>;
   updateAgent(id: string, data: Partial<StoredAgent>): Promise<StoredAgent>;
   createAuditEvent(event: AuditEvent): Promise<AuditEvent>;
   queryAuditEvents(filters: AuditQueryFilters): Promise<AuditEvent[]>;
@@ -36,6 +36,8 @@ export interface StoredAgent {
   status: string;
   registeredAt: string;
   updatedAt: string;
+  /** Organization ID for multi-tenant isolation */
+  organizationId?: string;
 }
 
 /** Audit event record */
@@ -48,6 +50,8 @@ export interface AuditEvent {
   detail?: Record<string, unknown>;
   policyRuleId?: string;
   createdAt: string;
+  /** Organization ID for multi-tenant isolation */
+  organizationId?: string;
 }
 
 /** Filters for querying audit events */
@@ -60,6 +64,8 @@ export interface AuditQueryFilters {
   until?: string;
   limit?: number;
   offset?: number;
+  /** Filter by organization ID for multi-tenant isolation */
+  organizationId?: string;
 }
 
 // ─── Memory Storage ─────────────────────────────────────────────
@@ -89,8 +95,10 @@ export function createMemoryStorage(): GovernanceStorage {
       }
       return null;
     },
-    async listAgents() {
-      return Array.from(agents.values());
+    async listAgents(organizationId?: string) {
+      const all = Array.from(agents.values());
+      if (organizationId) return all.filter((a) => a.organizationId === organizationId);
+      return all;
     },
     async updateAgent(id, data) {
       const existing = agents.get(id);
@@ -109,6 +117,7 @@ export function createMemoryStorage(): GovernanceStorage {
     },
     async queryAuditEvents(filters) {
       let result = [...events];
+      if (filters.organizationId) result = result.filter((e) => e.organizationId === filters.organizationId);
       if (filters.agentId) result = result.filter((e) => e.agentId === filters.agentId);
       if (filters.eventType) result = result.filter((e) => e.eventType === filters.eventType);
       if (filters.outcome) result = result.filter((e) => e.outcome === filters.outcome);
