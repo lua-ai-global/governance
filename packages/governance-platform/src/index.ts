@@ -69,6 +69,7 @@ export type {
   StoredSavedPolicy,
   OrgPreferences,
   OrgSettingsUpdate,
+  BehavioralScoringConfig,
   KillSwitchState,
 } from "./types.js";
 

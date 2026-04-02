@@ -14,6 +14,7 @@ import type {
   OrgPreferences,
   OrgSettingsUpdate,
   KillSwitchState,
+  BehavioralScoringConfig,
 } from "./types.js";
 
 /* ------------------------------------------------------------------ */
@@ -35,6 +36,7 @@ function rowToOrgSettings(row: OrgSettingsRow): StoredOrgSettings {
     settings: {
       autoRegisterAgents: row.settings?.autoRegisterAgents !== false,
       killSwitch: (row.settings?.killSwitch as KillSwitchState | undefined) ?? null,
+      behavioralConfig: (row.settings?.behavioralConfig as BehavioralScoringConfig | undefined),
     },
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -189,6 +191,7 @@ export async function loadPolicyTiers(
     settings: {
       autoRegisterAgents: orgRow?.settings?.autoRegisterAgents !== false,
       killSwitch: (orgRow?.settings?.killSwitch as KillSwitchState | null | undefined) ?? null,
+      behavioralConfig: (orgRow?.settings?.behavioralConfig as BehavioralScoringConfig | undefined),
     },
   };
 }

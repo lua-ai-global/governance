@@ -56,10 +56,22 @@ export interface KillSwitchState {
   agentId?: string;
 }
 
+/** Behavioral scoring tuning — configurable per org */
+export interface BehavioralScoringConfig {
+  /** Block rate below this is "clean" (default 0.05 = 5%) */
+  blockRateThreshold: number;
+  /** Weight recent events more (0=equal, 1=recent-only, default 0.7) */
+  recencyBias: number;
+  /** How many recent events to consider (default 200) */
+  windowSize: number;
+}
+
 /** Org-level preferences stored in settings JSONB */
 export interface OrgPreferences {
   autoRegisterAgents: boolean;
   killSwitch?: KillSwitchState | null;
+  /** Behavioral scoring tuning (defaults applied if not set) */
+  behavioralConfig?: BehavioralScoringConfig;
 }
 
 /** Partial update payload — each field is optional */
