@@ -83,15 +83,6 @@ export interface DetectionConfig {
   maxInputLength?: number;
 }
 
-/** Compliance posture self-assessment flags */
-export interface CompliancePosture {
-  auditIntegrity?: boolean;
-  humanOversight?: boolean;
-  logRetention?: boolean;
-  configVersionControlled?: boolean;
-  policiesTested?: boolean;
-}
-
 /** Org-level preferences stored in settings JSONB */
 export interface OrgPreferences {
   autoRegisterAgents: boolean;
@@ -99,8 +90,6 @@ export interface OrgPreferences {
   behavioralConfig?: BehavioralScoringConfig;
   scoringConfig?: ScoringConfig;
   detectionConfig?: DetectionConfig;
-  defaultOutcome?: "allow" | "block";
-  compliancePosture?: CompliancePosture;
 }
 
 /** Partial update payload — each field is optional */

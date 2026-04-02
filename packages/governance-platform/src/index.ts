@@ -72,7 +72,6 @@ export type {
   BehavioralScoringConfig,
   ScoringConfig,
   DetectionConfig,
-  CompliancePosture,
   KillSwitchState,
 } from "./types.js";
 
