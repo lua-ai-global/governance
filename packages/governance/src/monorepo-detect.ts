@@ -36,7 +36,7 @@ const AGENT_DEP_PATTERNS: Array<{ pattern: RegExp; framework: string }> = [
 
 /** Secondary deps that confirm an agent (not framework-specific) */
 const AGENT_SIGNAL_DEPS = [
-  "@lua-ai-global/governance",
+  "governance-sdk",
   "@langchain/openai",
   "@langchain/anthropic",
   "llamaindex",

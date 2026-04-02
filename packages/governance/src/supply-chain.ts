@@ -1,12 +1,12 @@
 /**
- * @lua-ai-global/governance — Agent Supply Chain Security
+ * governance-sdk — Agent Supply Chain Security
  *
  * Declare agent dependencies, validate against approved registries,
  * and enforce supply chain policies. Addresses OWASP AA-03.
  *
  * @example
  * ```ts
- * import { createSupplyChainPolicy, declareAgentDependencies } from '@lua-ai-global/governance/supply-chain';
+ * import { createSupplyChainPolicy, declareAgentDependencies } from 'governance-sdk/supply-chain';
  *
  * const deps = declareAgentDependencies({
  *   tools: ['web_search', 'email_send'],

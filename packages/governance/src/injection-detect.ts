@@ -6,7 +6,7 @@
  *
  * @example
  * ```ts
- * import { detectInjection, createInjectionGuard } from '@lua-ai-global/governance/injection-detect';
+ * import { detectInjection, createInjectionGuard } from 'governance-sdk/injection-detect';
  *
  * const result = detectInjection('Ignore previous instructions...');
  * // { detected: true, score: 0.85, patterns: ['instruction_override'], ... }

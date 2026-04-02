@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance A2A (Agent-to-Agent Protocol) Plugin
+ * governance-sdk A2A (Agent-to-Agent Protocol) Plugin
  *
  * Integrates governance enforcement into Google's A2A protocol.
  * Governs both outbound message sends and inbound message receives.
@@ -9,8 +9,8 @@
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { createGovernedA2A } from '@lua-ai-global/governance/plugins/a2a';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { createGovernedA2A } from 'governance-sdk/plugins/a2a';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['untrusted-agent.example.com'])],

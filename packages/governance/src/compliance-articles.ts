@@ -2,7 +2,7 @@
  * EU AI Act Article Definitions
  *
  * Static article and requirement definitions for the 6 EU AI Act
- * articles tracked by @lua-ai-global/governance. Separated from assessment
+ * articles tracked by governance-sdk. Separated from assessment
  * logic to keep files under 300 LOC.
  */
 
@@ -30,7 +30,7 @@ export interface ArticleRequirement {
   id: string;
   /** What the law requires */
   requirement: string;
-  /** How @lua-ai-global/governance addresses this */
+  /** How governance-sdk addresses this */
   sdkFeature: string;
   /** What to check for compliance */
   checkDescription: string;

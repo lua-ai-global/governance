@@ -38,7 +38,7 @@ describe("GovernanceProcessor", () => {
       agentName: "test-agent",
       owner: "test-team",
     });
-    assert.equal(processor.id, "lua-governance");
+    assert.equal(processor.id, "governance-sdk");
     assert.equal(processor.name, "Lua Governance Processor");
   });
 

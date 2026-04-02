@@ -7,8 +7,8 @@
  * Run: GOVERNANCE_API_KEY=sk_... npm run openai-agents
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { governAgent } from "@lua-ai-global/governance/plugins/openai-agents";
+import { createGovernance } from "governance-sdk";
+import { governAgent } from "governance-sdk/plugins/openai-agents";
 import { API_URL, API_KEY } from "../shared/config.ts";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 

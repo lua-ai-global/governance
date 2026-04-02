@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance CrewAI Plugin
+ * governance-sdk CrewAI Plugin
  *
  * Integrates governance enforcement into CrewAI agent tool execution.
  * Wraps tools with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governCrewAIAgent } from '@lua-ai-global/governance/plugins/crewai';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governCrewAIAgent } from 'governance-sdk/plugins/crewai';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec'])],

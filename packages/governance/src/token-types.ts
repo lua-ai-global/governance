@@ -11,7 +11,7 @@
  *
  * @example
  * ```ts
- * import type { HoneycombAgentToken, TokenRequest } from '@lua-ai-global/governance/token-types';
+ * import type { HoneycombAgentToken, TokenRequest } from 'governance-sdk/token-types';
  * ```
  */
 

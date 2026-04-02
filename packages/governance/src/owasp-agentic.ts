@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — OWASP Top 10 for Agentic Applications Assessment
+ * governance-sdk — OWASP Top 10 for Agentic Applications Assessment
  *
  * Assesses governance configuration against the OWASP Agentic Security Top 10 (2026).
  * Risk definitions are in owasp-agentic-articles.ts.

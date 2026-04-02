@@ -1,4 +1,4 @@
-# @lua-ai-global/governance — SDK Development Rules
+# governance-sdk — SDK Development Rules
 
 ## WHAT THIS IS
 The first standalone governance SDK for TypeScript AI agents. Zero runtime dependencies. MIT license. Thin client — local policy evaluation, scoring, injection detection, and adapters. Stateful operations (rate limiting, distributed kill switch, durable audit) belong in the API layer.

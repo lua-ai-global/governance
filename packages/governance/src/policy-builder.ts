@@ -1,12 +1,12 @@
 /**
- * @lua-ai-global/governance — Fluent Policy Builder DSL
+ * governance-sdk — Fluent Policy Builder DSL
  *
  * TypeScript-native fluent API for building policy rules.
  * Produces standard PolicyRule objects compatible with createGovernance().
  *
  * @example
  * ```ts
- * import { when } from '@lua-ai-global/governance/policy-builder';
+ * import { when } from 'governance-sdk/policy-builder';
  *
  * const rule = when().tool('shell_exec').then().block('Dangerous tool blocked');
  * const rule2 = when().action('payment').then().requireApproval('Payments need human review');

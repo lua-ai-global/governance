@@ -7,8 +7,8 @@
  *
  * @example
  * ```ts
- * import { createGovernance } from '@lua-ai-global/governance';
- * import { createKillSwitch } from '@lua-ai-global/governance/kill-switch';
+ * import { createGovernance } from 'governance-sdk';
+ * import { createKillSwitch } from 'governance-sdk/kill-switch';
  *
  * const gov = createGovernance({ rules: [...] });
  * const killSwitch = createKillSwitch(gov);

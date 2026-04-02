@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance Deno AI Plugin
+ * governance-sdk Deno AI Plugin
  *
  * Integrates governance enforcement into Deno-native AI agent patterns.
  * Wraps tools with policy checks and integrates with Deno's permission model.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governDenoAgent } from '@lua-ai-global/governance/plugins/deno';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governDenoAgent } from 'governance-sdk/plugins/deno';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['file_delete', 'shell_exec'])],

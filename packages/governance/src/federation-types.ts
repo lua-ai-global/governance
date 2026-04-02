@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Multi-Agent Federation Types
+ * governance-sdk — Multi-Agent Federation Types
  *
  * Types for cross-boundary governance between agents governed
  * by different governance instances.

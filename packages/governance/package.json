@@ -1,12 +1,12 @@
 {
-  "name": "@lua-ai-global/governance",
-  "version": "0.4.4",
+  "name": "governance-sdk",
+  "version": "0.5.0",
   "description": "AI Agent Governance for TypeScript — policy enforcement, scoring, compliance, and audit for AI agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "lua-governance": "dist/cli/init.js"
+    "governance-sdk": "dist/cli/init.js"
   },
   "exports": {
     ".": {

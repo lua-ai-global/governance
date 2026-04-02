@@ -1,5 +1,5 @@
 /**
- * PostgreSQL Storage Adapter for @lua-ai-global/governance.
+ * PostgreSQL Storage Adapter for governance-sdk.
  *
  * Production-ready persistent storage with automatic table creation.
  * Schema and row mappers are in storage-postgres-schema.ts.

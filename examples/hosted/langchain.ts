@@ -7,8 +7,8 @@
  * Run: GOVERNANCE_API_KEY=sk_... npm run langchain
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { governTools } from "@lua-ai-global/governance/plugins/langchain";
+import { createGovernance } from "governance-sdk";
+import { governTools } from "governance-sdk/plugins/langchain";
 import { API_URL, API_KEY } from "../shared/config.ts";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 

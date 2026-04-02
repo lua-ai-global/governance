@@ -7,10 +7,10 @@
  * Run: npm run local:langchain
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { blockTools, requireLevel } from "@lua-ai-global/governance/policy";
-import { detectInjection, createInjectionGuard } from "@lua-ai-global/governance/injection-detect";
-import { governTools } from "@lua-ai-global/governance/plugins/langchain";
+import { createGovernance } from "governance-sdk";
+import { blockTools, requireLevel } from "governance-sdk/policy";
+import { detectInjection, createInjectionGuard } from "governance-sdk/injection-detect";
+import { governTools } from "governance-sdk/plugins/langchain";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 
 printHeader("LangChain (Local 2-Stage)");

@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Injection Detection Benchmark
+ * governance-sdk — Injection Detection Benchmark
  *
  * Curated dataset for benchmarking prompt injection detectors.
  * Covers 7 attack categories + hard negatives (legitimate text that
@@ -8,8 +8,8 @@
  *
  * @example
  * ```ts
- * import { runBenchmark, BENCHMARK_DATASET } from '@lua-ai-global/governance/injection-benchmark';
- * import { detectInjection } from '@lua-ai-global/governance/injection-detect';
+ * import { runBenchmark, BENCHMARK_DATASET } from 'governance-sdk/injection-benchmark';
+ * import { detectInjection } from 'governance-sdk/injection-detect';
  *
  * const results = runBenchmark((input) => {
  *   const r = detectInjection(input);

@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Multi-Agent Federation Protocol
+ * governance-sdk — Multi-Agent Federation Protocol
  *
  * Cross-boundary governance for multi-agent systems.
  * Enables agents governed by different instances to exchange postures,
@@ -7,7 +7,7 @@
  *
  * @example
  * ```ts
- * import { createFederation } from '@lua-ai-global/governance/federation';
+ * import { createFederation } from 'governance-sdk/federation';
  *
  * const federation = createFederation(localGovernance, { minimumRemoteScore: 50 });
  *

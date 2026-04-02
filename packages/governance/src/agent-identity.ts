@@ -1,12 +1,12 @@
 /**
- * @lua-ai-global/governance — Agent Identity Primitives
+ * governance-sdk — Agent Identity Primitives
  *
  * Cryptographic agent identity using HMAC-SHA256 via Web Crypto API.
  * Zero dependencies. Produces verifiable identity tokens and fingerprints.
  *
  * @example
  * ```ts
- * import { createAgentIdentity } from '@lua-ai-global/governance/agent-identity';
+ * import { createAgentIdentity } from 'governance-sdk/agent-identity';
  *
  * const identity = createAgentIdentity('my-signing-key');
  * const token = await identity.issueToken({ id: 'agent-1', name: 'sales-bot', owner: 'team-a' });

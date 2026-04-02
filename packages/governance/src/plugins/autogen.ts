@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance Microsoft AutoGen Plugin
+ * governance-sdk Microsoft AutoGen Plugin
  *
  * NOTE: AutoGen is in maintenance mode. Microsoft Agent Framework is the
  * successor. AG2 (ag2ai/ag2) is the community fork. These types approximate
@@ -10,8 +10,8 @@
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governAutoGenAgent } from '@lua-ai-global/governance/plugins/autogen';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governAutoGenAgent } from 'governance-sdk/plugins/autogen';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec', 'database_drop'])],

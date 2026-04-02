@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance Mistral AI Plugin
+ * governance-sdk Mistral AI Plugin
  *
  * Integrates governance enforcement into Mistral AI tool execution.
  * Wraps tool executors with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governMistralTools } from '@lua-ai-global/governance/plugins/mistral';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governMistralTools } from 'governance-sdk/plugins/mistral';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec'])],

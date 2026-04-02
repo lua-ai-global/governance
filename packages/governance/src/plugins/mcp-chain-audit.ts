@@ -6,7 +6,7 @@
  *
  * @example
  * ```ts
- * import { createChainAuditor } from '@lua-ai-global/governance/plugins/mcp-chain-audit';
+ * import { createChainAuditor } from 'governance-sdk/plugins/mcp-chain-audit';
  *
  * const auditor = createChainAuditor({ maxChainLength: 20 });
  * auditor.recordCall({ server: 'mcp://files', tool: 'read_file', agentId: 'bot-1' });

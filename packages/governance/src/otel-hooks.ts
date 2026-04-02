@@ -1,12 +1,12 @@
 /**
- * @lua-ai-global/governance — OpenTelemetry Hook Points
+ * governance-sdk — OpenTelemetry Hook Points
  *
  * Produces structured span-compatible data from governance events.
  * Zero dependencies — outputs plain objects that users wire to their OTel tracer.
  *
  * @example
  * ```ts
- * import { createOtelHooks, type GovernanceSpan } from '@lua-ai-global/governance/otel-hooks';
+ * import { createOtelHooks, type GovernanceSpan } from 'governance-sdk/otel-hooks';
  * import { trace } from '@opentelemetry/api';
  *
  * const tracer = trace.getTracer('governance');
@@ -39,7 +39,7 @@ export interface GovernanceSpan {
 
 /** Configuration for OTel hooks */
 export interface OtelHooksConfig {
-  /** Service name for span attributes (default: "@lua-ai-global/governance") */
+  /** Service name for span attributes (default: "governance-sdk") */
   serviceName?: string;
   /** Custom attribute mapper */
   attributeMapper?: (event: GovernanceEventInput) => Record<string, string | number | boolean>;
@@ -56,7 +56,7 @@ export interface GovernanceEventInput {
 // ─── Implementation ─────────────────────────────────────────
 
 export function createOtelHooks(config: OtelHooksConfig = {}) {
-  const serviceName = config.serviceName ?? "@lua-ai-global/governance";
+  const serviceName = config.serviceName ?? "governance-sdk";
 
   return {
     /**

@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.5.0] - 2026-04-02
+
+### Changed
+- **Renamed to `governance-sdk`** — unscoped npm package for maximum discoverability
+- Package: `@lua-ai-global/governance` → `governance-sdk`
+- Platform: `@lua-ai-global/governance-platform` → `governance-sdk-platform`
+- Benchmark: `@lua-ai-global/governance-benchmark` → `governance-sdk-benchmark`
+- CLI bin: `lua-governance` → `governance-sdk`
+- Publish target: npmjs.org (public, unscoped)
+- Synced all package versions to 0.5.0
+
+### Migration
+
+```bash
+# Old
+npm install @lua-ai-global/governance
+# New
+npm install governance-sdk
+```
+
+All import paths stay the same shape — just replace the package name:
+```typescript
+// Before
+import { createGovernance } from '@lua-ai-global/governance';
+import { detectInjection } from '@lua-ai-global/governance/injection-detect';
+
+// After
+import { createGovernance } from 'governance-sdk';
+import { detectInjection } from 'governance-sdk/injection-detect';
+```
+
 ## [0.4.4] - 2026-04-01
 
 ### Added
@@ -54,7 +85,7 @@
 
 ### Changed
 - **Thin-client positioning** — SDK handles local policy evaluation, scoring, injection detection, and adapters. Stateful operations (rate limiting, distributed kill switch, durable audit) are the API layer's responsibility.
-- Enterprise modules extracted to separate `@lua-ai-global/governance-enterprise` package (585 tests)
+- Enterprise modules extracted to separate `governance-sdk-enterprise` package (585 tests)
 - 35 export paths (20 framework adapters + behavioral-scorer + repo-patterns + core modules)
 - 935 tests across the governance package
 - Removed dead `verbose` flag from `PolicyEngineConfig`

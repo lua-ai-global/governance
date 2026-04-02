@@ -28,7 +28,7 @@ function generateConfigFile(config: InitConfig): string {
     rules.push(`    tokenBudget(${config.tokenLimit.toLocaleString().replace(/,/g, "_")}),`);
   }
 
-  const content = `import { ${imports.join(", ")} } from '@lua-ai-global/governance';`;
+  const content = `import { ${imports.join(", ")} } from 'governance-sdk';`;
   return content + "\n" + rules.join("\n");
 }
 

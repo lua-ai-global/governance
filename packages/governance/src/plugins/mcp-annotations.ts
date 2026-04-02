@@ -7,7 +7,7 @@
  *
  * @example
  * ```ts
- * import { generateAnnotationRules } from '@lua-ai-global/governance/plugins/mcp-annotations';
+ * import { generateAnnotationRules } from 'governance-sdk/plugins/mcp-annotations';
  *
  * const tools = await mcpClient.listTools();
  * const rules = generateAnnotationRules(tools);

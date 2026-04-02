@@ -6,7 +6,7 @@
  *
  * @example
  * ```ts
- * import { createMCPTrustRegistry } from '@lua-ai-global/governance/plugins/mcp-trust';
+ * import { createMCPTrustRegistry } from 'governance-sdk/plugins/mcp-trust';
  *
  * const trust = createMCPTrustRegistry({
  *   servers: [

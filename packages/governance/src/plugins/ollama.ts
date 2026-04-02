@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance Ollama Plugin
+ * governance-sdk Ollama Plugin
  *
  * Integrates governance enforcement into Ollama tool execution.
  * Wraps tool executors with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governOllamaTools } from '@lua-ai-global/governance/plugins/ollama';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governOllamaTools } from 'governance-sdk/plugins/ollama';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec'])],

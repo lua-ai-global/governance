@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — In-Memory Trace Collector
+ * governance-sdk — In-Memory Trace Collector
  *
  * Captures agent operation traces for eval scoring.
  * Default implementation stores traces in memory with configurable limits.
@@ -7,7 +7,7 @@
  *
  * @example
  * ```ts
- * import { createTraceCollector } from '@lua-ai-global/governance/eval-trace';
+ * import { createTraceCollector } from 'governance-sdk/eval-trace';
  *
  * const traces = createTraceCollector({ maxTraces: 200 });
  * const ctx = traces.startTrace('luna', 'What deals closed this week?');

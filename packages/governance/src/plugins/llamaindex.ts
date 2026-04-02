@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance LlamaIndex Plugin
+ * governance-sdk LlamaIndex Plugin
  *
  * Integrates governance enforcement into LlamaIndex tool execution.
  * Wraps tools with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governLlamaIndexTools } from '@lua-ai-global/governance/plugins/llamaindex';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governLlamaIndexTools } from 'governance-sdk/plugins/llamaindex';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['file_delete', 'shell_exec'])],

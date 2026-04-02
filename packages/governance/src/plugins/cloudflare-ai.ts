@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance Cloudflare Workers AI Plugin
+ * governance-sdk Cloudflare Workers AI Plugin
  *
  * Integrates governance enforcement into Cloudflare Workers AI tool execution.
  * Wraps tool executors with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governCloudflareTools } from '@lua-ai-global/governance/plugins/cloudflare-ai';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governCloudflareTools } from 'governance-sdk/plugins/cloudflare-ai';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec', 'file_delete'])],

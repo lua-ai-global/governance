@@ -9,10 +9,10 @@
  * Run: npm run local:vercel-ai
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { blockTools, requireLevel } from "@lua-ai-global/governance/policy";
-import { detectInjection, createInjectionGuard } from "@lua-ai-global/governance/injection-detect";
-import { createGovernedTools, type VercelToolExecutionOptions } from "@lua-ai-global/governance/plugins/vercel-ai";
+import { createGovernance } from "governance-sdk";
+import { blockTools, requireLevel } from "governance-sdk/policy";
+import { detectInjection, createInjectionGuard } from "governance-sdk/injection-detect";
+import { createGovernedTools, type VercelToolExecutionOptions } from "governance-sdk/plugins/vercel-ai";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 
 printHeader("Vercel AI SDK (Local 2-Stage)");

@@ -1,12 +1,12 @@
 /**
- * @lua-ai-global/governance — YAML Policy Serialization
+ * governance-sdk — YAML Policy Serialization
  *
  * Serialize and deserialize PolicyRule[] to/from YAML format.
  * Zero dependencies — handwritten YAML emitter and parser.
  *
  * @example
  * ```ts
- * import { toYAML, fromYAML } from '@lua-ai-global/governance/policy-yaml';
+ * import { toYAML, fromYAML } from 'governance-sdk/policy-yaml';
  *
  * const yaml = toYAML(governance.policies.getRules());
  * // Save to file, commit to git, review in PR

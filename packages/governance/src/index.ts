@@ -1,9 +1,9 @@
 /**
- * @lua-ai-global/governance — Runtime governance for TypeScript AI agents.
+ * governance-sdk — Runtime governance for TypeScript AI agents.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools, requireLevel } from '@lua-ai-global/governance';
+ * import { createGovernance, blockTools, requireLevel } from 'governance-sdk';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec']), requireLevel(2)],
@@ -124,7 +124,7 @@ function storedToRegistration(agent: StoredAgent): AgentRegistration {
 }
 
 /**
- * Create a governance instance — the main entry point for @lua-ai-global/governance.
+ * Create a governance instance — the main entry point for governance-sdk.
  *
  * @param config - Optional configuration: storage adapter, policy rules, default outcome, remote server
  * @returns A fully-wired governance instance with register, enforce, audit, score, and scoreFleet

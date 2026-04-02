@@ -7,8 +7,8 @@
  * Run: GOVERNANCE_API_KEY=sk_... npm run mcp
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { createGovernedMCP, type MCPCallToolRequest, type MCPReadResourceRequest } from "@lua-ai-global/governance/plugins/mcp";
+import { createGovernance } from "governance-sdk";
+import { createGovernedMCP, type MCPCallToolRequest, type MCPReadResourceRequest } from "governance-sdk/plugins/mcp";
 import { API_URL, API_KEY } from "../shared/config.ts";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 

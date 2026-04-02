@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance Anthropic Claude SDK Plugin
+ * governance-sdk Anthropic Claude SDK Plugin
  *
  * Integrates governance enforcement into Anthropic Claude tool execution.
  * Wraps tool executors with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governAnthropicTools } from '@lua-ai-global/governance/plugins/anthropic';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governAnthropicTools } from 'governance-sdk/plugins/anthropic';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['file_write'])],

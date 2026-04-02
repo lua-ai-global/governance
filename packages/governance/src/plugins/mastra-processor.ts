@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Native Mastra Processor
+ * governance-sdk — Native Mastra Processor
  *
  * Framework-level governance integration for Mastra agents.
  * Intercepts ALL tool calls at the pipeline level — zero per-tool config.
@@ -35,7 +35,7 @@ export type {
 // ─── GovernanceProcessor ──────────────────────────────────────
 
 export class GovernanceProcessor implements MastraProcessorInterface {
-  readonly id = "lua-governance" as const;
+  readonly id = "governance-sdk" as const;
   readonly name = "Lua Governance Processor";
 
   private governance: GovernanceInstance;

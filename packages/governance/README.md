@@ -1,4 +1,4 @@
-# @lua-ai-global/governance
+# governance-sdk
 
 AI Agent Governance for TypeScript — before-action policy enforcement, 7-dimension scoring, injection detection, and 20 framework adapters.
 
@@ -13,7 +13,7 @@ AI Agent Governance for TypeScript — before-action policy enforcement, 7-dimen
 ## Install
 
 ```bash
-npm install @lua-ai-global/governance
+npm install governance-sdk
 ```
 
 ---
@@ -21,7 +21,7 @@ npm install @lua-ai-global/governance
 ## Quick Start
 
 ```typescript
-import { createGovernance, blockTools, requireApproval, tokenBudget } from '@lua-ai-global/governance';
+import { createGovernance, blockTools, requireApproval, tokenBudget } from 'governance-sdk';
 
 // 1. Create governance instance with policy rules
 const gov = createGovernance({
@@ -132,7 +132,7 @@ import {
   tokenBudget,       // Per-session token limit — priority 70
   rateLimit,         // Action rate threshold — priority 60
   timeWindow,        // Restrict to business hours — priority 50
-} from '@lua-ai-global/governance';
+} from 'governance-sdk';
 ```
 
 | Preset | Signature | Example |
@@ -183,7 +183,7 @@ Scores an agent across 7 weighted dimensions:
 | L4 | Certified | 81–100 | Cross-team, regulatory-ready |
 
 ```typescript
-import { assessAgent, assessFleet, getGovernanceLevel } from '@lua-ai-global/governance/scorer';
+import { assessAgent, assessFleet, getGovernanceLevel } from 'governance-sdk/scorer';
 
 const assessment = assessAgent('agent-id', {
   name: 'production-agent',
@@ -209,7 +209,7 @@ const level = getGovernanceLevel(87);
 Pattern-based prompt injection detection. 64+ regex patterns across 7 categories with weighted scoring.
 
 ```typescript
-import { detectInjection, createInjectionGuard, getBuiltinPatterns } from '@lua-ai-global/governance/injection-detect';
+import { detectInjection, createInjectionGuard, getBuiltinPatterns } from 'governance-sdk/injection-detect';
 ```
 
 ### `detectInjection(input, config?): InjectionResult`
@@ -259,7 +259,7 @@ interface InjectionDetectorConfig {
 Emergency agent shutdown at priority 999 — overrides ALL other policy rules.
 
 ```typescript
-import { createKillSwitch } from '@lua-ai-global/governance/kill-switch';
+import { createKillSwitch } from 'governance-sdk/kill-switch';
 
 const killSwitch = createKillSwitch(gov);
 
@@ -287,7 +287,7 @@ await killSwitch.reviveAll();
 HMAC-SHA256 hash-chained audit trail — tamper-evident by design.
 
 ```typescript
-import { createIntegrityAudit } from '@lua-ai-global/governance/audit-integrity';
+import { createIntegrityAudit } from 'governance-sdk/audit-integrity';
 
 const integrity = createIntegrityAudit(gov, { hmacKey: 'your-secret-key' });
 
@@ -311,7 +311,7 @@ const verification = await integrity.verify();
 6 articles mapped with requirements, deadlines, and SDK feature mapping.
 
 ```typescript
-import { assessCompliance, getArticles, getDaysUntilDeadline } from '@lua-ai-global/governance/compliance';
+import { assessCompliance, getArticles, getDaysUntilDeadline } from 'governance-sdk/compliance';
 
 const daysLeft = getDaysUntilDeadline(); // Days until August 2, 2026
 
@@ -344,7 +344,7 @@ const report = await assessCompliance({
 Real-time governance event emitter — zero dependencies, native `EventTarget`.
 
 ```typescript
-import { createGovernanceEmitter } from '@lua-ai-global/governance/events';
+import { createGovernanceEmitter } from 'governance-sdk/events';
 
 const emitter = createGovernanceEmitter();
 
@@ -363,7 +363,7 @@ Event types: `enforcement` · `registration` · `kill` · `revive` · `score_cha
 In-memory counters and timings for observability.
 
 ```typescript
-import { createGovernanceMetrics } from '@lua-ai-global/governance/metrics';
+import { createGovernanceMetrics } from 'governance-sdk/metrics';
 
 const metrics = createGovernanceMetrics();
 metrics.increment('enforcement.total');
@@ -380,7 +380,7 @@ const snapshot = metrics.snapshot();
 Merge policies from multiple teams with conflict resolution.
 
 ```typescript
-import { composePolicies } from '@lua-ai-global/governance/policy-compose';
+import { composePolicies } from 'governance-sdk/policy-compose';
 
 const { rules, conflicts } = composePolicies([
   { name: 'security', source: 'security-team', rules: securityRules },
@@ -398,7 +398,7 @@ Conflict strategies: `strict` (block wins) · `permissive` (allow wins) · `prio
 Test policy changes against your fleet before deploying — CI-ready.
 
 ```typescript
-import { dryRun, fleetDryRun } from '@lua-ai-global/governance/dry-run';
+import { dryRun, fleetDryRun } from 'governance-sdk/dry-run';
 
 const result = await fleetDryRun(gov, actions);
 // result.fleetSummary.agentsAffected = 11
@@ -413,7 +413,7 @@ const result = await fleetDryRun(gov, actions);
 Adjust governance scores based on runtime behavior (block rate, audit volume, tool diversity).
 
 ```typescript
-import { computeBehavioralAdjustments, applyBehavioralAdjustments } from '@lua-ai-global/governance/behavioral-scorer';
+import { computeBehavioralAdjustments, applyBehavioralAdjustments } from 'governance-sdk/behavioral-scorer';
 
 const behavioral = computeBehavioralAdjustments({ agentId: 'agent-1', events: auditEvents });
 // behavioral.adjustments = [{ dimension: 'guardrails', adjustment: -8, reason: 'High block rate' }]
@@ -428,7 +428,7 @@ const adjusted = applyBehavioralAdjustments(baseDimensions, behavioral.adjustmen
 Detect agent capabilities by scanning source code.
 
 ```typescript
-import { scanRepoContents, SCAN_GLOBS } from '@lua-ai-global/governance/repo-patterns';
+import { scanRepoContents, SCAN_GLOBS } from 'governance-sdk/repo-patterns';
 
 const result = scanRepoContents(fileContents);
 // result.detections = [{ capability: 'auth', confidence: 0.9, evidence: 'Found Clerk import' }]
@@ -449,7 +449,7 @@ const gov = createGovernance(); // In-memory storage, no config needed
 ### PostgreSQL
 
 ```typescript
-import { createPostgresStorage } from '@lua-ai-global/governance/storage-postgres';
+import { createPostgresStorage } from 'governance-sdk/storage-postgres';
 
 const storage = await createPostgresStorage({
   pool: myPgPool,                  // Any pg.Pool-compatible object
@@ -463,7 +463,7 @@ const gov = createGovernance({ storage });
 ### Schema Export
 
 ```typescript
-import { getSchemaSQL } from '@lua-ai-global/governance/storage-postgres-schema';
+import { getSchemaSQL } from 'governance-sdk/storage-postgres-schema';
 
 const ddl = getSchemaSQL('governance_');
 // Returns CREATE TABLE statements for agents and audit_events tables
@@ -517,7 +517,7 @@ const gov = createGovernance({
 // Same API — enforcement runs server-side
 ```
 
-Enterprise features (multi-tenant, RBAC, compliance reports, anomaly detection) are in the separate `@lua-ai-global/governance-enterprise` package.
+Enterprise features (multi-tenant, RBAC, compliance reports, anomaly detection) are in the separate `governance-sdk-enterprise` package.
 
 ---
 
@@ -525,7 +525,7 @@ Enterprise features (multi-tenant, RBAC, compliance reports, anomaly detection) 
 
 | # | Export Path | Key Exports |
 |---|-----------|-------------|
-| 1 | `@lua-ai-global/governance` | `createGovernance`, `blockTools`, `allowOnlyTools`, `requireApproval`, `tokenBudget`, `rateLimit`, `requireLevel`, `requireSequence`, `timeWindow`, `assessAgent`, `assessFleet`, `getGovernanceLevel`, `createPolicyEngine`, `createMemoryStorage` |
+| 1 | `governance-sdk` | `createGovernance`, `blockTools`, `allowOnlyTools`, `requireApproval`, `tokenBudget`, `rateLimit`, `requireLevel`, `requireSequence`, `timeWindow`, `assessAgent`, `assessFleet`, `getGovernanceLevel`, `createPolicyEngine`, `createMemoryStorage` |
 | 2 | `./policy` | `createPolicyEngine`, `PolicyRule`, `PolicyCondition`, `EnforcementContext`, `EnforcementDecision` |
 | 3 | `./scorer` | `assessAgent`, `assessFleet`, `getGovernanceLevel` |
 | 4 | `./kill-switch` | `createKillSwitch` |

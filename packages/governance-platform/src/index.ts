@@ -1,12 +1,12 @@
 /**
- * @lua-ai-global/governance-platform — Platform storage layer.
+ * governance-sdk-platform — Platform storage layer.
  *
  * Auto-migrating schema for org settings, policy tiers, and platform config.
  * Both governance-web (dashboard) and governance-api (enforce) depend on this.
  *
  * @example
  * ```ts
- * import { createPlatformStorage } from "@lua-ai-global/governance-platform";
+ * import { createPlatformStorage } from "governance-sdk-platform";
  *
  * const platform = await createPlatformStorage({ pool });
  * const settings = await platform.loadOrgSettings(orgId);

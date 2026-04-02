@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance Microsoft Semantic Kernel Plugin
+ * governance-sdk Microsoft Semantic Kernel Plugin
  *
  * Integrates governance enforcement into Semantic Kernel function execution.
  * Wraps kernel functions and provides a FunctionFilter for kernel-level integration.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governSKFunctions } from '@lua-ai-global/governance/plugins/semantic-kernel';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governSKFunctions } from 'governance-sdk/plugins/semantic-kernel';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['delete_file', 'send_payment'])],

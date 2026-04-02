@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Eval Type System
+ * governance-sdk — Eval Type System
  *
  * Zero-dependency type definitions for the governance eval loop.
  * Traces capture what agents do. Metrics measure quality.
@@ -7,7 +7,7 @@
  *
  * @example
  * ```ts
- * import type { EvalTrace, EvalResult, TraceCollector } from '@lua-ai-global/governance/eval-types';
+ * import type { EvalTrace, EvalResult, TraceCollector } from 'governance-sdk/eval-types';
  * ```
  */
 

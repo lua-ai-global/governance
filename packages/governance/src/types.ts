@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Core type system for agent governance.
+ * governance-sdk — Core type system for agent governance.
  * Framework-agnostic types for agent registration, scoring, and fleet management.
  */
 

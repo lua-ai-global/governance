@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance OpenAI Agents SDK Plugin
+ * governance-sdk OpenAI Agents SDK Plugin
  *
  * Integrates governance enforcement into OpenAI Agents SDK tool execution.
  * Wraps tools with before-action policy checks and audit logging.
@@ -7,8 +7,8 @@
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governAgent } from '@lua-ai-global/governance/plugins/openai-agents';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governAgent } from 'governance-sdk/plugins/openai-agents';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec', 'database_drop'])],

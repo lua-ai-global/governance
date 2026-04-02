@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance LangChain Plugin
+ * governance-sdk LangChain Plugin
  *
  * Integrates governance enforcement into LangChain/LangGraph tool execution.
  * Wraps tools with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governTool, governTools } from '@lua-ai-global/governance/plugins/langchain';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governTool, governTools } from 'governance-sdk/plugins/langchain';
  * import { DynamicStructuredTool } from 'langchain/tools';
  *
  * const gov = createGovernance({

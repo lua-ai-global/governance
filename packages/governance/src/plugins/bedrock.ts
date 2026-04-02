@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance AWS Bedrock Agents Plugin
+ * governance-sdk AWS Bedrock Agents Plugin
  *
  * Integrates governance enforcement into AWS Bedrock agent invocations.
  * Wraps invokeAgent calls and action group execution with policy checks.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { createGovernedBedrock } from '@lua-ai-global/governance/plugins/bedrock';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { createGovernedBedrock } from 'governance-sdk/plugins/bedrock';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['delete_records', 'send_email'])],

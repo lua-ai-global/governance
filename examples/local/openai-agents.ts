@@ -7,10 +7,10 @@
  * Run: npm run local:openai-agents
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { blockTools, requireLevel } from "@lua-ai-global/governance/policy";
-import { detectInjection, createInjectionGuard } from "@lua-ai-global/governance/injection-detect";
-import { governAgent } from "@lua-ai-global/governance/plugins/openai-agents";
+import { createGovernance } from "governance-sdk";
+import { blockTools, requireLevel } from "governance-sdk/policy";
+import { detectInjection, createInjectionGuard } from "governance-sdk/injection-detect";
+import { governAgent } from "governance-sdk/plugins/openai-agents";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 
 printHeader("OpenAI Agents SDK (Local 2-Stage)");

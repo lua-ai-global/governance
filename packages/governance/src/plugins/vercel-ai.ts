@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance Vercel AI SDK Plugin
+ * governance-sdk Vercel AI SDK Plugin
  *
  * Integrates governance enforcement into the Vercel AI SDK tool system.
  * Wraps tool execution with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { createGovernedTools } from '@lua-ai-global/governance/plugins/vercel-ai';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { createGovernedTools } from 'governance-sdk/plugins/vercel-ai';
  * import { generateText, tool } from 'ai';
  *
  * const gov = createGovernance({

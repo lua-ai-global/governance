@@ -50,7 +50,7 @@ npx tsx benchmark/scripts/run-benchmark.ts --json
 ## Using with Your Own Detector
 
 ```typescript
-import { runBenchmark } from '@lua-ai-global/governance/injection-benchmark';
+import { runBenchmark } from 'governance-sdk/injection-benchmark';
 
 const results = await runBenchmark(async (input) => {
   // Your detector here

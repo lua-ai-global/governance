@@ -1,12 +1,12 @@
 /**
- * @lua-ai-global/governance — Policy-Level Execution Sandboxing
+ * governance-sdk — Policy-Level Execution Sandboxing
  *
  * Sandbox levels implemented as composable policy conditions.
  * No OS-level isolation — governance-enforced boundaries.
  *
  * @example
  * ```ts
- * import { createSandbox, SANDBOX_LEVELS } from '@lua-ai-global/governance/sandbox';
+ * import { createSandbox, SANDBOX_LEVELS } from 'governance-sdk/sandbox';
  *
  * const sandbox = createSandbox({ level: 2, quotas: { maxToolCalls: 50, maxTokens: 100_000 } });
  * governance.addRule(sandbox.levelRule);

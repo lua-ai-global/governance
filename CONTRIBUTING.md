@@ -1,4 +1,4 @@
-# Contributing to @lua-ai-global/governance
+# Contributing to governance-sdk
 
 Thanks for your interest in contributing! This guide covers everything you need to get started.
 

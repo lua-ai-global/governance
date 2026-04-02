@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance Composio Plugin
+ * governance-sdk Composio Plugin
  *
  * Integrates governance enforcement into Composio tool execution.
  * Wraps tools with before-action policy checks and audit logging.
@@ -8,8 +8,8 @@
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governComposioTools } from '@lua-ai-global/governance/plugins/composio';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governComposioTools } from 'governance-sdk/plugins/composio';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['GMAIL_SEND_EMAIL'])],

@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance MCP (Model Context Protocol) Plugin
+ * governance-sdk MCP (Model Context Protocol) Plugin
  *
  * Integrates governance enforcement into MCP servers.
  * Governs tool calls and resource reads with before-action policy checks.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { createGovernedMCP } from '@lua-ai-global/governance/plugins/mcp';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { createGovernedMCP } from 'governance-sdk/plugins/mcp';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec', 'file_delete'])],

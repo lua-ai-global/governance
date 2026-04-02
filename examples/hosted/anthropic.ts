@@ -7,8 +7,8 @@
  * Run: GOVERNANCE_API_KEY=sk_... npm run anthropic
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { governAnthropicTools, type AnthropicToolUseBlock } from "@lua-ai-global/governance/plugins/anthropic";
+import { createGovernance } from "governance-sdk";
+import { governAnthropicTools, type AnthropicToolUseBlock } from "governance-sdk/plugins/anthropic";
 import { API_URL, API_KEY } from "../shared/config.ts";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 

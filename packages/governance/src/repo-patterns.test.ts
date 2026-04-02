@@ -17,7 +17,7 @@ describe("scanRepoContents", () => {
 
   it("detects Lua Governance SDK as guardrail", () => {
     const files = new Map([
-      ["src/agent.ts", `import { createGovernance } from "@lua-ai-global/governance";\nconst gov = createGovernance({ rules: [] });`],
+      ["src/agent.ts", `import { createGovernance } from "governance-sdk";\nconst gov = createGovernance({ rules: [] });`],
     ]);
     const result = scanRepoContents(files);
     const guard = result.detections.find((d) => d.capability === "hasGuardrails");

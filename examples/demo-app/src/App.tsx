@@ -5,12 +5,12 @@ import {
   blockTools,
   requireLevel,
   createInjectionGuard,
-} from "@lua-ai-global/governance";
+} from "governance-sdk";
 import type {
   InjectionResult,
   EnforcementDecision,
   AgentFramework,
-} from "@lua-ai-global/governance";
+} from "governance-sdk";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -133,7 +133,7 @@ function buildCodePreview(agent: AgentConfig, policy: PolicyConfig, mode: Mode):
   if (mode === "local" && policy.blockedTools.size > 0) lines.push(`  blockTools,`);
   if (mode === "local" && policy.requireLevelEnabled) lines.push(`  requireLevel,`);
   if (mode === "local" && policy.injectionGuardEnabled) lines.push(`  createInjectionGuard,`);
-  lines.push(`} from "@lua-ai-global/governance";`);
+  lines.push(`} from "governance-sdk";`);
   lines.push(``);
 
   if (mode === "hosted") {
@@ -587,7 +587,7 @@ export default function App() {
         </div>
 
         <div className="sidebar-footer">
-          @lua-ai-global/governance v0.3.2
+          governance-sdk v0.3.2
         </div>
       </aside>
 

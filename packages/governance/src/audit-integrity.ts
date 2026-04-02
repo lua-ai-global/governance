@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Tamper-Evident Audit Logging
+ * governance-sdk — Tamper-Evident Audit Logging
  *
  * HMAC-SHA256 hash chaining for audit events. Each event's hash includes
  * the previous hash, making tampering immediately detectable.

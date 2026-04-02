@@ -1,6 +1,6 @@
-# @lua-ai-global/governance-platform
+# governance-sdk-platform
 
-PostgreSQL storage layer for [`@lua-ai-global/governance`](https://github.com/lua-ai-global/governance) -- auto-migrating schema, typed queries for org settings and policy tiers.
+PostgreSQL storage layer for [`governance-sdk`](https://github.com/lua-ai-global/governance) -- auto-migrating schema, typed queries for org settings and policy tiers.
 
 ## What it does
 
@@ -14,20 +14,13 @@ Provides persistent storage for governance state that the core SDK evaluates in-
 ## Install
 
 ```bash
-npm install @lua-ai-global/governance-platform --registry=https://npm.pkg.github.com
-```
-
-Requires `.npmrc` configuration for GitHub Packages:
-
-```
-@lua-ai-global:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+npm install governance-sdk-platform
 ```
 
 ## Usage
 
 ```typescript
-import { createPlatformStorage, migrate } from '@lua-ai-global/governance-platform';
+import { createPlatformStorage, migrate } from 'governance-sdk-platform';
 import pg from 'pg';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -51,8 +44,8 @@ This package is the storage companion to the core SDK. The core SDK handles poli
 
 | Package | Purpose |
 |---------|---------|
-| `@lua-ai-global/governance` | Core SDK -- policy engine, scoring, injection detection |
-| `@lua-ai-global/governance-platform` | **This package** -- PostgreSQL storage layer |
+| `governance-sdk` | Core SDK -- policy engine, scoring, injection detection |
+| `governance-sdk-platform` | **This package** -- PostgreSQL storage layer |
 
 ## License
 

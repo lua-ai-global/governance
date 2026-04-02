@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — ISO/IEC 42001 Compliance Assessment
+ * governance-sdk — ISO/IEC 42001 Compliance Assessment
  *
  * Assesses governance configuration against ISO 42001 AI Management System clauses.
  * Clause definitions are in iso-42001-articles.ts.

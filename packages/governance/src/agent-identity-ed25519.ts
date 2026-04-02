@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Ed25519 Cryptographic Agent Identity
+ * governance-sdk — Ed25519 Cryptographic Agent Identity
  *
  * Public-key agent identity using Ed25519 via Web Crypto API.
  * Zero dependencies. Supports key generation, action signing, verification,
@@ -7,7 +7,7 @@
  *
  * @example
  * ```ts
- * import { createEd25519Identity } from '@lua-ai-global/governance/agent-identity-ed25519';
+ * import { createEd25519Identity } from 'governance-sdk/agent-identity-ed25519';
  *
  * const identity = createEd25519Identity();
  * const keyPair = await identity.generateKeyPair();

@@ -1,13 +1,13 @@
 /**
- * @lua-ai-global/governance Google Genkit Plugin
+ * governance-sdk Google Genkit Plugin
  *
  * Integrates governance enforcement into Genkit tool execution and flows.
  * Wraps tools with before-action policy checks and audit logging.
  *
  * @example
  * ```ts
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { governGenkitTools } from '@lua-ai-global/governance/plugins/genkit';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { governGenkitTools } from 'governance-sdk/plugins/genkit';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['file_delete', 'send_email'])],

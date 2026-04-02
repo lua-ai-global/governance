@@ -7,8 +7,8 @@
  * Run: GOVERNANCE_API_KEY=sk_... npm run mastra
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { createGovernanceMiddleware } from "@lua-ai-global/governance/plugins/mastra";
+import { createGovernance } from "governance-sdk";
+import { createGovernanceMiddleware } from "governance-sdk/plugins/mastra";
 import { API_URL, API_KEY } from "../shared/config.ts";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 

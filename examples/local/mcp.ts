@@ -7,10 +7,10 @@
  * Run: npm run local:mcp
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { blockTools, requireLevel } from "@lua-ai-global/governance/policy";
-import { detectInjection, createInjectionGuard } from "@lua-ai-global/governance/injection-detect";
-import { createGovernedMCP, type MCPCallToolRequest, type MCPReadResourceRequest } from "@lua-ai-global/governance/plugins/mcp";
+import { createGovernance } from "governance-sdk";
+import { blockTools, requireLevel } from "governance-sdk/policy";
+import { detectInjection, createInjectionGuard } from "governance-sdk/injection-detect";
+import { createGovernedMCP, type MCPCallToolRequest, type MCPReadResourceRequest } from "governance-sdk/plugins/mcp";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 
 printHeader("MCP (Local 2-Stage)");

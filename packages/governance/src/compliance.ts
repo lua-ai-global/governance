@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — EU AI Act Compliance Assessment
+ * governance-sdk — EU AI Act Compliance Assessment
  *
  * Assesses governance configuration against EU AI Act article requirements.
  * Article definitions are in compliance-articles.ts.

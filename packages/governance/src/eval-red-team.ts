@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Red Team: Policy Effectiveness Tester
+ * governance-sdk — Red Team: Policy Effectiveness Tester
  *
  * Measures how well GOVERNANCE POLICIES protect an agent:
  * - Injection resistance — do policies detect and block injection probes?

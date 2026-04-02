@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — NIST AI Risk Management Framework Assessment
+ * governance-sdk — NIST AI Risk Management Framework Assessment
  *
  * Assesses governance configuration against NIST AI RMF 1.0 functions.
  * Function definitions are in nist-ai-rmf-articles.ts.

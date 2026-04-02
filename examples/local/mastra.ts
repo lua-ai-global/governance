@@ -7,10 +7,10 @@
  * Run: npm run local:mastra
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { blockTools, requireLevel } from "@lua-ai-global/governance/policy";
-import { detectInjection, createInjectionGuard } from "@lua-ai-global/governance/injection-detect";
-import { createGovernanceMiddleware } from "@lua-ai-global/governance/plugins/mastra";
+import { createGovernance } from "governance-sdk";
+import { blockTools, requireLevel } from "governance-sdk/policy";
+import { detectInjection, createInjectionGuard } from "governance-sdk/injection-detect";
+import { createGovernanceMiddleware } from "governance-sdk/plugins/mastra";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 
 printHeader("Mastra (Local 2-Stage)");

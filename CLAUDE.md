@@ -1,4 +1,4 @@
-# @lua-ai-global/governance — SDK Monorepo
+# governance-sdk — SDK Monorepo
 
 ## WHAT THIS IS
 Public SDK monorepo for AI Agent Governance for TypeScript. Two packages:
@@ -28,10 +28,10 @@ npm run lint     # Type-check all packages
 ```
 
 ## PUBLISHING
-Packages publish to GitHub Packages (`@lua-ai-global` scope) via CI on version tags:
+Packages publish to npmjs.org (`governance-sdk`, `governance-sdk-platform`) via CI on version tags:
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.5.0
+git push origin v0.5.0
 ```
 
 ## GIT RULES

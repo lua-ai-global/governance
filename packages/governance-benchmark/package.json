@@ -1,5 +1,5 @@
 {
-  "name": "@lua-ai-global/governance-benchmark",
+  "name": "governance-sdk-benchmark",
   "version": "0.1.0",
   "description": "Agent Governance Benchmark (AGB) — the industry-standard evaluation dataset for AI agent injection detection. 10K+ samples across agent-specific attack categories with hard negatives.",
   "type": "module",
@@ -64,10 +64,10 @@
   },
   "homepage": "https://heylua.ai/governance",
   "peerDependencies": {
-    "@lua-ai-global/governance": ">=0.4.0"
+    "governance-sdk": ">=0.4.0"
   },
   "peerDependenciesMeta": {
-    "@lua-ai-global/governance": {
+    "governance-sdk": {
       "optional": true
     }
   },

@@ -7,8 +7,8 @@
  * Run: GOVERNANCE_API_KEY=sk_... npm run vercel-ai
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { createGovernedTools, type VercelToolExecutionOptions } from "@lua-ai-global/governance/plugins/vercel-ai";
+import { createGovernance } from "governance-sdk";
+import { createGovernedTools, type VercelToolExecutionOptions } from "governance-sdk/plugins/vercel-ai";
 import { API_URL, API_KEY } from "../shared/config.ts";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 

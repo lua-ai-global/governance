@@ -1,14 +1,14 @@
 /**
- * @lua-ai-global/governance — ML Injection Detection Interface
+ * governance-sdk — ML Injection Detection Interface
  *
  * Defines a pluggable classifier interface for ML-based injection detection.
  * The OSS SDK ships the interface; commercial packages provide implementations.
  *
  * @example
  * ```ts
- * import { setInjectionClassifier, getInjectionClassifier } from '@lua-ai-global/governance/injection-classifier';
+ * import { setInjectionClassifier, getInjectionClassifier } from 'governance-sdk/injection-classifier';
  *
- * // Register a classifier (e.g., from @lua-ai-global/governance-ml)
+ * // Register a classifier (e.g., from governance-sdk-ml)
  * setInjectionClassifier({
  *   classify: async (input) => ({
  *     detected: true,

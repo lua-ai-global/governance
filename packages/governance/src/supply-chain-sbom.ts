@@ -1,12 +1,12 @@
 /**
- * @lua-ai-global/governance — Agent Software Bill of Materials (SBOM)
+ * governance-sdk — Agent Software Bill of Materials (SBOM)
  *
  * Generates a JSON manifest of agent capabilities, dependencies,
  * and governance posture. Compatible with CycloneDX concepts.
  *
  * @example
  * ```ts
- * import { generateAgentSBOM } from '@lua-ai-global/governance/supply-chain-sbom';
+ * import { generateAgentSBOM } from 'governance-sdk/supply-chain-sbom';
  *
  * const sbom = generateAgentSBOM({
  *   agent: storedAgent,

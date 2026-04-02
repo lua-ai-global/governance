@@ -7,4 +7,4 @@ The open-source benchmark provides:
 - The `InjectionClassifier` interface for plugging in any ML model
 - The regex-based detector (zero dependencies)
 
-For ML-powered detection, see `@lua-ai-global/governance-ml` (commercial tier).
+For ML-powered detection, see `governance-sdk-ml` (commercial tier).

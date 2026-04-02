@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance Mastra Plugin
+ * governance-sdk Mastra Plugin
  *
  * Integrates governance enforcement into the Mastra agent lifecycle.
  * Wraps tool execution with before-action policy checks and audit logging.
@@ -7,8 +7,8 @@
  * @example
  * ```ts
  * import { Agent } from '@mastra/core';
- * import { createGovernance, blockTools } from '@lua-ai-global/governance';
- * import { createGovernanceMiddleware } from '@lua-ai-global/governance/plugins/mastra';
+ * import { createGovernance, blockTools } from 'governance-sdk';
+ * import { createGovernanceMiddleware } from 'governance-sdk/plugins/mastra';
  *
  * const gov = createGovernance({
  *   rules: [blockTools(['shell_exec', 'database_drop'])],

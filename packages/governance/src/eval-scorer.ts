@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance — Eval Scorer
+ * governance-sdk — Eval Scorer
  *
  * Maps eval metric results to governance dimension adjustments.
  * Works alongside behavioral-scorer.ts — eval signals are direct quality
@@ -17,7 +17,7 @@
  *
  * @example
  * ```ts
- * import { computeEvalAdjustments, applyEvalAdjustments } from '@lua-ai-global/governance/eval-scorer';
+ * import { computeEvalAdjustments, applyEvalAdjustments } from 'governance-sdk/eval-scorer';
  *
  * const adjustments = computeEvalAdjustments({ results: recentEvals });
  * const adjusted = applyEvalAdjustments(baseDimensions, adjustments);

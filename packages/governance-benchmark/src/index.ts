@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance-benchmark
+ * governance-sdk-benchmark
  *
  * Agent Governance Benchmark (AGB) — multi-axis evaluation
  * dataset for AI agent injection detection.

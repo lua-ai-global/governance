@@ -1,5 +1,5 @@
 /**
- * @lua-ai-global/governance E2B Sandbox Plugin
+ * governance-sdk E2B Sandbox Plugin
  *
  * Integrates governance enforcement into E2B sandbox operations.
  * Wraps code execution, filesystem ops, and process spawning with
@@ -7,8 +7,8 @@
  *
  * @example
  * ```ts
- * import { createGovernance } from '@lua-ai-global/governance';
- * import { governE2BSandbox } from '@lua-ai-global/governance/plugins/e2b';
+ * import { createGovernance } from 'governance-sdk';
+ * import { governE2BSandbox } from 'governance-sdk/plugins/e2b';
  *
  * const gov = createGovernance();
  *

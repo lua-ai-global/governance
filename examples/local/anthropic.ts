@@ -7,10 +7,10 @@
  * Run: npm run local:anthropic
  */
 
-import { createGovernance } from "@lua-ai-global/governance";
-import { blockTools, requireLevel } from "@lua-ai-global/governance/policy";
-import { detectInjection, createInjectionGuard } from "@lua-ai-global/governance/injection-detect";
-import { governAnthropicTools, type AnthropicToolUseBlock } from "@lua-ai-global/governance/plugins/anthropic";
+import { createGovernance } from "governance-sdk";
+import { blockTools, requireLevel } from "governance-sdk/policy";
+import { detectInjection, createInjectionGuard } from "governance-sdk/injection-detect";
+import { governAnthropicTools, type AnthropicToolUseBlock } from "governance-sdk/plugins/anthropic";
 import { printHeader, printResult, INJECTION_PAYLOADS } from "../shared/tools.ts";
 
 printHeader("Anthropic Claude SDK (Local 2-Stage)");
