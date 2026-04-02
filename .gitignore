@@ -23,3 +23,25 @@ skills-lock.json
 # ide
 .idea/
 .vscode/
+
+# benchmark pipeline artifacts (regeneratable via scripts)
+packages/governance/benchmark/data/raw-*.jsonl
+packages/governance/benchmark/data/merged-*.jsonl
+packages/governance/benchmark/data/validated.jsonl
+packages/governance/benchmark/data/needs-review.jsonl
+packages/governance/benchmark/data/generated-*.jsonl
+packages/governance/benchmark/data/agb-*.jsonl
+packages/governance/benchmark/data/high-score-*.jsonl
+packages/governance/benchmark/data/ml-high-score-*.jsonl
+packages/governance/benchmark/data/llm-audit-results.json
+packages/governance/benchmark/data/label-fixes*.json
+packages/governance/benchmark/data/*-augmented.jsonl
+packages/governance/benchmark/data/validation-report.txt
+
+# ML training (belongs in governance-cloud, not here)
+packages/governance/benchmark/ml/.venv/
+packages/governance/benchmark/ml/output*/
+packages/governance/benchmark/ml/__pycache__/
+*.safetensors
+*.onnx
+*.pt

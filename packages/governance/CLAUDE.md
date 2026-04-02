@@ -4,12 +4,10 @@
 The first standalone governance SDK for TypeScript AI agents. Zero runtime dependencies. MIT license. Thin client — local policy evaluation, scoring, injection detection, and adapters. Stateful operations (rate limiting, distributed kill switch, durable audit) belong in the API layer.
 
 ## CURRENT STATE (Post-Audit)
-- **945+ tests, 0 failures** — run with `npm test` (enterprise tests are in `packages/governance-enterprise/`)
+- **945+ tests, 0 failures** — run with `npm test`
 - **0 runtime dependencies** — only devDependencies (tsx, typescript)
 - **35 export paths** — core, policy, scorer, 20 framework adapters, suggest, policy-compose, events, metrics, dry-run, audit-integrity, compliance, kill-switch, storage-postgres, storage-postgres-schema, injection-detect, behavioral-scorer, repo-patterns
 - **20 framework adapters**: Mastra, Mastra Processor, Vercel AI, LangChain, OpenAI Agents, Anthropic, MCP, CrewAI, Bedrock, Genkit, Semantic Kernel, AutoGen, A2A, LlamaIndex, Cloudflare AI, Deno, Mistral, Ollama, E2B, Composio
-- **Enterprise is a separate package** — `packages/governance-enterprise/` (585 tests, 29 modules)
-- **Version: 0.3.2**
 
 ## ABSOLUTE RULES
 - **Zero runtime dependencies** — NEVER add a `dependency`. Framework imports go in `peerDependencies` (optional).

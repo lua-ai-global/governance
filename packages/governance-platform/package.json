@@ -13,7 +13,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc",
@@ -24,13 +25,18 @@
   "author": "Lua <hello@heylua.ai> (https://heylua.ai)",
   "license": "MIT",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/lua-ai-global/governance",
     "directory": "packages/governance-platform"
   },
+  "bugs": {
+    "url": "https://github.com/lua-ai-global/governance/issues"
+  },
+  "homepage": "https://heylua.ai/governance",
   "peerDependencies": {
     "pg": ">=8.0.0"
   },

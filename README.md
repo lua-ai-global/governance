@@ -25,10 +25,10 @@ Every AI agent framework lets you build agents. None of them govern what those a
 
 ```bash
 # Core SDK (zero dependencies)
-npm install @lua-ai-global/governance --registry=https://npm.pkg.github.com
+npm install @lua-ai-global/governance
 
 # PostgreSQL storage (optional)
-npm install @lua-ai-global/governance-platform --registry=https://npm.pkg.github.com
+npm install @lua-ai-global/governance-platform
 ```
 
 Or scaffold a project with the CLI:
@@ -37,22 +37,13 @@ Or scaffold a project with the CLI:
 npx @lua-ai-global/governance init
 ```
 
-### Configure npm for GitHub Packages
-
-Add to your project or user `.npmrc`:
-
-```
-@lua-ai-global:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
-```
-
 ### Basic Usage
 
 ```typescript
 import { createGovernance, blockTools, rateLimit } from '@lua-ai-global/governance';
 
 const governance = createGovernance({
-  policies: [
+  rules: [
     blockTools(['shell_exec', 'eval']),
     rateLimit({ maxRequests: 100, windowMs: 60_000 }),
   ],

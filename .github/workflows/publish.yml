@@ -4,7 +4,6 @@ on:
     tags: ['v*']
 permissions:
   contents: read
-  packages: write
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -13,20 +12,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://npm.pkg.github.com
+          registry-url: https://registry.npmjs.org
       - run: npm ci
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm run build
       - run: npm test
       - name: Publish packages (skip already-published versions)
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           for pkg in governance governance-platform; do
             PKG_NAME=$(node -p "require('./packages/$pkg/package.json').name")
             PKG_VERSION=$(node -p "require('./packages/$pkg/package.json').version")
-            if npm view "$PKG_NAME@$PKG_VERSION" version --registry=https://npm.pkg.github.com 2>/dev/null; then
+            if npm view "$PKG_NAME@$PKG_VERSION" version 2>/dev/null; then
               echo "⏭ $PKG_NAME@$PKG_VERSION already published, skipping"
             else
               echo "📦 Publishing $PKG_NAME@$PKG_VERSION"

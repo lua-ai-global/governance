@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.4.4] - 2026-04-01
+
+### Added
+- PII and prompt leak detection patterns in injection detection
+- Stage-aware dry-run and remote enforce forwarding
+- Condition registry for pluggable policy conditions
+
+### Fixed
+- Broken detection patterns in injection-detect
+- Pipeline demo action types for valid PolicyAction values
+- `evaluateStage` to use condition-type stage defaults
+- Serialize postgres migration per prefix to avoid duplicate pg_type
+
+## [0.4.0] - 2026-03-28
+
+### Added
+- **Multi-stage policy engine** with 10 new conditions (preprocess/postprocess pipeline)
+- Demo app scaffold with Vite + React + TypeScript
+
+## [0.3.4] - 2026-03-20
+
+### Added
+- `KillSwitchState` to platform types and passthrough in queries
+- Resolved per-agent policy display in demo app
+
+### Fixed
+- Demo app Configure tab remote policy display
+
+## [0.3.3] - 2026-03-15
+
+### Changed
+- Remote `register()` is now a local no-op — API auto-registers on enforce
+- Refactored policy storage: `saved_policies` as single source of truth
+- `loadPolicyTiers` return now includes plan for quota enforcement
+
+### Fixed
+- Remote enforce response unwrapping
+- Hosted mode: agent picker, policy display, sidebar state
+
+### Added
+- Remote config panel to demo app hosted mode
+- Examples for hosted and local enforcement
+
 ## [0.3.2] - 2026-03-11
 
 ### Added
