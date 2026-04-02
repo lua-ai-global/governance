@@ -37,14 +37,21 @@ describe("computeSignals", () => {
     assert.equal(signals.lastActivityAt, null);
   });
 
-  it("computes block rate", () => {
+  it("computes recency-weighted block rate", () => {
     const events = [
       ...makeEvents(7),
       ...makeEvents(3, { outcome: "blocked" }),
     ];
+    // With recency bias, blocked events at end of list weigh more
     const signals = computeSignals({ events, declaredTools: [] });
     assert.equal(signals.totalEvents, 10);
-    assert.ok(Math.abs(signals.blockRate - 0.3) < 0.01);
+    // Block rate should be in the ballpark of 30% but weighted toward recent events
+    assert.ok(signals.blockRate > 0.2, `Block rate ${signals.blockRate} should be > 0.2`);
+    assert.ok(signals.blockRate < 0.5, `Block rate ${signals.blockRate} should be < 0.5`);
+
+    // With no recency bias, should be exactly 0.3
+    const flat = computeSignals({ events, declaredTools: [], config: { recencyBias: 0 } });
+    assert.ok(Math.abs(flat.blockRate - 0.3) < 0.01, "Flat weighting should give exact 0.3");
   });
 
   it("detects undeclared tools", () => {
