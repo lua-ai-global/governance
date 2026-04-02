@@ -70,6 +70,10 @@ export type {
   OrgPreferences,
   OrgSettingsUpdate,
   BehavioralScoringConfig,
+  ScoringConfig,
+  DetectionConfig,
+  ResourceLimitsConfig,
+  CompliancePosture,
   KillSwitchState,
 } from "./types.js";
 

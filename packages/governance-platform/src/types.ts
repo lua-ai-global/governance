@@ -66,12 +66,48 @@ export interface BehavioralScoringConfig {
   windowSize: number;
 }
 
+/** Dimension weight overrides — keys match ScoreDimension */
+export interface ScoringConfig {
+  dimensionWeights?: Record<string, number>;
+  /** Level boundary overrides: [level0Max, level1Max, level2Max, level3Max] */
+  levelThresholds?: [number, number, number, number];
+  /** Score above which agents are approved (default 60) */
+  approvalThreshold?: number;
+}
+
+/** Injection detection tuning */
+export interface DetectionConfig {
+  /** Detection threshold 0-1 (default 0.5) */
+  injectionThreshold?: number;
+  /** Max input length in chars (default 100000) */
+  maxInputLength?: number;
+}
+
+/** Per-governance-level resource limits */
+export interface ResourceLimitsConfig {
+  /** Indexed by governance level 0-4 */
+  levels?: Record<number, { maxNamespaces: number; maxExtractionTier: 0 | 1 | 2 }>;
+}
+
+/** Compliance posture self-assessment flags */
+export interface CompliancePosture {
+  auditIntegrity?: boolean;
+  humanOversight?: boolean;
+  logRetention?: boolean;
+  configVersionControlled?: boolean;
+  policiesTested?: boolean;
+}
+
 /** Org-level preferences stored in settings JSONB */
 export interface OrgPreferences {
   autoRegisterAgents: boolean;
   killSwitch?: KillSwitchState | null;
-  /** Behavioral scoring tuning (defaults applied if not set) */
   behavioralConfig?: BehavioralScoringConfig;
+  scoringConfig?: ScoringConfig;
+  detectionConfig?: DetectionConfig;
+  resourceLimits?: ResourceLimitsConfig;
+  defaultOutcome?: "allow" | "block";
+  compliancePosture?: CompliancePosture;
 }
 
 /** Partial update payload — each field is optional */

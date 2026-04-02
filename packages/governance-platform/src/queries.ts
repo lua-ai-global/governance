@@ -15,6 +15,10 @@ import type {
   OrgSettingsUpdate,
   KillSwitchState,
   BehavioralScoringConfig,
+  ScoringConfig,
+  DetectionConfig,
+  ResourceLimitsConfig,
+  CompliancePosture,
 } from "./types.js";
 
 /* ------------------------------------------------------------------ */
@@ -30,13 +34,19 @@ interface OrgSettingsRow {
 }
 
 function rowToOrgSettings(row: OrgSettingsRow): StoredOrgSettings {
+  const s = row.settings ?? {};
   return {
     clerkOrgId: row.clerk_org_id,
     plan: row.plan,
     settings: {
-      autoRegisterAgents: row.settings?.autoRegisterAgents !== false,
-      killSwitch: (row.settings?.killSwitch as KillSwitchState | undefined) ?? null,
-      behavioralConfig: (row.settings?.behavioralConfig as BehavioralScoringConfig | undefined),
+      autoRegisterAgents: s.autoRegisterAgents !== false,
+      killSwitch: (s.killSwitch as KillSwitchState | undefined) ?? null,
+      behavioralConfig: s.behavioralConfig as BehavioralScoringConfig | undefined,
+      scoringConfig: s.scoringConfig as ScoringConfig | undefined,
+      detectionConfig: s.detectionConfig as DetectionConfig | undefined,
+      resourceLimits: s.resourceLimits as ResourceLimitsConfig | undefined,
+      defaultOutcome: s.defaultOutcome as "allow" | "block" | undefined,
+      compliancePosture: s.compliancePosture as CompliancePosture | undefined,
     },
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -191,7 +201,12 @@ export async function loadPolicyTiers(
     settings: {
       autoRegisterAgents: orgRow?.settings?.autoRegisterAgents !== false,
       killSwitch: (orgRow?.settings?.killSwitch as KillSwitchState | null | undefined) ?? null,
-      behavioralConfig: (orgRow?.settings?.behavioralConfig as BehavioralScoringConfig | undefined),
+      behavioralConfig: orgRow?.settings?.behavioralConfig as BehavioralScoringConfig | undefined,
+      scoringConfig: orgRow?.settings?.scoringConfig as ScoringConfig | undefined,
+      detectionConfig: orgRow?.settings?.detectionConfig as DetectionConfig | undefined,
+      resourceLimits: orgRow?.settings?.resourceLimits as ResourceLimitsConfig | undefined,
+      defaultOutcome: orgRow?.settings?.defaultOutcome as "allow" | "block" | undefined,
+      compliancePosture: orgRow?.settings?.compliancePosture as CompliancePosture | undefined,
     },
   };
 }
