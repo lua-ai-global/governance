@@ -26,6 +26,7 @@
 import type { GovernanceInstance, AuditEvent } from "../index";
 import type { EnforcementDecision, PolicyAction } from "../policy";
 import type { AgentRegistration } from "../types";
+import { detectInjection } from "../injection-detect.js";
 import type {
   MCPCallToolRequest,
   MCPCallToolResult,
@@ -135,6 +136,25 @@ export async function createGovernedMCP(
 
     try {
       const output = await toolCallHandler(request);
+
+      // Scan text content in tool output for injection patterns
+      if (config.scanToolOutputs !== false) {
+        for (const block of output.content) {
+          if (block.type === "text" && block.text) {
+            const scan = detectInjection(block.text, { threshold: config.outputInjectionThreshold ?? 0.6 });
+            if (scan.detected) {
+              await audit(toolName, "failure", {
+                injectionInOutput: true, score: scan.score, patterns: scan.patterns,
+              });
+              throw new GovernanceBlockedError(
+                { blocked: true, reason: `Injection detected in tool output (score: ${scan.score})`, ruleId: null, outcome: "block", evaluatedAt: new Date().toISOString(), rulesEvaluated: 0 },
+                toolName,
+              );
+            }
+          }
+        }
+      }
+
       await audit(toolName, output.isError ? "failure" : "success", {
         contentTypes: output.content.map((c) => c.type),
       });

@@ -148,6 +148,74 @@
     "./plugins/composio": {
       "types": "./dist/plugins/composio.d.ts",
       "import": "./dist/plugins/composio.js"
+    },
+    "./owasp-agentic": {
+      "types": "./dist/owasp-agentic.d.ts",
+      "import": "./dist/owasp-agentic.js"
+    },
+    "./nist-ai-rmf": {
+      "types": "./dist/nist-ai-rmf.d.ts",
+      "import": "./dist/nist-ai-rmf.js"
+    },
+    "./otel-hooks": {
+      "types": "./dist/otel-hooks.d.ts",
+      "import": "./dist/otel-hooks.js"
+    },
+    "./agent-identity": {
+      "types": "./dist/agent-identity.d.ts",
+      "import": "./dist/agent-identity.js"
+    },
+    "./plugins/mcp-annotations": {
+      "types": "./dist/plugins/mcp-annotations.d.ts",
+      "import": "./dist/plugins/mcp-annotations.js"
+    },
+    "./agent-identity-ed25519": {
+      "types": "./dist/agent-identity-ed25519.d.ts",
+      "import": "./dist/agent-identity-ed25519.js"
+    },
+    "./supply-chain": {
+      "types": "./dist/supply-chain.d.ts",
+      "import": "./dist/supply-chain.js"
+    },
+    "./supply-chain-sbom": {
+      "types": "./dist/supply-chain-sbom.d.ts",
+      "import": "./dist/supply-chain-sbom.js"
+    },
+    "./plugins/mcp-trust": {
+      "types": "./dist/plugins/mcp-trust.d.ts",
+      "import": "./dist/plugins/mcp-trust.js"
+    },
+    "./plugins/mcp-chain-audit": {
+      "types": "./dist/plugins/mcp-chain-audit.d.ts",
+      "import": "./dist/plugins/mcp-chain-audit.js"
+    },
+    "./injection-classifier": {
+      "types": "./dist/injection-classifier.d.ts",
+      "import": "./dist/injection-classifier.js"
+    },
+    "./policy-builder": {
+      "types": "./dist/policy-builder.d.ts",
+      "import": "./dist/policy-builder.js"
+    },
+    "./policy-yaml": {
+      "types": "./dist/policy-yaml.d.ts",
+      "import": "./dist/policy-yaml.js"
+    },
+    "./federation": {
+      "types": "./dist/federation.d.ts",
+      "import": "./dist/federation.js"
+    },
+    "./sandbox": {
+      "types": "./dist/sandbox.d.ts",
+      "import": "./dist/sandbox.js"
+    },
+    "./iso-42001": {
+      "types": "./dist/iso-42001.d.ts",
+      "import": "./dist/iso-42001.js"
+    },
+    "./injection-benchmark": {
+      "types": "./dist/injection-benchmark.d.ts",
+      "import": "./dist/injection-benchmark.js"
     }
   },
   "files": [
@@ -175,11 +243,15 @@
   "author": "Lua <hello@heylua.ai> (https://heylua.ai)",
   "license": "MIT",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/lua-ai-global/governance"
+  },
+  "bugs": {
+    "url": "https://github.com/lua-ai-global/governance/issues"
   },
   "homepage": "https://heylua.ai/governance",
   "engines": {

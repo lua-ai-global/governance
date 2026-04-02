@@ -172,6 +172,16 @@ export function getBuiltinConditions(
       description: "Detect leaked credentials and secrets",
       evaluator: (ctx, p) => evaluateSensitiveDataFilter(ctx, p.patterns as string[] | undefined),
     },
+    // ─── Identity ─────────────────────────────────────────────
+    {
+      name: "require_signed_action",
+      description: "Require a cryptographic signature in action metadata",
+      evaluator: (ctx) => {
+        // Block if no signature present in metadata
+        const meta = ctx.metadata as Record<string, unknown> | undefined;
+        return !meta || !meta.signature || typeof meta.signature !== "string";
+      },
+    },
     // ─── Combinators ───────────────────────────────────────────
     {
       name: "any_of",

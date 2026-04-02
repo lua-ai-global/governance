@@ -162,6 +162,10 @@ export interface GovernMCPConfig {
   resourceActionMapper?: (uri: string) => PolicyAction;
   /** Whether to govern resource reads (default: true) */
   governResources?: boolean;
+  /** Whether to scan tool output text for injection patterns (default: true) */
+  scanToolOutputs?: boolean;
+  /** Injection detection threshold for tool outputs (default: 0.6) */
+  outputInjectionThreshold?: number;
 }
 
 // ─── Results ────────────────────────────────────────────────
