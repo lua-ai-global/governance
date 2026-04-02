@@ -24,13 +24,19 @@
  * @packageDocumentation
  */
 
-import { assessAgent, assessFleet } from "./scorer.js";
+import { assessAgent, assessFleet, getGovernanceLevel, computeCompositeScore } from "./scorer.js";
 import { createPolicyEngine } from "./policy.js";
 import { createMemoryStorage } from "./storage.js";
 import { createRemoteEnforcer, validateRemoteConfig } from "./remote-enforce.js";
+import { computeBehavioralAdjustments, applyBehavioralAdjustments } from "./behavioral-scorer.js";
+import { computeEvalAdjustments, applyEvalAdjustments } from "./eval-scorer.js";
+import { createTraceCollector } from "./eval-trace.js";
+import { runRedTeam } from "./eval-red-team.js";
 import type { AgentRegistration, GovernanceAssessment, FleetSummary } from "./types.js";
 import type { PolicyRule, PolicyEngine, PolicyStage, EnforcementContext, EnforcementDecision } from "./policy.js";
 import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
+import type { EvalResult, TraceCollector } from "./eval-types.js";
+import type { RedTeamConfig, RedTeamReport } from "./eval-red-team.js";
 
 // Re-export storage types (other modules import from ./index)
 export type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
@@ -83,6 +89,19 @@ export interface GovernanceInstance {
   addRule: (rule: PolicyRule) => void;
   /** Remove a policy rule by ID */
   removeRule: (ruleId: string) => void;
+  /** Eval loop — submit results, access traces, run red team */
+  eval: {
+    /** Submit eval results for an agent (feeds into scoring via score()) */
+    submit: (result: EvalResult) => void;
+    /** Get recent eval results for an agent */
+    getResults: (agentId: string) => EvalResult[];
+    /** Clear eval results for an agent */
+    clear: (agentId: string) => void;
+    /** Trace collector for wiring into framework adapters */
+    traces: TraceCollector;
+    /** Run adversarial policy effectiveness suite */
+    runRedTeam: (agentId: string, config?: RedTeamConfig) => Promise<RedTeamReport>;
+  };
 }
 
 /** Reconstruct an AgentRegistration from a StoredAgent, including capability booleans from metadata. */
@@ -125,6 +144,11 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   const remote = config.serverUrl
     ? createRemoteEnforcer({ serverUrl: config.serverUrl, apiKey: config.apiKey! })
     : null;
+
+  // Eval stores — in-memory, capped per agent
+  const evalResultStore = new Map<string, EvalResult[]>();
+  const traceCollector = createTraceCollector({ maxTraces: 200 });
+  const MAX_EVAL_RESULTS_PER_AGENT = 100;
 
   async function register(input: AgentRegistration) {
     if (remote) {
@@ -214,7 +238,40 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 
     const registration = storedToRegistration(agent);
     const assessment = assessAgent(agentId, registration);
-    await storage.updateAgent(agentId, { compositeScore: assessment.compositeScore, governanceLevel: assessment.level.level, status: assessment.status });
+
+    // Apply behavioral adjustments from audit history
+    const auditEvents = await storage.queryAuditEvents({ agentId, limit: 200 });
+    if (auditEvents.length > 0) {
+      const behavioral = computeBehavioralAdjustments({
+        events: auditEvents,
+        declaredTools: agent.tools,
+      });
+      assessment.dimensions = applyBehavioralAdjustments(
+        assessment.dimensions, behavioral.adjustments,
+      );
+    }
+
+    // Apply eval adjustments from submitted eval results
+    const evalResults = evalResultStore.get(agentId) ?? [];
+    if (evalResults.length > 0) {
+      const evalAssessment = computeEvalAdjustments({ results: evalResults });
+      assessment.dimensions = applyEvalAdjustments(
+        assessment.dimensions, evalAssessment.adjustments,
+      );
+    }
+
+    // Recompute composite score from adjusted dimensions
+    const newScore = computeCompositeScore(assessment.dimensions);
+    const newLevel = getGovernanceLevel(newScore);
+    assessment.compositeScore = newScore;
+    assessment.level = newLevel;
+    assessment.status = newScore >= 60 ? "approved" : newScore > 0 ? "flagged" : "registered";
+
+    await storage.updateAgent(agentId, {
+      compositeScore: newScore,
+      governanceLevel: newLevel.level,
+      status: assessment.status,
+    });
     return assessment;
   }
 
@@ -265,7 +322,35 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     policies.removeRule(ruleId);
   }
 
-  return { register, enforce, enforcePreprocess, enforcePostprocess, audit, score: scoreAgentFn, scoreFleet: scoreFleetFn, policies: readonlyPolicies, storage, addRule, removeRule };
+  const evalApi = {
+    submit(result: EvalResult): void {
+      if (!evalResultStore.has(result.agentId)) evalResultStore.set(result.agentId, []);
+      const results = evalResultStore.get(result.agentId)!;
+      results.push(result);
+      if (results.length > MAX_EVAL_RESULTS_PER_AGENT) {
+        results.splice(0, results.length - MAX_EVAL_RESULTS_PER_AGENT);
+      }
+    },
+    getResults(agentId: string): EvalResult[] {
+      return evalResultStore.get(agentId) ?? [];
+    },
+    clear(agentId: string): void {
+      evalResultStore.delete(agentId);
+    },
+    traces: traceCollector,
+    async runRedTeam(agentId: string, redTeamConfig?: RedTeamConfig): Promise<RedTeamReport> {
+      return runRedTeam(instance, agentId, redTeamConfig);
+    },
+  };
+
+  const instance: GovernanceInstance = {
+    register, enforce, enforcePreprocess, enforcePostprocess, audit,
+    score: scoreAgentFn, scoreFleet: scoreFleetFn,
+    policies: readonlyPolicies, storage, addRule, removeRule,
+    eval: evalApi,
+  };
+
+  return instance;
 }
 
 // ─── Re-exports ─────────────────────────────────────────────────

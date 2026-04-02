@@ -216,6 +216,26 @@
     "./injection-benchmark": {
       "types": "./dist/injection-benchmark.d.ts",
       "import": "./dist/injection-benchmark.js"
+    },
+    "./token-types": {
+      "types": "./dist/token-types.d.ts",
+      "import": "./dist/token-types.js"
+    },
+    "./eval-types": {
+      "types": "./dist/eval-types.d.ts",
+      "import": "./dist/eval-types.js"
+    },
+    "./eval-scorer": {
+      "types": "./dist/eval-scorer.d.ts",
+      "import": "./dist/eval-scorer.js"
+    },
+    "./eval-trace": {
+      "types": "./dist/eval-trace.d.ts",
+      "import": "./dist/eval-trace.js"
+    },
+    "./eval-red-team": {
+      "types": "./dist/eval-red-team.d.ts",
+      "import": "./dist/eval-red-team.js"
     }
   },
   "files": [

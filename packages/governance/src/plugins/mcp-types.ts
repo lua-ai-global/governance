@@ -12,6 +12,7 @@
 import type { GovernanceInstance, AuditEvent } from "../index";
 import type { EnforcementDecision, PolicyAction } from "../policy";
 import type { AgentFramework } from "../types";
+import type { TraceCollector } from "../eval-types";
 
 // ─── MCP SDK Shapes (spec 2025-11-25) ──────────────────────
 
@@ -166,6 +167,8 @@ export interface GovernMCPConfig {
   scanToolOutputs?: boolean;
   /** Injection detection threshold for tool outputs (default: 0.6) */
   outputInjectionThreshold?: number;
+  /** Optional trace collector for eval — captures tool call spans */
+  traceCollector?: TraceCollector;
 }
 
 // ─── Results ────────────────────────────────────────────────

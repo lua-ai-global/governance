@@ -128,9 +128,26 @@ export async function createGovernedMCP(
   async function handleToolCall(request: MCPCallToolRequest): Promise<MCPCallToolResult> {
     const toolName = request.params.name;
     const args = request.params.arguments;
+    const startTime = Date.now();
 
     const decision = await enforce(toolName, args);
     if (decision.blocked) {
+      // Capture blocked call as a trace span if collector is configured
+      if (config.traceCollector) {
+        try {
+          const ctx = config.traceCollector.startTrace(result.id, safeStringify(args));
+          ctx.addSpan({
+            operation: "tool_call",
+            toolName,
+            input: args,
+            output: { blocked: true, reason: decision.reason },
+            latencyMs: Date.now() - startTime,
+            success: false,
+            error: `Blocked: ${decision.reason}`,
+          });
+          ctx.end();
+        } catch { /* tracing must never break tool calls */ }
+      }
       throw new GovernanceBlockedError(decision, toolName);
     }
 
@@ -155,11 +172,45 @@ export async function createGovernedMCP(
         }
       }
 
+      // Capture successful call as a trace span
+      if (config.traceCollector) {
+        try {
+          const ctx = config.traceCollector.startTrace(result.id, safeStringify(args));
+          ctx.addSpan({
+            operation: "tool_call",
+            toolName,
+            input: args,
+            output: output.content.map((c) => c.type === "text" ? c.text : `[${c.type}]`).join("\n"),
+            latencyMs: Date.now() - startTime,
+            success: !output.isError,
+            error: output.isError ? "Tool returned error" : undefined,
+          });
+          ctx.end(output.content.map((c) => c.type === "text" ? c.text : "").filter(Boolean).join("\n"));
+        } catch { /* tracing must never break tool calls */ }
+      }
+
       await audit(toolName, output.isError ? "failure" : "success", {
         contentTypes: output.content.map((c) => c.type),
       });
       return output;
     } catch (error) {
+      // Capture error as trace span
+      if (config.traceCollector) {
+        try {
+          const ctx = config.traceCollector.startTrace(result.id, safeStringify(args));
+          ctx.addSpan({
+            operation: "tool_call",
+            toolName,
+            input: args,
+            output: null,
+            latencyMs: Date.now() - startTime,
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          ctx.end();
+        } catch { /* tracing must never break tool calls */ }
+      }
+
       await audit(toolName, "failure", {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -212,4 +263,15 @@ export async function createGovernedMCP(
     enforce,
     audit,
   };
+}
+
+// ─── Utilities ─────────────────────────────────────────────────
+
+/** JSON.stringify that never throws (handles circular refs, BigInt, etc.) */
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }

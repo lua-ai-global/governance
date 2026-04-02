@@ -35,7 +35,7 @@ export function getGovernanceLevel(score: number): GovernanceLevel {
 
 // ─── Composite Score ────────────────────────────────────────────
 
-function computeCompositeScore(dimensions: DimensionResult[]): number {
+export function computeCompositeScore(dimensions: DimensionResult[]): number {
   const totalWeight = dimensions.reduce((sum, d) => sum + d.weight, 0);
   const weightedSum = dimensions.reduce((sum, d) => sum + d.score * d.weight, 0);
   return Math.round(weightedSum / totalWeight);
