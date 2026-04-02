@@ -109,8 +109,14 @@ export function computeBehavioralAdjustments(
   const adjustments: BehavioralAdjustment[] = [];
 
   // ── Identity ──────────────────────────────────────────────────
-  // Active agents with audit trails prove identity
-  const identityAdj = signals.totalEvents > 10 ? 5 : signals.totalEvents > 0 ? 2 : 0;
+  // Active agents with CLEAN audit trails prove identity.
+  // Activity with high block rate doesn't prove good identity.
+  let identityAdj = 0;
+  if (signals.totalEvents > 0 && signals.blockRate === 0) {
+    identityAdj = signals.totalEvents > 10 ? 5 : 2;
+  } else if (signals.blockRate > 0.3) {
+    identityAdj = -5; // suspicious activity pattern
+  }
   adjustments.push({
     dimension: "identity",
     adjustment: clampAdj(identityAdj),
@@ -143,10 +149,11 @@ export function computeBehavioralAdjustments(
   });
 
   // ── Observability ─────────────────────────────────────────────
-  // Regular audit events = agent is observable. High frequency = good.
+  // Regular CLEAN audit events = agent is observable. Blocked activity doesn't count.
   let obsAdj = 0;
-  if (signals.totalEvents > 50) obsAdj += 10;
-  else if (signals.totalEvents > 10) obsAdj += 5;
+  if (signals.blockRate === 0 && signals.totalEvents > 50) obsAdj += 10;
+  else if (signals.blockRate === 0 && signals.totalEvents > 10) obsAdj += 5;
+  else if (signals.blockRate > 0.3) obsAdj -= 5;
   adjustments.push({
     dimension: "observability",
     adjustment: clampAdj(obsAdj),
@@ -177,10 +184,11 @@ export function computeBehavioralAdjustments(
   });
 
   // ── Auditability ──────────────────────────────────────────────
-  // Presence of audit events proves audit trail works.
+  // Clean audit history = good. Mostly-blocked history = suspicious.
   let auditAdj = 0;
-  if (signals.totalEvents > 20) auditAdj += 10;
-  else if (signals.totalEvents > 5) auditAdj += 5;
+  if (signals.blockRate === 0 && signals.totalEvents > 20) auditAdj += 10;
+  else if (signals.blockRate === 0 && signals.totalEvents > 5) auditAdj += 5;
+  else if (signals.blockRate > 0.3) auditAdj -= 5;
   if (signals.lastActivityAt) {
     const daysSince = (Date.now() - new Date(signals.lastActivityAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSince > 30) auditAdj -= 5; // stale — no recent audit data
@@ -210,11 +218,12 @@ export function computeBehavioralAdjustments(
   });
 
   // ── Lifecycle ─────────────────────────────────────────────────
-  // Active agent = healthy lifecycle. Stale = concern.
+  // Recent CLEAN activity = healthy lifecycle. Stale or blocked = concern.
   let lifeAdj = 0;
   if (signals.lastActivityAt) {
     const daysSince = (Date.now() - new Date(signals.lastActivityAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSince < 7) lifeAdj += 5;
+    if (daysSince < 7 && signals.blockRate === 0) lifeAdj += 5;
+    else if (daysSince < 7 && signals.blockRate > 0.3) lifeAdj -= 5;
     else if (daysSince > 30) lifeAdj -= 10;
   }
   adjustments.push({
