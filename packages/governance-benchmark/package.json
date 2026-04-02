@@ -1,0 +1,78 @@
+{
+  "name": "@lua-ai-global/governance-benchmark",
+  "version": "0.1.0",
+  "description": "Agent Governance Benchmark (AGB) — the industry-standard evaluation dataset for AI agent injection detection. 10K+ samples across agent-specific attack categories with hard negatives.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./taxonomy": {
+      "types": "./dist/taxonomy.d.ts",
+      "import": "./dist/taxonomy.js"
+    },
+    "./runner": {
+      "types": "./dist/runner.d.ts",
+      "import": "./dist/runner.js"
+    },
+    "./generator": {
+      "types": "./dist/generator.d.ts",
+      "import": "./dist/generator.js"
+    }
+  },
+  "files": [
+    "dist",
+    "data",
+    "taxonomy",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx --test src/*.test.ts",
+    "generate": "tsx scripts/generate-dataset.ts",
+    "fetch": "tsx scripts/fetch-sources.ts",
+    "benchmark": "tsx scripts/run-benchmark.ts",
+    "publish-hf": "tsx scripts/publish-huggingface.ts"
+  },
+  "keywords": [
+    "ai-safety",
+    "prompt-injection",
+    "benchmark",
+    "agent-governance",
+    "ai-security",
+    "jailbreak-detection",
+    "evaluation",
+    "dataset"
+  ],
+  "author": "Lua <hello@heylua.ai> (https://heylua.ai)",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lua-ai-global/governance",
+    "directory": "packages/governance-benchmark"
+  },
+  "bugs": {
+    "url": "https://github.com/lua-ai-global/governance/issues"
+  },
+  "homepage": "https://heylua.ai/governance",
+  "peerDependencies": {
+    "@lua-ai-global/governance": ">=0.4.0"
+  },
+  "peerDependenciesMeta": {
+    "@lua-ai-global/governance": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
