@@ -17,7 +17,6 @@ import type {
   BehavioralScoringConfig,
   ScoringConfig,
   DetectionConfig,
-  ResourceLimitsConfig,
   CompliancePosture,
 } from "./types.js";
 
@@ -44,7 +43,6 @@ function rowToOrgSettings(row: OrgSettingsRow): StoredOrgSettings {
       behavioralConfig: s.behavioralConfig as BehavioralScoringConfig | undefined,
       scoringConfig: s.scoringConfig as ScoringConfig | undefined,
       detectionConfig: s.detectionConfig as DetectionConfig | undefined,
-      resourceLimits: s.resourceLimits as ResourceLimitsConfig | undefined,
       defaultOutcome: s.defaultOutcome as "allow" | "block" | undefined,
       compliancePosture: s.compliancePosture as CompliancePosture | undefined,
     },
@@ -204,7 +202,6 @@ export async function loadPolicyTiers(
       behavioralConfig: orgRow?.settings?.behavioralConfig as BehavioralScoringConfig | undefined,
       scoringConfig: orgRow?.settings?.scoringConfig as ScoringConfig | undefined,
       detectionConfig: orgRow?.settings?.detectionConfig as DetectionConfig | undefined,
-      resourceLimits: orgRow?.settings?.resourceLimits as ResourceLimitsConfig | undefined,
       defaultOutcome: orgRow?.settings?.defaultOutcome as "allow" | "block" | undefined,
       compliancePosture: orgRow?.settings?.compliancePosture as CompliancePosture | undefined,
     },

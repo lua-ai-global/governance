@@ -83,12 +83,6 @@ export interface DetectionConfig {
   maxInputLength?: number;
 }
 
-/** Per-governance-level resource limits */
-export interface ResourceLimitsConfig {
-  /** Indexed by governance level 0-4 */
-  levels?: Record<number, { maxNamespaces: number; maxExtractionTier: 0 | 1 | 2 }>;
-}
-
 /** Compliance posture self-assessment flags */
 export interface CompliancePosture {
   auditIntegrity?: boolean;
@@ -105,7 +99,6 @@ export interface OrgPreferences {
   behavioralConfig?: BehavioralScoringConfig;
   scoringConfig?: ScoringConfig;
   detectionConfig?: DetectionConfig;
-  resourceLimits?: ResourceLimitsConfig;
   defaultOutcome?: "allow" | "block";
   compliancePosture?: CompliancePosture;
 }
