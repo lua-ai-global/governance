@@ -118,13 +118,19 @@ export function computeBehavioralAdjustments(
   });
 
   // ── Permissions ───────────────────────────────────────────────
-  // Undeclared tools = negative signal. Low block rate = good boundaries.
+  // Undeclared tools = negative. Blocks = agent tried something it shouldn't.
+  // Zero blocks with activity = agent respects its boundaries.
   let permAdj = 0;
   if (signals.undeclaredTools.length > 0) {
     permAdj -= Math.min(15, signals.undeclaredTools.length * 5);
   }
-  if (signals.blockRate < 0.1 && signals.totalEvents > 5) {
-    permAdj += 5; // agent stays within bounds
+  if (signals.totalEvents > 5) {
+    if (signals.blockRate === 0) {
+      permAdj += 5; // clean record — never blocked
+    } else if (signals.blockRate > 0) {
+      // Every block is evidence the agent tried something it shouldn't
+      permAdj -= Math.min(15, Math.round(signals.blockRate * 30));
+    }
   }
   adjustments.push({
     dimension: "permissions",
@@ -148,17 +154,18 @@ export function computeBehavioralAdjustments(
   });
 
   // ── Guardrails ────────────────────────────────────────────────
-  // High block rate = guardrails are catching things (good).
-  // Injection hits = guardrails are needed and working.
-  // Very high block rate (>50%) = agent is poorly configured (bad).
+  // Blocks = agent triggered guardrails = BAD agent behavior.
+  // Injection hits = agent sent/received injection content = BAD.
+  // Zero blocks = agent respects guardrails = GOOD.
   let guardAdj = 0;
-  if (signals.blockRate > 0 && signals.blockRate <= 0.3) {
-    guardAdj += 10; // guardrails working, not overly restrictive
-  } else if (signals.blockRate > 0.5) {
-    guardAdj -= 10; // agent is constantly blocked — misconfigured
+  if (signals.totalEvents > 5 && signals.blockRate === 0 && signals.injectionHits === 0) {
+    guardAdj += 10; // clean — never triggered any guardrail
   }
-  if (signals.injectionHits > 0 && signals.blockRate < 0.5) {
-    guardAdj += 5; // injection guard is catching attacks
+  if (signals.blockRate > 0) {
+    guardAdj -= Math.min(15, Math.round(signals.blockRate * 30));
+  }
+  if (signals.injectionHits > 0) {
+    guardAdj -= Math.min(10, signals.injectionHits * 3);
   }
   adjustments.push({
     dimension: "guardrails",
@@ -185,13 +192,13 @@ export function computeBehavioralAdjustments(
   });
 
   // ── Compliance ────────────────────────────────────────────────
-  // Low block rate + active = compliant. Injection hits handled = good.
+  // Zero blocks = compliant. Any blocks = policy violations.
   let compAdj = 0;
-  if (signals.totalEvents > 10 && signals.blockRate < 0.2) {
-    compAdj += 10; // operating within policy
+  if (signals.totalEvents > 5 && signals.blockRate === 0) {
+    compAdj += 10; // fully compliant — zero policy violations
   }
-  if (signals.blockRate > 0.4) {
-    compAdj -= 10; // frequently violating policy
+  if (signals.blockRate > 0) {
+    compAdj -= Math.min(15, Math.round(signals.blockRate * 30));
   }
   adjustments.push({
     dimension: "compliance",

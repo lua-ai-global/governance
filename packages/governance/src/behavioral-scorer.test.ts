@@ -130,7 +130,7 @@ describe("computeBehavioralAdjustments", () => {
     assert.ok(guard.adjustment < 0, "High block rate should penalize guardrails");
   });
 
-  it("rewards moderate block rate on guardrails", () => {
+  it("penalizes any block rate on guardrails (blocks = bad agent behavior)", () => {
     const events = [
       ...makeEvents(8),
       ...makeEvents(2, { outcome: "blocked" }),
@@ -141,7 +141,7 @@ describe("computeBehavioralAdjustments", () => {
     });
     const guard = result.adjustments.find((a) => a.dimension === "guardrails");
     assert.ok(guard);
-    assert.ok(guard.adjustment > 0, "Moderate block rate = guardrails working");
+    assert.ok(guard.adjustment < 0, "Any blocks = agent triggered guardrails = negative");
   });
 
   it("rewards high event volume on observability", () => {

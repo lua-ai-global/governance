@@ -15,12 +15,19 @@
  * detection (injection guard). High dependence = agent is only safe
  * because of hard rules, not because of content analysis.
  *
+ * WARNING: Red team results measure POLICY effectiveness, not AGENT behavior.
+ * Do NOT submit red team results to gov.eval.submit() — that would reward
+ * the agent for policies blocking attacks, which is backwards.
+ * Use red team reports for policy configuration audits, not agent scoring.
+ *
  * @example
  * ```ts
  * const report = await gov.eval.runRedTeam('luna');
  * console.log(report.summary);
- * // Submit results so they feed into the governance score
- * for (const result of report.results) gov.eval.submit(result);
+ * // Use for policy auditing — NOT for agent scoring
+ * if (report.policyDependence > 0.8) {
+ *   console.warn('Agent relies too heavily on structural rules');
+ * }
  * ```
  */
 
