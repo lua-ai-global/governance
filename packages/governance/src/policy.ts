@@ -7,6 +7,7 @@
 
 import { getBuiltinConditions } from "./conditions/builtins.js";
 import { getDefaultStage } from "./policy-stage-defaults.js";
+import { maskSensitiveData, maskPattern, maskBlocklistTerms } from "./mask.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -20,7 +21,7 @@ export type PolicyAction =
   | "payment"
   | "custom";
 
-export type PolicyOutcome = "allow" | "block" | "warn" | "require_approval";
+export type PolicyOutcome = "allow" | "block" | "warn" | "require_approval" | "mask";
 
 export type PolicyStage = "preprocess" | "process" | "postprocess";
 
@@ -80,6 +81,8 @@ export interface EnforcementDecision {
   outcome: PolicyOutcome;
   evaluatedAt: string;
   rulesEvaluated: number;
+  /** Redacted text when outcome is "mask" — the transformed version with sensitive data replaced */
+  maskedText?: string;
 }
 
 // ─── Condition Registry ─────────────────────────────────────────
@@ -179,19 +182,43 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
   const rules: PolicyRule[] = [...(config.rules ?? [])];
   const defaultOutcome = config.defaultOutcome ?? "allow";
 
+  /** Compute masked text when outcome is "mask" based on the condition type and context. */
+  function computeMaskedText(rule: PolicyRule, ctx: EnforcementContext): string | undefined {
+    const { type, params } = rule.condition;
+    const text = ctx.outputText ?? (ctx.input?.prompt as string | undefined) ?? "";
+    if (!text) return undefined;
+
+    if (type === "sensitive_data_filter") {
+      return maskSensitiveData(text, params.patterns as string[] | undefined);
+    }
+    if (type === "output_pattern" || type === "input_pattern") {
+      return maskPattern(text, params.pattern as string, params.flags as string | undefined);
+    }
+    if (type === "blocklist") {
+      return maskBlocklistTerms(text, params.terms as string[]);
+    }
+    // Fallback: return text unchanged (condition detected something but we don't know how to mask)
+    return text;
+  }
+
+  function buildDecision(rule: PolicyRule, ctx: EnforcementContext, rulesEvaluated: number): EnforcementDecision {
+    return {
+      blocked: rule.outcome === "block" || rule.outcome === "require_approval",
+      reason: rule.reason,
+      ruleId: rule.id,
+      outcome: rule.outcome,
+      evaluatedAt: new Date().toISOString(),
+      rulesEvaluated,
+      ...(rule.outcome === "mask" ? { maskedText: computeMaskedText(rule, ctx) } : {}),
+    };
+  }
+
   function evaluate(ctx: EnforcementContext): EnforcementDecision {
     const active = rules.filter((r) => r.enabled).sort((a, b) => b.priority - a.priority);
 
     for (const rule of active) {
       if (evaluateCondition(rule.condition, ctx)) {
-        return {
-          blocked: rule.outcome === "block" || rule.outcome === "require_approval",
-          reason: rule.reason,
-          ruleId: rule.id,
-          outcome: rule.outcome,
-          evaluatedAt: new Date().toISOString(),
-          rulesEvaluated: active.length,
-        };
+        return buildDecision(rule, ctx, active.length);
       }
     }
 
@@ -223,14 +250,7 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
 
     for (const rule of active) {
       if (evaluateCondition(rule.condition, ctx)) {
-        return {
-          blocked: rule.outcome === "block" || rule.outcome === "require_approval",
-          reason: rule.reason,
-          ruleId: rule.id,
-          outcome: rule.outcome,
-          evaluatedAt: new Date().toISOString(),
-          rulesEvaluated: active.length,
-        };
+        return buildDecision(rule, ctx, active.length);
       }
     }
 

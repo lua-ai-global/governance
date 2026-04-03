@@ -146,3 +146,31 @@ export function sensitiveDataFilter(patterns?: string[], reason?: string): Polic
     stage: "postprocess",
   };
 }
+
+/** Mask (redact) leaked credentials/keys instead of blocking */
+export function maskSensitiveOutput(patterns?: string[], reason?: string): PolicyRule {
+  return {
+    id: `mask-sensitive-data`,
+    name: `Mask sensitive data`,
+    condition: { type: "sensitive_data_filter", params: { patterns } },
+    outcome: "mask",
+    reason: reason ?? `Sensitive data redacted from output`,
+    priority: 95,
+    enabled: true,
+    stage: "postprocess",
+  };
+}
+
+/** Mask (redact) patterns in output instead of blocking */
+export function maskOutputPattern(pattern: string, flags?: string, reason?: string): PolicyRule {
+  return {
+    id: `mask-output-pattern-${pattern.slice(0, 20).replace(/[^a-z0-9]/gi, "")}`,
+    name: `Mask output pattern: /${pattern}/`,
+    condition: { type: "output_pattern", params: { pattern, flags } },
+    outcome: "mask",
+    reason: reason ?? `Output pattern redacted`,
+    priority: 90,
+    enabled: true,
+    stage: "postprocess",
+  };
+}

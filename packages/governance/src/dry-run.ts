@@ -62,6 +62,7 @@ export interface DryRunSummary {
   wouldAllow: number;
   wouldRequireApproval: number;
   wouldWarn: number;
+  wouldMask: number;
   blockRate: number;
   rulesTriggered: string[];
 }
@@ -129,6 +130,7 @@ export async function dryRun(
   let wouldAllow = 0;
   let wouldRequireApproval = 0;
   let wouldWarn = 0;
+  let wouldMask = 0;
 
   for (const action of scenario.actions) {
     const ctx = {
@@ -164,6 +166,8 @@ export async function dryRun(
       wouldBlock++;
     } else if (decision.outcome === "warn") {
       wouldWarn++;
+    } else if (decision.outcome === "mask") {
+      wouldMask++;
     } else {
       wouldAllow++;
     }
@@ -182,6 +186,7 @@ export async function dryRun(
       wouldAllow,
       wouldRequireApproval,
       wouldWarn,
+      wouldMask,
       blockRate: totalActions > 0 ? wouldBlock / totalActions : 0,
       rulesTriggered: [...rulesTriggered],
     },

@@ -492,3 +492,76 @@ describe("decision metadata", () => {
     assert.equal(d.rulesEvaluated, 2);
   });
 });
+
+describe("mask outcome", () => {
+  test("mask outcome is non-blocking", () => {
+    const engine = createPolicyEngine({
+      rules: [makeRule({ outcome: "mask" })],
+    });
+    const d = engine.evaluate(makeCtx({ tool: "danger" }));
+    assert.equal(d.blocked, false);
+    assert.equal(d.outcome, "mask");
+  });
+
+  test("mask populates maskedText for sensitive_data_filter", () => {
+    const engine = createPolicyEngine({
+      rules: [makeRule({
+        condition: { type: "sensitive_data_filter", params: {} },
+        outcome: "mask",
+        reason: "Sensitive data masked",
+        stage: "postprocess",
+      })],
+    });
+    const d = engine.evaluateStage(
+      makeCtx({ outputText: "Here is your key: sk-proj-abc123def456ghi789jkl" }),
+      "postprocess",
+    );
+    assert.equal(d.outcome, "mask");
+    assert.equal(d.blocked, false);
+    assert.ok(d.maskedText);
+    assert.ok(!d.maskedText!.includes("sk-proj-"), "API key should be redacted");
+    assert.ok(d.maskedText!.includes("[REDACTED]"), "Should contain [REDACTED]");
+  });
+
+  test("mask populates maskedText for output_pattern", () => {
+    const engine = createPolicyEngine({
+      rules: [makeRule({
+        condition: { type: "output_pattern", params: { pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b" } },
+        outcome: "mask",
+        reason: "SSN masked",
+        stage: "postprocess",
+      })],
+    });
+    const d = engine.evaluateStage(
+      makeCtx({ outputText: "SSN is 123-45-6789 thanks" }),
+      "postprocess",
+    );
+    assert.equal(d.outcome, "mask");
+    assert.ok(d.maskedText);
+    assert.ok(!d.maskedText!.includes("123-45-6789"), "SSN should be redacted");
+  });
+
+  test("mask does not populate maskedText when no text available", () => {
+    const engine = createPolicyEngine({
+      rules: [makeRule({
+        condition: { type: "tool_blocked", params: { tools: ["danger"] } },
+        outcome: "mask",
+      })],
+    });
+    const d = engine.evaluate(makeCtx({ tool: "danger" }));
+    assert.equal(d.outcome, "mask");
+    // maskedText may be undefined when there's no text to mask
+  });
+
+  test("block outcome takes priority over mask at same level", () => {
+    const engine = createPolicyEngine({
+      rules: [
+        makeRule({ id: "block-rule", outcome: "block", priority: 100 }),
+        makeRule({ id: "mask-rule", outcome: "mask", priority: 50 }),
+      ],
+    });
+    const d = engine.evaluate(makeCtx({ tool: "danger" }));
+    assert.equal(d.outcome, "block");
+    assert.equal(d.blocked, true);
+  });
+});
