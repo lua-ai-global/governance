@@ -4,7 +4,6 @@ on:
     tags: ['v*']
 permissions:
   contents: read
-  id-token: write
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -12,12 +11,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build
       - run: npm test
       - name: Publish packages (skip already-published versions)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           for pkg in governance governance-platform; do
             PKG_NAME=$(node -p "require('./packages/$pkg/package.json').name")
@@ -26,6 +27,6 @@ jobs:
               echo "⏭ $PKG_NAME@$PKG_VERSION already published, skipping"
             else
               echo "📦 Publishing $PKG_NAME@$PKG_VERSION"
-              npm publish -w "packages/$pkg" --provenance --access public
+              npm publish -w "packages/$pkg" --access public
             fi
           done
