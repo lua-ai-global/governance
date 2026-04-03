@@ -957,7 +957,7 @@ export default function App() {
 
                   <div className="dashboard-link-box">
                     <p>Configure your policies from the governance dashboard.</p>
-                    <a href="https://governance.heylua.ai" target="_blank" rel="noopener noreferrer" className="btn outline">
+                    <a href="https://heygovernance.ai" target="_blank" rel="noopener noreferrer" className="btn outline">
                       Open Dashboard
                     </a>
                   </div>

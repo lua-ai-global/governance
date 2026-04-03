@@ -36,7 +36,7 @@
   "bugs": {
     "url": "https://github.com/lua-ai-global/governance/issues"
   },
-  "homepage": "https://heylua.ai/governance",
+  "homepage": "https://heygovernance.ai",
   "peerDependencies": {
     "pg": ">=8.0.0"
   },

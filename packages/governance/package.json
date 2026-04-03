@@ -274,7 +274,7 @@
   "bugs": {
     "url": "https://github.com/lua-ai-global/governance/issues"
   },
-  "homepage": "https://heylua.ai/governance",
+  "homepage": "https://heygovernance.ai",
   "engines": {
     "node": ">=18"
   },

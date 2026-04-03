@@ -238,6 +238,6 @@ npm run lint
 
 ## Links
 
-- Homepage: [heylua.ai/governance](https://heylua.ai/governance)
+- Homepage: [heygovernance.ai](https://heygovernance.ai)
 - Organization: [Lua](https://heylua.ai)
 - Repository: [github.com/lua-ai-global/governance](https://github.com/lua-ai-global/governance)
