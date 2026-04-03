@@ -1,6 +1,6 @@
 {
   "name": "governance-sdk-platform",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Platform storage layer for governance-sdk — auto-migrating schema, typed queries for org settings and policy tiers",
   "type": "module",
   "main": "./dist/index.js",
