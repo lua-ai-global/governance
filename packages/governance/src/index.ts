@@ -287,7 +287,73 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       id: a.id,
       registration: storedToRegistration(a),
     }));
-    return assessFleet(registrations);
+    const fleet = assessFleet(registrations);
+
+    // Apply behavioral + eval adjustments to each agent assessment
+    for (const assessment of fleet.assessments) {
+      const agent = agents.find((a) => a.id === assessment.agentId);
+      if (!agent) continue;
+
+      const auditEvents = await storage.queryAuditEvents({ agentId: agent.id, limit: 200 });
+      if (auditEvents.length > 0) {
+        const behavioral = computeBehavioralAdjustments({
+          events: auditEvents,
+          declaredTools: agent.tools,
+        });
+        assessment.dimensions = applyBehavioralAdjustments(
+          assessment.dimensions, behavioral.adjustments,
+        );
+      }
+
+      const evalResults = evalResultStore.get(agent.id) ?? [];
+      if (evalResults.length > 0) {
+        const evalAssessment = computeEvalAdjustments({ results: evalResults });
+        assessment.dimensions = applyEvalAdjustments(
+          assessment.dimensions, evalAssessment.adjustments,
+        );
+      }
+
+      const newScore = computeCompositeScore(assessment.dimensions);
+      const newLevel = getGovernanceLevel(newScore);
+      assessment.compositeScore = newScore;
+      assessment.level = newLevel;
+      assessment.status = newScore >= 60 ? "approved" : newScore > 0 ? "flagged" : "registered";
+    }
+
+    // Recompute fleet summary with adjusted scores
+    const scores = fleet.assessments.map((a) => a.compositeScore);
+    const avgScore = scores.length > 0
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : 0;
+    fleet.summary.averageScore = avgScore;
+    fleet.summary.fleetLevel = getGovernanceLevel(avgScore);
+
+    const sorted = [...fleet.assessments].sort((a, b) => b.compositeScore - a.compositeScore);
+    fleet.summary.highestScoring = sorted[0]
+      ? { name: sorted[0].agentName, score: sorted[0].compositeScore } : null;
+    fleet.summary.lowestScoring = sorted.length > 0
+      ? { name: sorted[sorted.length - 1].agentName, score: sorted[sorted.length - 1].compositeScore } : null;
+
+    // Recount by status and level
+    const byStatus: Record<string, number> = {
+      registered: 0, assessed: 0, approved: 0, flagged: 0, deprecated: 0, quarantined: 0,
+    };
+    const byLevel: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+    for (const a of fleet.assessments) {
+      byStatus[a.status] = (byStatus[a.status] || 0) + 1;
+      byLevel[a.level.level] = (byLevel[a.level.level] || 0) + 1;
+    }
+    fleet.summary.byStatus = byStatus as typeof fleet.summary.byStatus;
+    fleet.summary.byLevel = byLevel;
+
+    // Update fleet recommendations
+    const recs: string[] = [];
+    if (byStatus.flagged > 0) recs.push(`${byStatus.flagged} agent(s) below governance threshold — review immediately`);
+    if (byLevel[0] > 0) recs.push(`${byLevel[0]} agent(s) at Level 0 (Unregistered) — complete registration`);
+    if (avgScore < 60) recs.push("Fleet average below 60 — prioritize governance improvements before scaling");
+    fleet.summary.recommendations = recs;
+
+    return fleet;
   }
 
   async function enforceStage(ctx: EnforcementContext, stage: PolicyStage): Promise<EnforcementDecision> {

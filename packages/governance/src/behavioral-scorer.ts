@@ -99,9 +99,16 @@ export function computeSignals(input: BehavioralInput): BehavioralSignals {
   // With recencyBias=0.7, the most recent event has 1.0 weight,
   // the oldest has 0.3 weight. This makes the score responsive to
   // recent behavior changes without ignoring history entirely.
+  // Kill switch blocks are excluded — they reflect admin action, not agent behavior.
   let weightedBlocked = 0;
   let totalWeight = 0;
   for (let i = 0; i < windowed.length; i++) {
+    const detail = windowed[i].detail as Record<string, unknown> | undefined;
+    const ruleId = (detail?.ruleId as string) ?? "";
+    const isKillSwitch = windowed[i].outcome === "kill_switch"
+      || ruleId.startsWith("__kill_switch__");
+    if (isKillSwitch) continue; // don't count kill switch blocks
+
     const position = i / Math.max(1, windowed.length - 1); // 0 (oldest) to 1 (newest)
     const weight = (1 - recencyBias) + recencyBias * position;
     totalWeight += weight;
@@ -110,10 +117,15 @@ export function computeSignals(input: BehavioralInput): BehavioralSignals {
   const blockRate = totalWeight > 0 ? weightedBlocked / totalWeight : 0;
 
   const approvals = windowed.filter((e) => e.outcome === "require_approval").length;
-  const injections = windowed.filter((e) =>
-    e.eventType === "injection_detected" ||
-    (e.detail as Record<string, unknown>)?.outcome === "detected"
-  ).length;
+  // Count injection hits: explicit injection events OR injection guard blocks
+  const injections = windowed.filter((e) => {
+    if (e.eventType === "injection_detected") return true;
+    const detail = e.detail as Record<string, unknown> | undefined;
+    if (detail?.outcome === "detected") return true;
+    // Injection guard policy blocks (ruleId = "injection-guard")
+    if (e.outcome === "block" && (detail?.ruleId as string)?.includes("injection")) return true;
+    return false;
+  }).length;
 
   // Tool diversity from event details
   const observedTools = new Set<string>();
@@ -157,12 +169,17 @@ export function computeBehavioralAdjustments(
   const isClean = signals.blockRate <= threshold;
   const isConcerning = signals.blockRate > threshold * 3; // 3x threshold = concerning
 
+  // Penalty multiplier scales with block rate severity.
+  // At 50% block rate: round(0.5 * 40) = 20 (max penalty per dimension).
+  // At 15% block rate: round(0.15 * 40) = 6 (moderate penalty).
+  const blockPenalty = Math.min(20, Math.round(signals.blockRate * 40));
+
   // ── Identity ──────────────────────────────────────────────────
   let identityAdj = 0;
   if (signals.totalEvents > 0 && isClean) {
     identityAdj = signals.totalEvents > 10 ? 5 : 2;
   } else if (isConcerning) {
-    identityAdj = -5;
+    identityAdj = -Math.max(5, Math.round(blockPenalty / 2));
   }
   adjustments.push({
     dimension: "identity",
@@ -179,7 +196,7 @@ export function computeBehavioralAdjustments(
     if (isClean) {
       permAdj += 5;
     } else {
-      permAdj -= Math.min(15, Math.round(signals.blockRate * 30));
+      permAdj -= blockPenalty;
     }
   }
   adjustments.push({
@@ -196,7 +213,7 @@ export function computeBehavioralAdjustments(
   let obsAdj = 0;
   if (isClean && signals.totalEvents > 50) obsAdj += 10;
   else if (isClean && signals.totalEvents > 10) obsAdj += 5;
-  else if (isConcerning) obsAdj -= 5;
+  else if (!isClean) obsAdj -= Math.max(5, Math.round(blockPenalty / 2));
   adjustments.push({
     dimension: "observability",
     adjustment: clampAdj(obsAdj),
@@ -209,7 +226,7 @@ export function computeBehavioralAdjustments(
     guardAdj += 10;
   }
   if (!isClean) {
-    guardAdj -= Math.min(15, Math.round(signals.blockRate * 30));
+    guardAdj -= blockPenalty;
   }
   if (signals.injectionHits > 0) {
     guardAdj -= Math.min(10, signals.injectionHits * 3);
@@ -227,7 +244,7 @@ export function computeBehavioralAdjustments(
   let auditAdj = 0;
   if (isClean && signals.totalEvents > 20) auditAdj += 10;
   else if (isClean && signals.totalEvents > 5) auditAdj += 5;
-  else if (isConcerning) auditAdj -= 5;
+  else if (!isClean) auditAdj -= Math.max(5, Math.round(blockPenalty / 2));
   if (signals.lastActivityAt) {
     const daysSince = (Date.now() - new Date(signals.lastActivityAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSince > 30) auditAdj -= 5; // stale — no recent audit data
@@ -244,7 +261,7 @@ export function computeBehavioralAdjustments(
     compAdj += 10;
   }
   if (!isClean) {
-    compAdj -= Math.min(15, Math.round(signals.blockRate * 30));
+    compAdj -= blockPenalty;
   }
   adjustments.push({
     dimension: "compliance",
@@ -260,7 +277,7 @@ export function computeBehavioralAdjustments(
   if (signals.lastActivityAt) {
     const daysSince = (Date.now() - new Date(signals.lastActivityAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSince < 7 && isClean) lifeAdj += 5;
-    else if (daysSince < 7 && isConcerning) lifeAdj -= 5;
+    else if (daysSince < 7 && !isClean) lifeAdj -= Math.max(5, Math.round(blockPenalty / 2));
     else if (daysSince > 30) lifeAdj -= 10;
   }
   adjustments.push({

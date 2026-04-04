@@ -201,6 +201,53 @@ describe("computeBehavioralAdjustments", () => {
   });
 });
 
+describe("computeSignals — kill switch exclusion", () => {
+  it("excludes kill switch blocks from block rate", () => {
+    const events = [
+      ...makeEvents(5),
+      // Kill switch blocks — should NOT count
+      ...makeEvents(5, { outcome: "block", detail: { ruleId: "__kill_switch__agent-1" } }),
+    ];
+    const signals = computeSignals({ events, declaredTools: [] });
+    // Only 5 non-kill-switch events, all "allow" → block rate should be 0
+    assert.equal(signals.blockRate, 0, "Kill switch blocks should not affect block rate");
+  });
+
+  it("excludes kill_switch outcome events from block rate", () => {
+    const events = [
+      ...makeEvents(5),
+      ...makeEvents(3, { outcome: "kill_switch" as "block" }),
+    ];
+    const signals = computeSignals({ events, declaredTools: [] });
+    assert.equal(signals.blockRate, 0);
+  });
+
+  it("counts injection guard policy blocks as injection hits", () => {
+    const events = [
+      makeEvent({ outcome: "block", detail: { ruleId: "injection-guard", action: "tool_call" } }),
+      makeEvent({ outcome: "block", detail: { ruleId: "injection-guard", action: "tool_call" } }),
+      makeEvent(),
+    ];
+    const signals = computeSignals({ events, declaredTools: [] });
+    assert.equal(signals.injectionHits, 2, "Injection guard blocks should count as injection hits");
+  });
+
+  it("high block rate from kill switch does not penalize agent", () => {
+    const events = [
+      ...makeEvents(5),
+      ...makeEvents(10, { outcome: "block", detail: { ruleId: "__kill_switch__fleet__" } }),
+    ];
+    const result = computeBehavioralAdjustments({
+      events,
+      declaredTools: [],
+    });
+    // With kill switch excluded, agent has 0 blocks → should get positive adjustments
+    const guard = result.adjustments.find((a) => a.dimension === "guardrails");
+    assert.ok(guard);
+    assert.ok(guard.adjustment >= 0, "Kill switch blocks should not penalize guardrails");
+  });
+});
+
 describe("applyBehavioralAdjustments", () => {
   it("adjusts dimension scores", () => {
     const base: DimensionResult[] = [
