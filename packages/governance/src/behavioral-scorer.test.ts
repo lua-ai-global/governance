@@ -13,7 +13,7 @@ function makeEvent(overrides: Partial<AuditEvent> = {}): AuditEvent {
     id: crypto.randomUUID(),
     agentId: "agent-1",
     eventType: "policy_evaluation",
-    outcome: "allowed",
+    outcome: "allow",
     severity: "info",
     createdAt: new Date().toISOString(),
     ...overrides,
@@ -40,7 +40,7 @@ describe("computeSignals", () => {
   it("computes recency-weighted block rate", () => {
     const events = [
       ...makeEvents(7),
-      ...makeEvents(3, { outcome: "blocked" }),
+      ...makeEvents(3, { outcome: "block" }),
     ];
     // With recency bias, blocked events at end of list weigh more
     const signals = computeSignals({ events, declaredTools: [] });
@@ -126,7 +126,7 @@ describe("computeBehavioralAdjustments", () => {
   it("penalizes high block rate on guardrails", () => {
     const events = [
       ...makeEvents(3),
-      ...makeEvents(7, { outcome: "blocked" }),
+      ...makeEvents(7, { outcome: "block" }),
     ];
     const result = computeBehavioralAdjustments({
       events,
@@ -140,7 +140,7 @@ describe("computeBehavioralAdjustments", () => {
   it("penalizes any block rate on guardrails (blocks = bad agent behavior)", () => {
     const events = [
       ...makeEvents(8),
-      ...makeEvents(2, { outcome: "blocked" }),
+      ...makeEvents(2, { outcome: "block" }),
     ];
     const result = computeBehavioralAdjustments({
       events,
@@ -164,7 +164,7 @@ describe("computeBehavioralAdjustments", () => {
   it("penalizes frequent policy violations on compliance", () => {
     const events = [
       ...makeEvents(3),
-      ...makeEvents(7, { outcome: "blocked" }),
+      ...makeEvents(7, { outcome: "block" }),
     ];
     const result = computeBehavioralAdjustments({
       events,

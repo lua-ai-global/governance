@@ -123,9 +123,9 @@ describe("createMemoryStorage", () => {
 
   test("queries by outcome", async () => {
     const storage = createMemoryStorage();
-    await storage.createAuditEvent(makeEvent({ outcome: "blocked" }));
+    await storage.createAuditEvent(makeEvent({ outcome: "block" }));
     await storage.createAuditEvent(makeEvent({ outcome: "success" }));
-    const results = await storage.queryAuditEvents({ outcome: "blocked" });
+    const results = await storage.queryAuditEvents({ outcome: "block" });
     assert.equal(results.length, 1);
   });
 
@@ -192,21 +192,21 @@ describe("createMemoryStorage", () => {
 
   test("combines multiple filters", async () => {
     const storage = createMemoryStorage();
-    await storage.createAuditEvent(makeEvent({ agentId: "a1", outcome: "blocked", severity: "warning" }));
+    await storage.createAuditEvent(makeEvent({ agentId: "a1", outcome: "block", severity: "warning" }));
     await storage.createAuditEvent(makeEvent({ agentId: "a1", outcome: "success", severity: "info" }));
-    await storage.createAuditEvent(makeEvent({ agentId: "a2", outcome: "blocked", severity: "warning" }));
+    await storage.createAuditEvent(makeEvent({ agentId: "a2", outcome: "block", severity: "warning" }));
 
-    const results = await storage.queryAuditEvents({ agentId: "a1", outcome: "blocked" });
+    const results = await storage.queryAuditEvents({ agentId: "a1", outcome: "block" });
     assert.equal(results.length, 1);
   });
 
   test("countAuditEvents with filters", async () => {
     const storage = createMemoryStorage();
-    await storage.createAuditEvent(makeEvent({ outcome: "blocked" }));
-    await storage.createAuditEvent(makeEvent({ outcome: "blocked" }));
+    await storage.createAuditEvent(makeEvent({ outcome: "block" }));
+    await storage.createAuditEvent(makeEvent({ outcome: "block" }));
     await storage.createAuditEvent(makeEvent({ outcome: "success" }));
 
-    assert.equal(await storage.countAuditEvents({ outcome: "blocked" }), 2);
+    assert.equal(await storage.countAuditEvents({ outcome: "block" }), 2);
     assert.equal(await storage.countAuditEvents({ outcome: "success" }), 1);
   });
 

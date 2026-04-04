@@ -38,7 +38,7 @@ describe("scanRepoContents", () => {
 
   it("detects audit logging", () => {
     const files = new Map([
-      ["src/agent.ts", `await gov.audit.log({ agentId: "a1", eventType: "action", outcome: "allowed" });`],
+      ["src/agent.ts", `await gov.audit.log({ agentId: "a1", eventType: "action", outcome: "allow" });`],
     ]);
     const result = scanRepoContents(files);
     const audit = result.detections.find((d) => d.capability === "hasAuditLog");

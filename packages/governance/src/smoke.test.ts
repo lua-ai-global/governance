@@ -248,7 +248,7 @@ describe("SMOKE TEST: Full Governance Lifecycle", () => {
     const totalEvents = await gov.audit.count();
     assert.ok(totalEvents >= 4, `Expected >= 4 audit events, got ${totalEvents}`);
 
-    const blockedEvents = await gov.audit.count({ outcome: "blocked" });
+    const blockedEvents = await gov.audit.count({ outcome: "block" });
     assert.ok(blockedEvents >= 2, `Expected >= 2 blocked events, got ${blockedEvents}`);
   });
 });

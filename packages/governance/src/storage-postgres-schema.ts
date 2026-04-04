@@ -3,7 +3,7 @@
  * Separated from storage-postgres.ts to keep files under 300 LOC.
  */
 
-import type { StoredAgent, AuditEvent } from "./storage.js";
+import type { StoredAgent, AuditEvent, AuditOutcome } from "./storage.js";
 import type { AuditIntegrity } from "./audit-integrity.js";
 
 // ─── Schema SQL ─────────────────────────────────────────────────
@@ -138,7 +138,7 @@ export function rowToEvent(row: AuditRow): AuditEvent {
     id: row.id,
     agentId: row.agent_id,
     eventType: row.event_type,
-    outcome: row.outcome,
+    outcome: row.outcome as AuditOutcome,
     severity: row.severity,
     detail: row.detail ?? undefined,
     policyRuleId: row.policy_rule_id ?? undefined,

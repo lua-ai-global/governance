@@ -40,12 +40,17 @@ export interface StoredAgent {
   organizationId?: string;
 }
 
+import type { PolicyOutcome } from "./policy.js";
+
+/** All valid audit event outcome values — PolicyOutcome + plugin/system outcomes */
+export type AuditOutcome = PolicyOutcome | "success" | "failure" | "kill_switch";
+
 /** Audit event record */
 export interface AuditEvent {
   id: string;
   agentId: string;
   eventType: string;
-  outcome: string;
+  outcome: AuditOutcome;
   severity: string;
   detail?: Record<string, unknown>;
   policyRuleId?: string;

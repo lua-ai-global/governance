@@ -164,7 +164,7 @@ async function assessRequirement(
 
     // AA-06: Inadequate Sandboxing
     case "aa06-action-enforcement": {
-      const enforced = await governance.audit.count({ outcome: "blocked" });
+      const enforced = await governance.audit.count({ outcome: "block" });
       if (enforced > 0) return ok(id, `Before-action enforcement active — ${enforced} action(s) blocked`);
       if (rules.length > 0) return partial(id, "Policies configured but no actions blocked yet");
       return fail(id, "No before-action enforcement", "Integrate gov.enforce() into your agent pipeline");

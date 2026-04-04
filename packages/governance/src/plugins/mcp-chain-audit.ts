@@ -26,7 +26,7 @@ export interface ChainEntry {
   timestamp: string;
   sequence: number;
   durationMs?: number;
-  outcome?: "success" | "failure" | "blocked";
+  outcome?: "success" | "failure" | "block";
 }
 
 export interface ChainAuditConfig {

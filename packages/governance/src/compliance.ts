@@ -122,7 +122,7 @@ async function assessRequirement(
       return fail(req.id, "No policy rules configured", "Add policy rules via blockTools(), requireLevel(), or custom rules");
     }
     case "art9-risk-mitigation": {
-      const blockedCount = await governance.audit.count({ outcome: "blocked" });
+      const blockedCount = await governance.audit.count({ outcome: "block" });
       if (blockedCount > 0) return ok(req.id, `${blockedCount} action(s) blocked by enforcement`);
       const rules = governance.policies.getRules();
       if (rules.length > 0) return partial(req.id, "Policies configured but no actions blocked yet");

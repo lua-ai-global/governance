@@ -83,14 +83,14 @@ describe("enforce edge cases", () => {
   test("enforce logs audit event for blocked action", async () => {
     const gov = createGovernance({ rules: [blockTools(["shell_exec"])] });
     await gov.enforce({ agentId: "a1", action: "tool_call", tool: "shell_exec" });
-    const events = await gov.audit.query({ agentId: "a1", outcome: "blocked" });
+    const events = await gov.audit.query({ agentId: "a1", outcome: "block" });
     assert.ok(events.length >= 1);
   });
 
   test("enforce logs audit event for allowed action", async () => {
     const gov = createGovernance();
     await gov.enforce({ agentId: "a1", action: "tool_call", tool: "web_search" });
-    const events = await gov.audit.query({ agentId: "a1", outcome: "allowed" });
+    const events = await gov.audit.query({ agentId: "a1", outcome: "allow" });
     assert.ok(events.length >= 1);
   });
 

@@ -40,7 +40,7 @@ describe("Tamper-Evident Audit (EU AI Act Article 12)", () => {
     const event2 = await audit.log({
       agentId: "agent-1",
       eventType: "policy_evaluation",
-      outcome: "blocked",
+      outcome: "block",
       severity: "warning",
     });
 
@@ -128,7 +128,7 @@ describe("Tamper-Evident Audit (EU AI Act Article 12)", () => {
     await audit.log({
       agentId: "agent-2",
       eventType: "policy_evaluation",
-      outcome: "blocked",
+      outcome: "block",
       severity: "warning",
     });
 

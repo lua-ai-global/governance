@@ -142,7 +142,7 @@ async function assessRequirement(
     }
     case "measure-2.1": {
       const hasInjection = rules.some((r) => r.condition.type === "injection_guard");
-      const blocked = await governance.audit.count({ outcome: "blocked" });
+      const blocked = await governance.audit.count({ outcome: "block" });
       if (hasInjection && blocked > 0) return ok(id, `Security evaluation active — injection detection + ${blocked} enforcement actions`);
       if (hasInjection || blocked > 0) return partial(id, "Partial security evaluation", "Enable injection detection and review enforcement statistics");
       return fail(id, "No security evaluation configured", "Add createInjectionGuard() and review enforcement outcomes");

@@ -105,7 +105,7 @@ export function computeSignals(input: BehavioralInput): BehavioralSignals {
     const position = i / Math.max(1, windowed.length - 1); // 0 (oldest) to 1 (newest)
     const weight = (1 - recencyBias) + recencyBias * position;
     totalWeight += weight;
-    if (windowed[i].outcome === "blocked") weightedBlocked += weight;
+    if (windowed[i].outcome === "block") weightedBlocked += weight;
   }
   const blockRate = totalWeight > 0 ? weightedBlocked / totalWeight : 0;
 

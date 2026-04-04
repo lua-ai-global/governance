@@ -97,8 +97,8 @@ describe("governance integration", () => {
     await gov.enforce({ agentId: agent.id, agentName: "a", agentLevel: 0, action: "tool_call", tool: "danger" });
     await gov.enforce({ agentId: agent.id, agentName: "a", agentLevel: 0, action: "tool_call", tool: "safe" });
 
-    const blocked = await gov.audit.count({ outcome: "blocked" });
-    const allowed = await gov.audit.count({ outcome: "allowed" });
+    const blocked = await gov.audit.count({ outcome: "block" });
+    const allowed = await gov.audit.count({ outcome: "allow" });
     assert.equal(blocked, 1);
     assert.equal(allowed, 1);
   });
@@ -248,7 +248,7 @@ describe("governance integration", () => {
 
     await gov.enforce({ agentId: agent.id, agentName: "a", agentLevel: 0, action: "tool_call", tool: "x" });
 
-    const events = await gov.audit.query({ eventType: "policy_evaluation", outcome: "blocked" });
+    const events = await gov.audit.query({ eventType: "policy_evaluation", outcome: "block" });
     assert.equal(events.length, 1);
     assert.ok(events[0].policyRuleId);
   });

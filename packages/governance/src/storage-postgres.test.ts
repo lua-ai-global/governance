@@ -266,7 +266,7 @@ describe("PostgreSQL Storage Adapter", () => {
       id: "evt-1",
       agentId: "a1",
       eventType: "policy_evaluation",
-      outcome: "allowed",
+      outcome: "allow",
       severity: "info",
       createdAt: new Date().toISOString(),
     });

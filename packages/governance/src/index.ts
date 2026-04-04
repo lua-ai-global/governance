@@ -39,7 +39,7 @@ import type { EvalResult, TraceCollector } from "./eval-types.js";
 import type { RedTeamConfig, RedTeamReport } from "./eval-red-team.js";
 
 // Re-export storage types (other modules import from ./index)
-export type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
+export type { GovernanceStorage, StoredAgent, AuditEvent, AuditOutcome, AuditQueryFilters } from "./storage.js";
 export { createMemoryStorage } from "./storage.js";
 
 // ─── Governance Instance ────────────────────────────────────────
@@ -216,7 +216,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       id: crypto.randomUUID(),
       agentId: ctx.agentId,
       eventType: "policy_evaluation",
-      outcome: decision.blocked ? "blocked" : "allowed",
+      outcome: decision.outcome,
       severity: decision.blocked ? "warning" : "info",
       detail: { action: ctx.action, tool: ctx.tool, ruleId: decision.ruleId, reason: decision.reason, rulesEvaluated: decision.rulesEvaluated },
       policyRuleId: decision.ruleId ?? undefined,
@@ -299,7 +299,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       id: crypto.randomUUID(),
       agentId: ctx.agentId,
       eventType: `policy_evaluation_${stage}`,
-      outcome: decision.blocked ? "blocked" : "allowed",
+      outcome: decision.outcome,
       severity: decision.blocked ? "warning" : "info",
       detail: { action: ctx.action, tool: ctx.tool, ruleId: decision.ruleId, reason: decision.reason, stage },
       policyRuleId: decision.ruleId ?? undefined,
