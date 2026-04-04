@@ -73,6 +73,8 @@ export type {
   ScoringConfig,
   DetectionConfig,
   KillSwitchState,
+  OptimizationTarget,
+  LlmJudgeMode,
 } from "./types.js";
 
 export { runMigrations } from "./migrator.js";

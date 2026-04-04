@@ -75,12 +75,26 @@ export interface ScoringConfig {
   approvalThreshold?: number;
 }
 
+/** Metric the org wants to optimize injection detection for */
+export type OptimizationTarget = "f1" | "precision" | "recall" | "fpRate";
+
+/** LLM-as-Judge review mode for ML detections */
+export type LlmJudgeMode = "off" | "on" | "suggest";
+
 /** Injection detection tuning */
 export interface DetectionConfig {
+  /** Master toggle — when false, all detection is skipped (default true) */
+  enabled?: boolean;
   /** Detection threshold 0-1 (default 0.5) */
   injectionThreshold?: number;
   /** Max input length in chars (default 100000) */
   maxInputLength?: number;
+  /** LLM-as-Judge mode: off = no review, on = LLM gates ML, suggest = log only (default "off") */
+  llmJudgeMode?: LlmJudgeMode;
+  /** Which metric to optimize for — influences deploy recommendations (default "f1") */
+  optimizationTarget?: OptimizationTarget;
+  /** Alert when FP rate exceeds this value 0-1 (default undefined = no alert) */
+  fpAlertThreshold?: number;
 }
 
 /** Org-level preferences stored in settings JSONB */
