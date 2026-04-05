@@ -3,7 +3,7 @@
 AI Agent Governance for TypeScript -- policy enforcement, behavioral scoring, compliance, and tamper-evident audit for AI agents. Zero runtime dependencies.
 
 [![npm version](https://img.shields.io/npm/v/governance-sdk)](https://www.npmjs.com/package/governance-sdk)
-[![tests](https://img.shields.io/badge/tests-945%2B%20passing-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-1196%20passing-brightgreen)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 ---
@@ -63,11 +63,58 @@ if (result.outcome === 'block') {
 }
 ```
 
+### Cloud Mode (Lua Governance API)
+
+Connect to [Lua Governance Cloud](https://heygovernance.ai) for ML-powered injection detection, approval workflows, fleet analytics, and a real-time dashboard.
+
+```typescript
+import { createGovernance } from 'governance-sdk';
+
+const gov = createGovernance({
+  serverUrl: 'https://api.heygovernance.ai',
+  apiKey: process.env.GOVERNANCE_API_KEY,
+  fallbackMode: 'allow', // fail-open if API unreachable (default)
+});
+
+// Verify connection at startup
+const status = await gov.connect();
+console.log(status);
+// => { connected: true, mode: 'remote', latencyMs: 45, plan: 'pro', features: [...], agentQuota: { used: 3, limit: 25 } }
+```
+
+The SDK retries transient failures with exponential backoff (3 attempts) and falls back gracefully when the API is unreachable — your agent never crashes from a governance outage.
+
+### Approval Flows
+
+When a policy returns `require_approval`, the SDK provides the approval ID and a polling helper:
+
+```typescript
+const decision = await gov.enforce({ agentId: 'bot', action: 'deploy', tool: 'prod_deploy' });
+
+if (decision.outcome === 'require_approval') {
+  console.log(`Waiting for approval: ${decision.approval?.pollUrl}`);
+  const result = await gov.waitForApproval(decision.approvalId!, { timeoutMs: 300_000 });
+  if (result === 'approved') {
+    // proceed with deployment
+  }
+}
+```
+
+### CLI
+
+```bash
+# Scaffold governance in your project
+npx governance-sdk init
+
+# Test API connectivity and show diagnostics
+GOVERNANCE_API_URL=https://api.heygovernance.ai GOVERNANCE_API_KEY=ak_... npx governance-sdk connect
+```
+
 ## Features
 
 ### Policy Engine
 
-Define rules that govern agent behavior at runtime. Policies return one of four outcomes: `allow`, `block`, `warn`, or `require_approval`.
+Define rules that govern agent behavior at runtime. Policies return one of five outcomes: `allow`, `block`, `warn`, `require_approval`, or `mask`.
 
 **8 preset policy builders:**
 
@@ -188,6 +235,20 @@ Drop-in integration with 20 agent frameworks via dedicated plugin exports:
 
 All framework dependencies are optional peer dependencies -- install only what you use.
 
+All adapters handle all 5 enforcement outcomes with configurable callbacks:
+
+```typescript
+const middleware = createGovernanceMiddleware(gov, {
+  agentName: 'my-agent',
+  owner: 'platform-team',
+  framework: 'mastra',
+  onBlocked: (decision, tool) => log.warn(`Blocked: ${tool}`),
+  onWarn: (decision, tool) => log.info(`Warning: ${tool} — ${decision.reason}`),
+  onMask: (decision, tool, masked) => log.info(`Masked output for ${tool}`),
+  onApprovalRequired: (decision, tool) => log.info(`Approval needed: ${tool}`),
+});
+```
+
 ## Export Paths
 
 The SDK ships 35 targeted exports so you can import only what you need:
@@ -220,7 +281,7 @@ npm install
 # Build all packages
 npm run build
 
-# Run tests (945+ tests, 0 failures)
+# Run tests (1196 tests, 0 failures)
 npm test
 
 # Type-check without emitting
