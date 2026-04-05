@@ -41,6 +41,8 @@ import type {
   PolicyAction,
 } from "../policy";
 import type { AgentRegistration, AgentFramework } from "../types";
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
 
 // ─── Middleware Types ───────────────────────────────────────────
 
@@ -73,6 +75,12 @@ export interface GovernanceMiddlewareConfig {
   onBlocked?: (decision: EnforcementDecision, toolName: string) => void;
   /** Called for every enforcement decision */
   onDecision?: (decision: EnforcementDecision, toolName: string) => void;
+  /** Called when a tool call triggers a warning (execution continues) */
+  onWarn?: (decision: EnforcementDecision, toolName: string) => void;
+  /** Called when output is masked */
+  onMask?: (decision: EnforcementDecision, toolName: string, maskedText: string) => void;
+  /** Called when a tool call requires human approval */
+  onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   /** Map tool call action types (default: "tool_call") */
   actionMapper?: (toolName: string) => PolicyAction;
   /** Track token usage per session */
@@ -103,19 +111,8 @@ export interface GovernanceMiddleware {
   ) => T;
 }
 
-// ─── Blocked Error ──────────────────────────────────────────────
-
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly toolName: string;
-
-  constructor(decision: EnforcementDecision, toolName: string) {
-    super(`Governance blocked: ${decision.reason} (tool: ${toolName}, rule: ${decision.ruleId})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.toolName = toolName;
-  }
-}
+// Re-export error types from shared outcome handler
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Create Middleware ──────────────────────────────────────────
 
@@ -167,11 +164,8 @@ export async function createGovernanceMiddleware(
 
     const decision = await governance.enforce(ctx);
 
-    config.onDecision?.(decision, toolName);
-
-    if (decision.blocked) {
-      config.onBlocked?.(decision, toolName);
-    }
+    // Handle all outcomes — warn/mask pass through, block/approval throw
+    handleOutcome(decision, toolName, config as OutcomeCallbacks);
 
     return decision;
   }
@@ -198,12 +192,8 @@ export async function createGovernanceMiddleware(
     fn: (input: TInput) => Promise<TOutput>,
   ): (input: TInput) => Promise<TOutput> {
     return async (input: TInput): Promise<TOutput> => {
-      // Before: enforce policy
-      const decision = await beforeToolCall(toolName, input as Record<string, unknown>);
-
-      if (decision.blocked) {
-        throw new GovernanceBlockedError(decision, toolName);
-      }
+      // Before: enforce policy — throws on block/approval_required
+      await beforeToolCall(toolName, input as Record<string, unknown>);
 
       // Execute tool
       try {
@@ -216,6 +206,10 @@ export async function createGovernanceMiddleware(
 
         return output;
       } catch (error) {
+        // Don't log governance errors as tool failures
+        if (error instanceof GovernanceBlockedError || error instanceof GovernanceApprovalRequiredError) {
+          throw error;
+        }
         // After: log failure
         await afterToolCall(toolName, "failure", {
           error: error instanceof Error ? error.message : String(error),

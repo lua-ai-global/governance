@@ -167,7 +167,7 @@ describe("governAutoGenAgent", () => {
     });
 
     assert.equal((await result.enforce("allowed")).blocked, false);
-    assert.equal((await result.enforce("blocked")).blocked, true);
+    await assert.rejects(result.enforce("blocked"), { name: "GovernanceBlockedError" });
   });
 
   test("audit method works standalone", async () => {

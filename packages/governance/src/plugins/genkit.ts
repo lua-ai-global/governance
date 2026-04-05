@@ -36,19 +36,12 @@ export type {
   GovernGenkitConfig, GovernedGenkitToolsResult, GovernedGenkitFlowResult,
 } from "./genkit-types.js";
 
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
+
 // ─── Blocked Error ──────────────────────────────────────────
 
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly toolName: string;
-
-  constructor(decision: EnforcementDecision, toolName: string) {
-    super(`Governance blocked: ${decision.reason} (tool: ${toolName})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.toolName = toolName;
-  }
-}
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Shared Helpers ─────────────────────────────────────────
 
@@ -78,8 +71,7 @@ function createEnforcer(governance: GovernanceInstance, agentId: string, config:
       action, tool: toolName, input,
       sessionTokensUsed: config.sessionTokenTracker?.(),
     });
-    config.onDecision?.(decision, toolName);
-    if (decision.blocked) config.onBlocked?.(decision, toolName);
+    handleOutcome(decision, toolName, config as OutcomeCallbacks);
     return decision;
   };
 }
@@ -103,7 +95,6 @@ function wrapTool(
     call: async (input: unknown, options?: Record<string, unknown>): Promise<unknown> => {
       const inputRecord = typeof input === "object" && input !== null ? input as Record<string, unknown> : { input };
       const decision = await enforce(tool.name, inputRecord);
-      if (decision.blocked) throw new GovernanceBlockedError(decision, tool.name);
       try {
         const output = await tool.call(input, options);
         await audit(tool.name, "success");
@@ -158,11 +149,7 @@ export async function governGenkitFlow(
     ...flow,
     call: async (input: unknown): Promise<unknown> => {
       const inputRecord = typeof input === "object" && input !== null ? input as Record<string, unknown> : { input };
-      const decision = await enforce(flow.name, inputRecord);
-
-      if (decision.blocked) {
-        throw new GovernanceBlockedError(decision, flow.name);
-      }
+      await enforce(flow.name, inputRecord);
 
       try {
         const output = await flow.call(input);

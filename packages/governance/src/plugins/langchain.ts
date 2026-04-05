@@ -44,6 +44,8 @@ import type {
   PolicyAction,
 } from "../policy";
 import type { AgentRegistration, AgentFramework } from "../types";
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -108,6 +110,9 @@ export interface GovernToolConfig {
   metadata?: Record<string, unknown>;
   onBlocked?: (decision: EnforcementDecision, toolName: string) => void;
   onDecision?: (decision: EnforcementDecision, toolName: string) => void;
+  onWarn?: (decision: EnforcementDecision, toolName: string) => void;
+  onMask?: (decision: EnforcementDecision, toolName: string, maskedText: string) => void;
+  onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (toolName: string) => PolicyAction;
   sessionTokenTracker?: () => number;
 }
@@ -121,17 +126,7 @@ export interface GovernedResult {
 
 // ─── Blocked Error ──────────────────────────────────────────────
 
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly toolName: string;
-
-  constructor(decision: EnforcementDecision, toolName: string) {
-    super(`Governance blocked: ${decision.reason} (tool: ${toolName})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.toolName = toolName;
-  }
-}
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Helper ─────────────────────────────────────────────────────
 
@@ -179,8 +174,7 @@ function createEnforcer(
       sessionTokensUsed: config.sessionTokenTracker?.(),
     });
 
-    config.onDecision?.(decision, toolName);
-    if (decision.blocked) config.onBlocked?.(decision, toolName);
+    handleOutcome(decision, toolName, config as OutcomeCallbacks);
 
     return decision;
   };
@@ -225,11 +219,7 @@ export async function governTool<T extends LangChainTool>(
     level: result.level,
     governance,
     invoke: async (input: unknown, config?: LangChainRunnableConfig): Promise<unknown> => {
-      const decision = await enforce(tool.name, input);
-
-      if (decision.blocked) {
-        throw new GovernanceBlockedError(decision, tool.name);
-      }
+      await enforce(tool.name, input);
 
       try {
         const output = await tool.invoke(input, config);
@@ -267,11 +257,7 @@ export async function governTools<T extends LangChainTool>(
   const governed = tools.map((tool) => ({
     ...tool,
     invoke: async (input: unknown, config?: LangChainRunnableConfig): Promise<unknown> => {
-      const decision = await enforce(tool.name, input);
-
-      if (decision.blocked) {
-        throw new GovernanceBlockedError(decision, tool.name);
-      }
+      await enforce(tool.name, input);
 
       try {
         const output = await tool.invoke(input, config);

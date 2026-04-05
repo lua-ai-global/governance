@@ -41,19 +41,12 @@ export type {
   GovernE2BConfig, GovernedE2BResult,
 } from "./e2b-types.js";
 
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
+
 // ─── Blocked Error ──────────────────────────────────────────
 
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly context: string;
-
-  constructor(decision: EnforcementDecision, context: string) {
-    super(`Governance blocked: ${decision.reason} (context: ${context})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.context = context;
-  }
-}
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Shared Helpers ─────────────────────────────────────────
 
@@ -83,8 +76,7 @@ function createEnforcer(governance: GovernanceInstance, agentId: string, config:
       action, tool: context, input,
       sessionTokensUsed: config.sessionTokenTracker?.(),
     });
-    config.onDecision?.(decision, context);
-    if (decision.blocked) config.onBlocked?.(decision, context);
+    handleOutcome(decision, context, config as OutcomeCallbacks);
     return decision;
   };
 }
@@ -145,7 +137,6 @@ export async function governE2BSandbox(
     const decision = await enforce("code_execution", {
       code: execution.code, language: execution.language,
     });
-    if (decision.blocked) throw new GovernanceBlockedError(decision, "code_execution");
 
     try {
       const output = await handlers.codeHandler(execution);
@@ -161,7 +152,6 @@ export async function governE2BSandbox(
     if (!handlers.filesystemHandler) throw new Error("No filesystem handler configured");
 
     const decision = await enforce("filesystem", { operation: op.operation, path: op.path });
-    if (decision.blocked) throw new GovernanceBlockedError(decision, "filesystem");
 
     try {
       const output = await handlers.filesystemHandler(op);
@@ -178,7 +168,6 @@ export async function governE2BSandbox(
     if (!handler) throw new Error("No command handler configured");
 
     const decision = await enforce("command_execution", { command: cmd.command });
-    if (decision.blocked) throw new GovernanceBlockedError(decision, "command_execution");
 
     try {
       const output = await handler(cmd);

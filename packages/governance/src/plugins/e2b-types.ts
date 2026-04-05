@@ -122,6 +122,9 @@ export interface GovernE2BConfig {
   metadata?: Record<string, unknown>;
   onBlocked?: (decision: EnforcementDecision, context: string) => void;
   onDecision?: (decision: EnforcementDecision, context: string) => void;
+  onWarn?: (decision: EnforcementDecision, toolName: string) => void;
+  onMask?: (decision: EnforcementDecision, toolName: string, maskedText: string) => void;
+  onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (context: string) => PolicyAction;
   sessionTokenTracker?: () => number;
   /** Blocked code patterns (regex strings) */

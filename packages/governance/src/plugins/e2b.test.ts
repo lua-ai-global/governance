@@ -81,7 +81,7 @@ describe("executeCode", () => {
       () => result.executeCode({ code: "print('hello')" }),
       (err: Error) => {
         assert.ok(err instanceof GovernanceBlockedError);
-        assert.equal(err.context, "code_execution");
+        assert.equal((err as GovernanceBlockedError).toolName, "code_execution");
         return true;
       },
     );
@@ -251,7 +251,7 @@ describe("enforce and audit", () => {
     });
 
     assert.equal((await result.enforce("code_execution")).blocked, false);
-    assert.equal((await result.enforce("blocked_op")).blocked, true);
+    await assert.rejects(result.enforce("blocked_op"), { name: "GovernanceBlockedError" });
   });
 
   test("calls onBlocked callback", async () => {

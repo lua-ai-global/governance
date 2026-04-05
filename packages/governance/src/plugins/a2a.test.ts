@@ -233,7 +233,7 @@ describe("createGovernedA2A", () => {
     );
 
     assert.equal((await result.enforce("safe_ctx")).blocked, false);
-    assert.equal((await result.enforce("blocked_ctx")).blocked, true);
+    await assert.rejects(result.enforce("blocked_ctx"), { name: "GovernanceBlockedError" });
   });
 
   test("handles receive from unknown agent", async () => {

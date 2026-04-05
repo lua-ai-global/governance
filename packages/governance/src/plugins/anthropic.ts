@@ -36,19 +36,12 @@ export type {
   GovernAnthropicConfig, GovernedAnthropicResult,
 } from "./anthropic-types.js";
 
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
+
 // ─── Blocked Error ──────────────────────────────────────────
 
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly toolName: string;
-
-  constructor(decision: EnforcementDecision, toolName: string) {
-    super(`Governance blocked: ${decision.reason} (tool: ${toolName})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.toolName = toolName;
-  }
-}
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Shared Helpers ─────────────────────────────────────────
 
@@ -78,8 +71,7 @@ function createEnforcer(governance: GovernanceInstance, agentId: string, config:
       action, tool: toolName, input,
       sessionTokensUsed: config.sessionTokenTracker?.(),
     });
-    config.onDecision?.(decision, toolName);
-    if (decision.blocked) config.onBlocked?.(decision, toolName);
+    handleOutcome(decision, toolName, config as OutcomeCallbacks);
     return decision;
   };
 }
@@ -113,7 +105,6 @@ export async function governAnthropicTools(
     ...tool,
     execute: async (input: Record<string, unknown>) => {
       const decision = await enforce(tool.name, input);
-      if (decision.blocked) throw new GovernanceBlockedError(decision, tool.name);
       try {
         const output = await tool.execute(input);
         await audit(tool.name, "success");
@@ -131,17 +122,17 @@ export async function governAnthropicTools(
       return { type: "tool_result", tool_use_id: block.id, content: `Unknown tool: ${block.name}`, is_error: true };
     }
     const input = (block.input ?? {}) as Record<string, unknown>;
-    const decision = await enforce(block.name, input);
-    if (decision.blocked) {
-      await audit(block.name, "failure", { reason: decision.reason });
-      return { type: "tool_result", tool_use_id: block.id, content: `Blocked: ${decision.reason}`, is_error: true };
-    }
     try {
+      await enforce(block.name, input);
       const output = await executor.execute(input);
       await audit(block.name, "success");
       const content = typeof output === "string" ? output : JSON.stringify(output);
       return { type: "tool_result", tool_use_id: block.id, content };
     } catch (error) {
+      if (error instanceof GovernanceBlockedError || error instanceof GovernanceApprovalRequiredError) {
+        await audit(block.name, "failure", { reason: (error as GovernanceBlockedError).decision.reason });
+        return { type: "tool_result", tool_use_id: block.id, content: `Blocked: ${(error as GovernanceBlockedError).decision.reason}`, is_error: true };
+      }
       const msg = error instanceof Error ? error.message : String(error);
       await audit(block.name, "failure", { error: msg });
       return { type: "tool_result", tool_use_id: block.id, content: msg, is_error: true };

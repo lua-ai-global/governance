@@ -200,8 +200,7 @@ describe("createGovernedMCP", () => {
     const allowed = await result.enforce("safe_tool");
     assert.equal(allowed.blocked, false);
 
-    const blocked = await result.enforce("blocked_tool");
-    assert.equal(blocked.blocked, true);
+    await assert.rejects(result.enforce("blocked_tool"), { name: "GovernanceBlockedError" });
   });
 
   test("audit method works standalone", async () => {

@@ -40,6 +40,8 @@ import type {
   PolicyAction,
 } from "../policy";
 import type { AgentRegistration, AgentFramework } from "../types";
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -105,6 +107,9 @@ export interface GovernedToolsConfig {
   metadata?: Record<string, unknown>;
   onBlocked?: (decision: EnforcementDecision, toolName: string) => void;
   onDecision?: (decision: EnforcementDecision, toolName: string) => void;
+  onWarn?: (decision: EnforcementDecision, toolName: string) => void;
+  onMask?: (decision: EnforcementDecision, toolName: string, maskedText: string) => void;
+  onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (toolName: string) => PolicyAction;
   sessionTokenTracker?: () => number;
 }
@@ -121,17 +126,7 @@ export interface GovernedToolsResult<T> {
 
 // ─── Blocked Error ──────────────────────────────────────────────
 
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly toolName: string;
-
-  constructor(decision: EnforcementDecision, toolName: string) {
-    super(`Governance blocked: ${decision.reason} (tool: ${toolName})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.toolName = toolName;
-  }
-}
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Create Governed Tools ──────────────────────────────────────
 
@@ -182,10 +177,7 @@ export async function createGovernedTools<
       sessionTokensUsed: config.sessionTokenTracker?.(),
     });
 
-    config.onDecision?.(decision, toolName);
-    if (decision.blocked) {
-      config.onBlocked?.(decision, toolName);
-    }
+    handleOutcome(decision, toolName, config as OutcomeCallbacks);
 
     return decision;
   }
@@ -211,11 +203,7 @@ export async function createGovernedTools<
       ...tool,
       execute: tool.execute
         ? async (input: unknown, options: VercelToolExecutionOptions) => {
-            const decision = await enforce(name, (input ?? {}) as Record<string, unknown>);
-
-            if (decision.blocked) {
-              throw new GovernanceBlockedError(decision, name);
-            }
+            await enforce(name, (input ?? {}) as Record<string, unknown>);
 
             try {
               const output = await tool.execute!(input, options);

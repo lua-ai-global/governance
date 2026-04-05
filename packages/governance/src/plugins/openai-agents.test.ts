@@ -232,8 +232,7 @@ describe("governAgent", () => {
     const allowed = await result.enforce("allowed");
     assert.equal(allowed.blocked, false);
 
-    const blocked = await result.enforce("blocked_tool");
-    assert.equal(blocked.blocked, true);
+    await assert.rejects(result.enforce("blocked_tool"), { name: "GovernanceBlockedError" });
   });
 
   test("audit method works standalone", async () => {

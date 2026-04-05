@@ -38,19 +38,12 @@ export type {
   GovernDenoConfig, GovernedDenoAgentResult, GovernedDenoToolsResult,
 } from "./deno-types.js";
 
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
+
 // ─── Blocked Error ──────────────────────────────────────────
 
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly toolName: string;
-
-  constructor(decision: EnforcementDecision, toolName: string) {
-    super(`Governance blocked: ${decision.reason} (tool: ${toolName})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.toolName = toolName;
-  }
-}
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Shared Helpers ─────────────────────────────────────────
 
@@ -83,8 +76,7 @@ function createEnforcer(governance: GovernanceInstance, agentId: string, config:
       action, tool: toolName, input,
       sessionTokensUsed: config.sessionTokenTracker?.(),
     });
-    config.onDecision?.(decision, toolName);
-    if (decision.blocked) config.onBlocked?.(decision, toolName);
+    handleOutcome(decision, toolName, config as OutcomeCallbacks);
     return decision;
   };
 }
@@ -107,7 +99,6 @@ function wrapTool(
     ...tool,
     execute: async (args: Record<string, unknown>): Promise<unknown> => {
       const decision = await enforce(tool.name, args);
-      if (decision.blocked) throw new GovernanceBlockedError(decision, tool.name);
       try {
         const output = await tool.execute(args);
         await audit(tool.name, "success");

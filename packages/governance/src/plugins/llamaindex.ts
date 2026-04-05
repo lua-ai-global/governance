@@ -38,19 +38,12 @@ export type {
   GovernLlamaIndexConfig, GovernedLlamaIndexToolsResult, GovernedLlamaIndexAgentResult,
 } from "./llamaindex-types.js";
 
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
+
 // ─── Blocked Error ──────────────────────────────────────────
 
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly toolName: string;
-
-  constructor(decision: EnforcementDecision, toolName: string) {
-    super(`Governance blocked: ${decision.reason} (tool: ${toolName})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.toolName = toolName;
-  }
-}
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Shared Helpers ─────────────────────────────────────────
 
@@ -80,8 +73,7 @@ function createEnforcer(governance: GovernanceInstance, agentId: string, config:
       action, tool: toolName, input,
       sessionTokensUsed: config.sessionTokenTracker?.(),
     });
-    config.onDecision?.(decision, toolName);
-    if (decision.blocked) config.onBlocked?.(decision, toolName);
+    handleOutcome(decision, toolName, config as OutcomeCallbacks);
     return decision;
   };
 }
@@ -106,7 +98,6 @@ function wrapTool(
     ...tool,
     call: async (input: Record<string, unknown>): Promise<LlamaIndexJSONValue> => {
       const decision = await enforce(toolName, input);
-      if (decision.blocked) throw new GovernanceBlockedError(decision, toolName);
       try {
         const output = await tool.call!(input);
         await audit(toolName, "success");

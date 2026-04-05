@@ -43,9 +43,14 @@ describe("createGovernanceMiddleware", () => {
       owner: "team",
     });
 
-    const decision = await mw.beforeToolCall("shell_exec");
-    assert.equal(decision.blocked, true);
-    assert.ok(decision.reason.includes("blocked"));
+    await assert.rejects(
+      mw.beforeToolCall("shell_exec"),
+      (err: Error) => {
+        assert.equal(err.name, "GovernanceBlockedError");
+        assert.ok(err.message.includes("blocked"));
+        return true;
+      },
+    );
   });
 
   test("wrapTool executes allowed tools", async () => {
@@ -127,7 +132,7 @@ describe("createGovernanceMiddleware", () => {
       },
     });
 
-    await mw.beforeToolCall("bad_tool");
+    await assert.rejects(mw.beforeToolCall("bad_tool"), { name: "GovernanceBlockedError" });
     assert.equal(blockedToolName, "bad_tool");
   });
 
@@ -165,7 +170,6 @@ describe("createGovernanceMiddleware", () => {
 
     // Over budget
     tokenCount = 60_000;
-    const d2 = await mw.beforeToolCall("search");
-    assert.equal(d2.blocked, true);
+    await assert.rejects(mw.beforeToolCall("search"), { name: "GovernanceBlockedError" });
   });
 });

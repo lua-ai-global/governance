@@ -157,6 +157,9 @@ export interface GovernMCPConfig {
   metadata?: Record<string, unknown>;
   onBlocked?: (decision: EnforcementDecision, toolName: string) => void;
   onDecision?: (decision: EnforcementDecision, toolName: string) => void;
+  onWarn?: (decision: EnforcementDecision, toolName: string) => void;
+  onMask?: (decision: EnforcementDecision, toolName: string, maskedText: string) => void;
+  onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (toolName: string) => PolicyAction;
   sessionTokenTracker?: () => number;
   /** Map resource URIs to policy actions (default: data_access) */

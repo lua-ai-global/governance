@@ -68,6 +68,9 @@ export interface GovernOllamaConfig {
   metadata?: Record<string, unknown>;
   onBlocked?: (decision: EnforcementDecision, toolName: string) => void;
   onDecision?: (decision: EnforcementDecision, toolName: string) => void;
+  onWarn?: (decision: EnforcementDecision, toolName: string) => void;
+  onMask?: (decision: EnforcementDecision, toolName: string, maskedText: string) => void;
+  onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (toolName: string) => PolicyAction;
   sessionTokenTracker?: () => number;
 }

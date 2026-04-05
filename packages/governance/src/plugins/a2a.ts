@@ -45,19 +45,12 @@ export type {
   A2ATaskSendHandler, A2ATaskReceiveHandler,
 } from "./a2a-types.js";
 
+import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
+import type { OutcomeCallbacks } from "./outcome-handler.js";
+
 // ─── Blocked Error ──────────────────────────────────────────
 
-export class GovernanceBlockedError extends Error {
-  public readonly decision: EnforcementDecision;
-  public readonly context: string;
-
-  constructor(decision: EnforcementDecision, context: string) {
-    super(`Governance blocked: ${decision.reason} (${context})`);
-    this.name = "GovernanceBlockedError";
-    this.decision = decision;
-    this.context = context;
-  }
-}
+export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
 // ─── Shared Helpers ─────────────────────────────────────────
 
@@ -86,8 +79,7 @@ function createEnforcer(governance: GovernanceInstance, agentId: string, config:
       action, tool: context, input,
       sessionTokensUsed: config.sessionTokenTracker?.(),
     });
-    config.onDecision?.(decision, context);
-    if (decision.blocked) config.onBlocked?.(decision, context);
+    handleOutcome(decision, context, config as OutcomeCallbacks);
     return decision;
   };
 }
@@ -119,21 +111,20 @@ export async function createGovernedA2A(
     const context = `send:${targetAgent.name}@${targetAgent.url}`;
     const targetAction = config.targetAgentMapper?.(targetAgent.url);
 
-    const decision = targetAction
-      ? await governance.enforce({
-          agentId: result.id, agentName: config.agentName, agentLevel: 0,
-          action: targetAction, tool: context,
-          input: { messageId: request.params.message.messageId, targetUrl: targetAgent.url },
-        })
-      : await enforce(context, {
-          messageId: request.params.message.messageId,
-          targetAgent: targetAgent.name,
-          targetUrl: targetAgent.url,
-          messageRole: request.params.message.role,
-        });
-
-    if (decision.blocked) {
-      throw new GovernanceBlockedError(decision, context);
+    if (targetAction) {
+      const decision = await governance.enforce({
+        agentId: result.id, agentName: config.agentName, agentLevel: 0,
+        action: targetAction, tool: context,
+        input: { messageId: request.params.message.messageId, targetUrl: targetAgent.url },
+      });
+      handleOutcome(decision, context, config as OutcomeCallbacks);
+    } else {
+      await enforce(context, {
+        messageId: request.params.message.messageId,
+        targetAgent: targetAgent.name,
+        targetUrl: targetAgent.url,
+        messageRole: request.params.message.role,
+      });
     }
 
     try {
@@ -156,16 +147,12 @@ export async function createGovernedA2A(
     const senderName = fromAgent?.name ?? "unknown";
     const context = `receive:${senderName}`;
 
-    const decision = await enforce(context, {
+    await enforce(context, {
       messageId: request.params.message.messageId,
       fromAgent: senderName,
       fromUrl: fromAgent?.url,
       messageRole: request.params.message.role,
     });
-
-    if (decision.blocked) {
-      throw new GovernanceBlockedError(decision, context);
-    }
 
     try {
       const task = await receiveHandler(request, fromAgent);

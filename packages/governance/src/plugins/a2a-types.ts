@@ -194,6 +194,9 @@ export interface GovernA2AConfig {
   metadata?: Record<string, unknown>;
   onBlocked?: (decision: EnforcementDecision, context: string) => void;
   onDecision?: (decision: EnforcementDecision, context: string) => void;
+  onWarn?: (decision: EnforcementDecision, toolName: string) => void;
+  onMask?: (decision: EnforcementDecision, toolName: string, maskedText: string) => void;
+  onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (taskId: string) => PolicyAction;
   sessionTokenTracker?: () => number;
   /** Map target agent URLs to policy actions */

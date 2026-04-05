@@ -142,7 +142,7 @@ describe("createGovernedBedrock", () => {
     });
 
     assert.equal((await result.enforce("safe_tool")).blocked, false);
-    assert.equal((await result.enforce("blocked_tool")).blocked, true);
+    await assert.rejects(result.enforce("blocked_tool"), { name: "GovernanceBlockedError" });
   });
 });
 
@@ -182,8 +182,7 @@ describe("guardActionGroup", () => {
       verb: "DELETE",
     };
 
-    const decision = await result.guardActionGroup(invocation);
-    assert.equal(decision.blocked, true);
+    await assert.rejects(result.guardActionGroup(invocation), { name: "GovernanceBlockedError" });
   });
 
   test("includes parameters in enforcement context", async () => {
@@ -244,8 +243,7 @@ describe("guardToolUse", () => {
       input: {},
     };
 
-    const decision = await result.guardToolUse(block);
-    assert.equal(decision.blocked, true);
+    await assert.rejects(result.guardToolUse(block), { name: "GovernanceBlockedError" });
   });
 
   test("logs audit on tool_use guard", async () => {
