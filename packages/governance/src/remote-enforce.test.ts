@@ -221,29 +221,32 @@ describe("remote enforce", () => {
     );
   });
 
-  test("throws RemoteEnforcementError on 500", async () => {
+  test("falls back on 500 after retries (fail-open)", async () => {
     setupFetchMock(500, "Internal Server Error", false);
 
-    const remote = createRemoteEnforcer(config);
-    await assert.rejects(
-      () => remote.enforce({ agentId: "a1", action: "tool_call" }),
-      (err: RemoteEnforcementError) => {
-        assert.equal(err.statusCode, 500);
-        assert.ok(err.responseBody.includes("Internal Server Error"));
-        return true;
-      },
-    );
+    const remote = createRemoteEnforcer({ ...config, maxRetries: 0 });
+    const decision = await remote.enforce({ agentId: "a1", action: "tool_call" });
+    assert.equal(decision.blocked, false);
+    assert.ok(decision.reason.includes("unreachable"));
   });
 
-  test("throws on network failure", async () => {
+  test("blocks on 500 with fallbackMode block", async () => {
+    setupFetchMock(500, "Internal Server Error", false);
+
+    const remote = createRemoteEnforcer({ ...config, maxRetries: 0, fallbackMode: "block" });
+    const decision = await remote.enforce({ agentId: "a1", action: "tool_call" });
+    assert.equal(decision.blocked, true);
+    assert.ok(decision.reason.includes("blocking"));
+  });
+
+  test("falls back on network failure (fail-open)", async () => {
     mockFetch = mock.fn(() => Promise.reject(new TypeError("fetch failed")));
     (globalThis as Record<string, unknown>).fetch = mockFetch;
 
-    const remote = createRemoteEnforcer(config);
-    await assert.rejects(
-      () => remote.enforce({ agentId: "a1", action: "tool_call" }),
-      { name: "TypeError", message: "fetch failed" },
-    );
+    const remote = createRemoteEnforcer({ ...config, maxRetries: 0 });
+    const decision = await remote.enforce({ agentId: "a1", action: "tool_call" });
+    assert.equal(decision.blocked, false);
+    assert.ok(decision.reason.includes("unreachable"));
   });
 
   test("strips trailing slash from serverUrl", async () => {

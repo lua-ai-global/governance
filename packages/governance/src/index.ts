@@ -55,6 +55,10 @@ export interface GovernanceConfig {
   apiKey?: string;
   /** Request timeout in ms for remote calls (default: 30000) */
   timeout?: number;
+  /** Max retry attempts for transient remote failures (default: 3) */
+  maxRetries?: number;
+  /** What to do when the API is unreachable after retries: "allow" (fail-open) or "block" (fail-closed). Default: "allow" */
+  fallbackMode?: "allow" | "block";
   /** Called when a fire-and-forget audit write fails. Audit errors never block enforcement. */
   onAuditError?: (error: unknown) => void;
 }
@@ -106,6 +110,12 @@ export interface GovernanceInstance {
     /** Run adversarial policy effectiveness suite */
     runRedTeam: (agentId: string, config?: RedTeamConfig) => Promise<RedTeamReport>;
   };
+  /** Test API connectivity. Returns status without throwing. */
+  connect: () => Promise<{ connected: boolean; mode: string; latencyMs: number }>;
+  /** Current connection status (cached from last enforce/connect call). */
+  status: () => { connected: boolean; mode: string; latencyMs: number };
+  /** Poll an approval until resolved. Returns final status. */
+  waitForApproval: (approvalId: string, opts?: { timeoutMs?: number; pollIntervalMs?: number }) => Promise<"approved" | "denied" | "expired" | "timeout">;
 }
 
 /** Reconstruct an AgentRegistration from a StoredAgent, including capability booleans from metadata. */
@@ -147,7 +157,13 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   });
 
   const remote = config.serverUrl
-    ? createRemoteEnforcer({ serverUrl: config.serverUrl, apiKey: config.apiKey!, timeout: config.timeout })
+    ? createRemoteEnforcer({
+        serverUrl: config.serverUrl,
+        apiKey: config.apiKey!,
+        timeout: config.timeout,
+        maxRetries: config.maxRetries,
+        fallbackMode: config.fallbackMode,
+      })
     : null;
 
   // Eval stores — in-memory, capped per agent and total agents
@@ -422,11 +438,18 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     },
   };
 
+  const noopStatus = () => ({ connected: true, mode: "local" as const, latencyMs: 0 });
+
   const instance: GovernanceInstance = {
     register, enforce, enforcePreprocess, enforcePostprocess, audit,
     score: scoreAgentFn, scoreFleet: scoreFleetFn,
     policies: readonlyPolicies, storage, addRule, removeRule,
     eval: evalApi,
+    connect: remote ? remote.connect : async () => noopStatus(),
+    status: remote ? remote.status : noopStatus,
+    waitForApproval: remote
+      ? remote.waitForApproval
+      : async () => "timeout" as const,
   };
 
   return instance;
@@ -454,6 +477,7 @@ export type { CapabilityDetection, RepoScanResult } from "./repo-patterns.js";
 export { findPackageJsonPaths, detectAgentRoots } from "./monorepo-detect.js";
 export type { AgentRoot } from "./monorepo-detect.js";
 export { RemoteEnforcementError } from "./remote-enforce.js";
+export type { FallbackMode, RemoteStatus } from "./remote-enforce.js";
 export { composePolicies, securityBaseline, complianceOverlay, platformDefaults } from "./policy-compose.js";
 export type { PolicySet, ConflictStrategy, ComposeConfig, ComposeResult, PolicyConflict } from "./policy-compose.js";
 export { getDefaultStage } from "./policy-stage-defaults.js";
