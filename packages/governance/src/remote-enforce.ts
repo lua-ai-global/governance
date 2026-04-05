@@ -36,6 +36,9 @@ export interface RemoteStatus {
   connected: boolean;
   mode: "remote" | "fallback";
   latencyMs: number;
+  plan?: string;
+  features?: string[];
+  agentQuota?: { used: number; limit: number | "unlimited" };
 }
 
 /** Error thrown when remote API returns a non-OK response */
@@ -199,12 +202,24 @@ export function createRemoteEnforcer(config: RemoteConfig) {
   async function connect(): Promise<RemoteStatus> {
     try {
       const start = performance.now();
-      const res = await fetch(`${baseUrl}/health`, {
+      const res = await fetch(`${baseUrl}/api/v1/connect`, {
         headers: { "Authorization": `Bearer ${apiKey}` },
         signal: AbortSignal.timeout(5000),
       });
       lastLatencyMs = Math.round(performance.now() - start);
       lastConnected = res.ok;
+
+      if (res.ok) {
+        const data = await res.json() as {
+          plan?: string;
+          features?: string[];
+          agentQuota?: { used: number; limit: number | "unlimited" };
+        };
+        return {
+          connected: true, mode: "remote", latencyMs: lastLatencyMs,
+          plan: data.plan, features: data.features, agentQuota: data.agentQuota,
+        };
+      }
     } catch {
       lastConnected = false;
       lastLatencyMs = 0;

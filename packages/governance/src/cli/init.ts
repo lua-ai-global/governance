@@ -251,7 +251,25 @@ async function main() {
   print("");
 }
 
-main().catch((e) => {
-  print(`${RED}Error: ${e instanceof Error ? e.message : String(e)}${RESET}`);
+// ─── Subcommand Router ────────────────────────────────────────
+
+const subcommand = process.argv[2];
+
+if (subcommand === "connect") {
+  import("./connect.js").then((m) => m.runConnect()).catch((e) => {
+    print(`${RED}Error: ${e instanceof Error ? e.message : String(e)}${RESET}`);
+    process.exit(1);
+  });
+} else if (subcommand === "init" || !subcommand) {
+  main().catch((e) => {
+    print(`${RED}Error: ${e instanceof Error ? e.message : String(e)}${RESET}`);
+    process.exit(1);
+  });
+} else {
+  print(`${RED}Unknown command: ${subcommand}${RESET}`);
+  print("");
+  print(`${BOLD}Usage:${RESET}`);
+  print(`  npx governance-sdk init      Set up governance in your project`);
+  print(`  npx governance-sdk connect   Test API connectivity`);
   process.exit(1);
-});
+}
