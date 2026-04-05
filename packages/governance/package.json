@@ -1,6 +1,6 @@
 {
   "name": "governance-sdk",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "AI Agent Governance for TypeScript — policy enforcement, scoring, compliance, and audit for AI agents",
   "type": "module",
   "main": "./dist/index.js",
