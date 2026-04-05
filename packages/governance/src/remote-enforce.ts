@@ -77,11 +77,20 @@ export function createRemoteEnforcer(config: RemoteConfig) {
       );
     }
 
-    const body = await response.json() as { decision: EnforcementDecision } | EnforcementDecision;
-    // API returns { decision: {...}, duration, operationId } — unwrap if nested
-    return "decision" in body && body.decision && typeof body.decision === "object" && "blocked" in body.decision
-      ? body.decision
-      : body as EnforcementDecision;
+    const body = await response.json() as {
+      decision: EnforcementDecision;
+      approvalId?: string;
+      approval?: EnforcementDecision["approval"];
+    } | EnforcementDecision;
+
+    // API returns { decision: {...}, approvalId, approval } — unwrap and merge
+    if ("decision" in body && body.decision && typeof body.decision === "object" && "blocked" in body.decision) {
+      const decision = body.decision;
+      if (body.approvalId) decision.approvalId = body.approvalId;
+      if (body.approval) decision.approval = body.approval;
+      return decision;
+    }
+    return body as EnforcementDecision;
   }
 
   /**

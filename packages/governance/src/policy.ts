@@ -83,6 +83,15 @@ export interface EnforcementDecision {
   rulesEvaluated: number;
   /** Redacted text when outcome is "mask" — the transformed version with sensitive data replaced */
   maskedText?: string;
+  /** Approval request ID when outcome is "require_approval" */
+  approvalId?: string;
+  /** Approval details with polling endpoint for async approval flows */
+  approval?: {
+    id: string;
+    status: string;
+    pollUrl: string;
+    message: string;
+  };
 }
 
 // ─── Condition Registry ─────────────────────────────────────────
