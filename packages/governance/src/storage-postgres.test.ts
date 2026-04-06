@@ -21,10 +21,11 @@ function createMockPool(): PgPoolLike & { queries: string[] } {
         return { rows: [], rowCount: 0 };
       }
 
-      // Parse table name from INSERT/SELECT/UPDATE
+      // Parse table name from INSERT/SELECT/UPDATE/DELETE
       const insertMatch = text.match(/INSERT INTO (\S+)/);
       const selectMatch = text.match(/SELECT .* FROM (\S+)/);
       const updateMatch = text.match(/UPDATE (\S+)/);
+      const deleteMatch = text.match(/DELETE FROM (\S+)/);
 
       if (insertMatch) {
         const table = insertMatch[1];
@@ -103,6 +104,19 @@ function createMockPool(): PgPoolLike & { queries: string[] } {
         }
 
         return { rows: [row], rowCount: 1 };
+      }
+
+      if (deleteMatch) {
+        const table = deleteMatch[1];
+        const rows = tables.get(table) ?? [];
+        const before = rows.length;
+        const filtered = applyWhere(rows, text, values ?? []);
+        // Remove matched rows in place
+        for (const row of filtered) {
+          const idx = rows.indexOf(row);
+          if (idx >= 0) rows.splice(idx, 1);
+        }
+        return { rows: [], rowCount: before - rows.length };
       }
 
       return { rows: [], rowCount: 0 };
@@ -256,6 +270,34 @@ describe("PostgreSQL Storage Adapter", () => {
       compositeScore: 10,
     });
     assert.ok(updated);
+  });
+
+  test("deleteAgent removes agent and throws if not found", async () => {
+    const pool = createMockPool();
+    const storage = await createPostgresStorage({ pool });
+
+    await storage.createAgent({
+      id: "del-1",
+      name: "doomed",
+      framework: "mastra",
+      owner: "team",
+      version: "1.0.0",
+      channels: [],
+      tools: [],
+      compositeScore: 50,
+      governanceLevel: 2,
+      status: "registered",
+      registeredAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await storage.deleteAgent("del-1");
+    assert.equal(await storage.getAgent("del-1"), null);
+
+    await assert.rejects(
+      () => storage.deleteAgent("del-1"),
+      { message: "Agent del-1 not found" },
+    );
   });
 
   test("createAuditEvent and queryAuditEvents work", async () => {

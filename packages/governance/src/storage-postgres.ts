@@ -154,6 +154,12 @@ export async function createPostgresStorage(
     return rowToAgent(result.rows[0]);
   }
 
+  async function deleteAgent(id: string): Promise<void> {
+    await ensureMigrated();
+    const result = await pool.query(`DELETE FROM ${prefix}_agents WHERE id = $1`, [id]);
+    if (result.rowCount === 0) throw new Error(`Agent ${id} not found`);
+  }
+
   async function createAuditEvent(event: AuditEvent): Promise<AuditEvent> {
     await ensureMigrated();
     await pool.query(
@@ -188,7 +194,7 @@ export async function createPostgresStorage(
 
   if (autoMigrate) await migrate();
 
-  return { createAgent, getAgent, getAgentByName, listAgents, updateAgent, createAuditEvent, queryAuditEvents, countAuditEvents, migrate, close: () => pool.end() };
+  return { createAgent, getAgent, getAgentByName, listAgents, updateAgent, deleteAgent, createAuditEvent, queryAuditEvents, countAuditEvents, migrate, close: () => pool.end() };
 }
 
 function buildAuditWhere(filters: AuditQueryFilters): { clauses: string[]; values: unknown[]; paramIdx: number } {

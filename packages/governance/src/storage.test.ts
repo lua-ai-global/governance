@@ -91,6 +91,40 @@ describe("createMemoryStorage", () => {
     );
   });
 
+  test("deletes an agent", async () => {
+    const storage = createMemoryStorage();
+    await storage.createAgent(makeAgent({ id: "del-1" }));
+    await storage.deleteAgent("del-1");
+    assert.equal(await storage.getAgent("del-1"), null);
+  });
+
+  test("delete preserves other agents", async () => {
+    const storage = createMemoryStorage();
+    await storage.createAgent(makeAgent({ id: "keep" }));
+    await storage.createAgent(makeAgent({ id: "drop" }));
+    await storage.deleteAgent("drop");
+    const remaining = await storage.listAgents();
+    assert.equal(remaining.length, 1);
+    assert.equal(remaining[0].id, "keep");
+  });
+
+  test("delete preserves audit events", async () => {
+    const storage = createMemoryStorage();
+    await storage.createAgent(makeAgent({ id: "a-with-events" }));
+    await storage.createAuditEvent(makeEvent({ agentId: "a-with-events" }));
+    await storage.deleteAgent("a-with-events");
+    const events = await storage.queryAuditEvents({ agentId: "a-with-events" });
+    assert.equal(events.length, 1);
+  });
+
+  test("throws when deleting nonexistent agent", async () => {
+    const storage = createMemoryStorage();
+    await assert.rejects(
+      () => storage.deleteAgent("nope"),
+      { message: "Agent nope not found" },
+    );
+  });
+
   test("creates and counts audit events", async () => {
     const storage = createMemoryStorage();
     await storage.createAuditEvent(makeEvent());

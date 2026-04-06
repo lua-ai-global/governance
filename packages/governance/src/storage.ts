@@ -14,6 +14,8 @@ export interface GovernanceStorage {
   getAgentByName(name: string, owner: string): Promise<StoredAgent | null>;
   listAgents(organizationId?: string): Promise<StoredAgent[]>;
   updateAgent(id: string, data: Partial<StoredAgent>): Promise<StoredAgent>;
+  /** Delete an agent by id. Audit events are preserved. Throws if not found. */
+  deleteAgent(id: string): Promise<void>;
   createAuditEvent(event: AuditEvent): Promise<AuditEvent>;
   queryAuditEvents(filters: AuditQueryFilters): Promise<AuditEvent[]>;
   countAuditEvents(filters?: AuditQueryFilters): Promise<number>;
@@ -111,6 +113,10 @@ export function createMemoryStorage(): GovernanceStorage {
       const updated = { ...existing, ...data, updatedAt: new Date().toISOString() };
       agents.set(id, updated);
       return updated;
+    },
+    async deleteAgent(id) {
+      if (!agents.has(id)) throw new Error(`Agent ${id} not found`);
+      agents.delete(id);
     },
     async createAuditEvent(event) {
       events.push(event);
