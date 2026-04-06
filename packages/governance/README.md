@@ -503,6 +503,93 @@ All adapters follow the same pattern:
 2. Wrap tool execution with `gov.enforce()` before each call
 3. Log results to `gov.audit.log()` after each call
 
+### Mastra: full pipeline coverage (preprocess + tool calls + postprocess)
+
+The `mastra-processor` adapter (since 0.8.0) implements three Mastra
+processor lifecycle methods, so a single instance covers the entire
+enforcement pipeline. Attach it once at agent definition time:
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { createGovernance } from 'governance-sdk';
+import { GovernanceProcessor } from 'governance-sdk/plugins/mastra-processor';
+
+// Local mode for dev, remote mode for production
+const gov = createGovernance({
+  serverUrl: process.env.GOVERNANCE_API_URL,  // omit for local
+  apiKey: process.env.GOVERNANCE_API_KEY,
+  fallbackMode: 'allow', // never block traffic if cloud is unreachable
+});
+
+const processor = new GovernanceProcessor(gov, {
+  agentName: 'my-agent',
+  owner: 'my-team',
+  framework: 'mastra',
+  hasAuth: true,
+  hasAuditLog: true,
+
+  // Per-call metadata enrichment — read userId/channel/threadId from
+  // Mastra's RequestContext so the dashboard knows WHO is being governed
+  metadataProvider: (stage, args) => {
+    const ctx = args.requestContext as { get?: (k: string) => unknown } | undefined;
+    return {
+      stage,
+      userId: ctx?.get?.('userId'),
+      channel: ctx?.get?.('channel'),
+      threadId: ctx?.get?.('threadId'),
+    };
+  },
+
+  // Optional: per-stage callbacks
+  onPreprocessBlocked: (decision, message) => {
+    console.warn('Preprocess blocked', { reason: decision.reason, message });
+  },
+  onPostprocessBlocked: (decision, output) => {
+    console.warn('Postprocess blocked', { reason: decision.reason });
+  },
+  onApprovalRequired: (decision, stage) => {
+    console.info('Approval required', { stage, approvalId: decision.approvalId });
+  },
+});
+
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: '...',
+  model: ...,
+  tools: { ... },
+  // Attach the processor to BOTH input and output processor slots
+  inputProcessors: [processor],
+  outputProcessors: [processor],
+});
+```
+
+What runs at each stage:
+
+| Stage | Mastra hook | Governance method | Use cases |
+|---|---|---|---|
+| **Preprocess** | `processInput()` | `enforcePreprocess()` | Injection scanning, input blocklists, input length, prompt-injection ML detection |
+| **Tool call** | `processOutputStep()` | `enforce()` | Block dangerous tools, require approval for sensitive actions, rate-limit, token budget |
+| **Postprocess** | `processOutputResult()` | `enforcePostprocess()` | Output filtering, PII redaction, sensitive-data masking, output length |
+
+When a rule blocks at any stage, the processor calls Mastra's `args.abort()`
+with a structured violation payload that flows to the agent's stream/error
+handler. The integrator's outer code can detect governance aborts via the
+abort metadata's `violations` array.
+
+When a rule returns `outcome: 'mask'` at the postprocess stage, the latest
+assistant message text is mutated in place with the SDK-computed redacted
+version — no integrator code needed.
+
+When a rule returns `outcome: 'require_approval'`, the `onApprovalRequired`
+callback fires with the `approvalId` and `pollUrl`. The integrator handles
+the async pause/resume (typically via a webhook receiver from the cloud).
+
+**Transport-agnostic.** All three lifecycle methods call the SDK's public
+`governance.enforce*()` methods, which transparently route to either the
+in-process policy engine (local mode) or the cloud HTTP API (remote mode).
+The same processor code works in both setups; only the `createGovernance()`
+config differs.
+
 ---
 
 ## Governance Cloud

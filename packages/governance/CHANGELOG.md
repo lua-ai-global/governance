@@ -1,5 +1,111 @@
 # Changelog
 
+## [0.8.0] - 2026-04-07
+
+### Added — Mastra Processor: full lifecycle coverage
+
+The `GovernanceProcessor` plugin (`governance-sdk/plugins/mastra-processor`)
+now implements three Mastra processor lifecycle methods. Previously it only
+implemented `processOutputStep` (tool-call enforcement). A single processor
+instance now covers the entire pipeline:
+
+- **`processInput()`** — runs once before the LLM is invoked. Calls
+  `governance.enforcePreprocess()` on the latest user message. This is
+  where injection scanning, input blocklists, input length, and any other
+  PRE-stage rules fire.
+- **`processOutputStep()`** — unchanged. Runs after each LLM response,
+  intercepting tool calls before execution. Calls `governance.enforce()`.
+- **`processOutputResult()`** — runs once after the agent finishes
+  generating, with the resolved final result. Calls
+  `governance.enforcePostprocess()` on the agent's response text. This is
+  where output filtering, PII redaction, and sensitive-data masking fire.
+  On `outcome: 'mask'`, the latest assistant message is mutated in place
+  with the SDK-computed `maskedText`.
+
+All three methods call the SDK's public enforce APIs, which means a single
+processor works in **both local mode** (in-process policy evaluation) and
+**remote mode** (HTTP enforce against the governance cloud). The integrator
+controls the transport via `createGovernance({ serverUrl, apiKey })`.
+
+### Added — Per-call metadata enrichment
+
+`GovernanceProcessorConfig` now accepts a `metadataProvider` callback that
+runs once per enforce invocation (preprocess, tool call, postprocess) and
+returns an object merged into `EnforcementContext.metadata`. The merged
+metadata is serialized into the cloud HTTP body and persisted on every
+audit event and approval queue entry.
+
+```typescript
+new GovernanceProcessor(gov, {
+  agentName: 'my-agent',
+  owner: 'my-team',
+  metadataProvider: (stage, args) => {
+    // For Mastra, args.requestContext is the canonical place to read
+    // per-request data (userId, channel, threadId, etc.)
+    const ctx = args.requestContext;
+    return {
+      stage,
+      userId: ctx?.get('userId'),
+      channel: ctx?.get('channel'),
+      threadId: ctx?.get('threadId'),
+    };
+  },
+});
+```
+
+A `metadata` (static, applied to every call) field is also accepted; per-call
+values from `metadataProvider` take precedence on key conflicts.
+
+### Added — Lifecycle-specific config flags
+
+- `skipPreprocess?: boolean` — bypass `processInput` enforcement entirely
+- `skipPostprocess?: boolean` — bypass `processOutputResult` enforcement entirely
+
+Both default to `false`. Useful for legacy migration paths and for replay
+flows where governance has already approved the call out-of-band.
+
+### Added — Lifecycle-specific callbacks
+
+- `onPreprocessBlocked?: (decision, message) => void` — fired when a
+  preprocess rule blocks an inbound user message
+- `onPostprocessBlocked?: (decision, output) => void` — fired when a
+  postprocess rule blocks the agent's output
+- `onApprovalRequired?: (decision, stage) => void` — fired when any stage
+  returns `outcome: require_approval`. The `stage` parameter is one of
+  `'preprocess' | 'tool_call' | 'postprocess'`
+- `onMask?: (decision, original, masked) => void` — fired when a postprocess
+  rule returns `outcome: mask`, with both the original text and the
+  SDK-computed redacted version
+
+### Added — Type exports
+
+New types exported from `governance-sdk/plugins/mastra-processor`:
+
+- `ProcessInputArgs` — Mastra `processInput` argument shape (mirror)
+- `ProcessOutputResultArgs` — Mastra `processOutputResult` argument shape (mirror)
+- `MastraOutputResult` — final generation result shape (mirror)
+- `GovernanceLifecycleArgs` — union of all argument shapes for `metadataProvider`
+- `GovernanceStage` — `'preprocess' | 'tool_call' | 'postprocess'`
+
+### Backwards compatibility
+
+This is an **additive** release. Existing consumers using only
+`processOutputStep` see no behavior change — Mastra only calls the new
+lifecycle methods if they're implemented, and the implementations are
+gated on the new `skipPreprocess` / `skipPostprocess` flags as well as
+fail-open if the agent isn't yet registered.
+
+The existing tool-call EnforcementContext now includes any
+`metadataProvider` output as well; this is additive — previously the
+metadata field was empty.
+
+### Tests
+
+14 new tests covering all new lifecycle methods, metadata threading,
+async metadataProvider promise handling, structured-content text
+extraction, mask outcome message mutation, skip flags, and the
+fail-open paths. Test count: 1201 → 1215.
+
 ## [0.5.0] - 2026-04-02
 
 ### Changed

@@ -1,8 +1,22 @@
 /**
  * governance-sdk — Native Mastra Processor
  *
- * Framework-level governance integration for Mastra agents.
- * Intercepts ALL tool calls at the pipeline level — zero per-tool config.
+ * Framework-level governance integration for Mastra agents. Implements three
+ * Mastra processor lifecycle methods so a single instance covers the full
+ * enforcement pipeline:
+ *
+ *   - processInput()        → governance.enforcePreprocess
+ *                              (user message before LLM, injection scanning)
+ *   - processOutputStep()   → governance.enforce
+ *                              (tool calls after LLM, before execution)
+ *   - processOutputResult() → governance.enforcePostprocess
+ *                              (final agent output, masking + filtering)
+ *
+ * All three call the SDK's public enforce methods, which means the same
+ * processor works in both local mode (in-process policy evaluation) and
+ * remote mode (HTTP enforce against the governance cloud) — the integrator
+ * controls this via createGovernance({ serverUrl, apiKey }).
+ *
  * Types are in mastra-processor-types.ts.
  */
 
@@ -12,7 +26,12 @@ import type { AgentRegistration } from "../types";
 import type {
   MastraProcessorInterface,
   MastraToolCallInfo,
+  MastraMessage,
+  ProcessInputArgs,
   ProcessOutputStepArgs,
+  ProcessOutputResultArgs,
+  GovernanceLifecycleArgs,
+  GovernanceStage,
   GovernanceProcessorConfig,
   GovernanceViolation,
   ProcessorStats,
@@ -26,7 +45,12 @@ export type {
   MastraAbortFn,
   MastraMessage,
   MastraStreamWriter,
+  MastraOutputResult,
+  ProcessInputArgs,
   ProcessOutputStepArgs,
+  ProcessOutputResultArgs,
+  GovernanceLifecycleArgs,
+  GovernanceStage,
   MastraProcessorInterface,
   GovernanceProcessorConfig,
   ProcessorStats,
@@ -91,7 +115,7 @@ export class GovernanceProcessor implements MastraProcessorInterface {
     const violations: GovernanceViolation[] = [];
 
     for (const toolCall of toolCalls) {
-      const decision = await this.evaluateToolCall(toolCall);
+      const decision = await this.evaluateToolCall(toolCall, args);
 
       this.stats.totalProcessed++;
       if (!this.stats.byTool[toolCall.toolName]) {
@@ -102,6 +126,11 @@ export class GovernanceProcessor implements MastraProcessorInterface {
         this.stats.totalBlocked++;
         this.stats.byTool[toolCall.toolName].blocked++;
         this.config.onBlocked?.(decision, toolCall);
+
+        // Notify approval-required separately so integrators can branch on it
+        if (decision.outcome === "require_approval") {
+          this.config.onApprovalRequired?.(decision, "tool_call");
+        }
 
         violations.push({
           toolName: toolCall.toolName,
@@ -131,20 +160,330 @@ export class GovernanceProcessor implements MastraProcessorInterface {
     }
   }
 
-  private async evaluateToolCall(toolCall: MastraToolCallInfo): Promise<EnforcementDecision> {
+  /**
+   * Mastra calls this BEFORE the LLM runs for the first time.
+   *
+   * Runs governance preprocess on the latest user message — this is where
+   * injection scanning, input blocklists, input length limits, and any
+   * other PRE-stage rules fire. Calls the SDK's public `enforcePreprocess`,
+   * which routes to either the local policy engine or the remote cloud API
+   * depending on how `createGovernance()` was configured.
+   */
+  async processInput(args: ProcessInputArgs): Promise<MastraMessage[]> {
+    if (this.config.skipPreprocess) return args.messages;
+
+    await this.ensureRegistered();
+    if (!this.agentId) return args.messages;
+
+    const userMessageText = this.extractUserText(args.messages);
+    if (!userMessageText) return args.messages;
+
+    const metadata = await this.buildMetadata("preprocess", args);
+
+    const decision = await this.governance.enforcePreprocess({
+      agentId: this.agentId,
+      agentName: this.config.agentName,
+      agentLevel: this.agentLevel,
+      action: "message_send",
+      input: { message: userMessageText },
+      metadata,
+    });
+
+    this.config.onDecision?.(decision, {
+      toolName: "__preprocess__",
+      args: { message: userMessageText },
+      toolCallId: "preprocess",
+    });
+
+    if (!decision.blocked && decision.outcome !== "warn" && decision.outcome !== "require_approval") {
+      return args.messages;
+    }
+
+    // warn → fire callback, continue
+    if (decision.outcome === "warn") {
+      this.config.onPreprocessBlocked?.(decision, userMessageText);
+      return args.messages;
+    }
+
+    // require_approval → fire approval callback, then halt
+    if (decision.outcome === "require_approval") {
+      this.config.onApprovalRequired?.(decision, "preprocess");
+    }
+
+    // block / require_approval → fire callback, halt with violation metadata
+    this.config.onPreprocessBlocked?.(decision, userMessageText);
+
+    const violation: GovernanceViolation = {
+      toolName: "__preprocess__",
+      ruleId: decision.ruleId ?? "unknown",
+      reason: decision.reason ?? "Preprocess governance policy violation",
+      decision,
+    };
+    const reason = `[GOVERNANCE] Preprocess blocked — ${decision.reason ?? "policy violation"} (rule: ${decision.ruleId ?? "unknown"})`;
+    args.abort(reason, { retry: false, metadata: { violations: [violation] } });
+    // args.abort returns `never`, but the type system doesn't know that
+    // through the optional chain. Throw to satisfy TS.
+    throw new Error(reason);
+  }
+
+  /**
+   * Mastra calls this ONCE after the agent has finished generating, with the
+   * resolved final result.
+   *
+   * Runs governance postprocess on the agent's final response text — this is
+   * where output filtering, PII redaction, sensitive-data masking, and any
+   * other POST-stage rules fire. Calls the SDK's public `enforcePostprocess`,
+   * which routes to either local or remote enforcement.
+   *
+   * On `mask` outcome, the latest assistant message text is mutated in place
+   * with the SDK-computed maskedText.
+   */
+  async processOutputResult(args: ProcessOutputResultArgs): Promise<MastraMessage[]> {
+    if (this.config.skipPostprocess) return args.messages;
+
+    // Skip if registration hasn't happened (the agent may not have made any
+    // tool calls or input was empty, so neither processInput nor
+    // processOutputStep ran). Fail-open in that case.
+    if (!this.agentId) return args.messages;
+
+    const responseText = args.result?.text ?? "";
+    if (!responseText) return args.messages;
+
+    const metadata = await this.buildMetadata("postprocess", args);
+
+    const decision = await this.governance.enforcePostprocess({
+      agentId: this.agentId,
+      agentName: this.config.agentName,
+      agentLevel: this.agentLevel,
+      action: "message_send",
+      input: { message: responseText },
+      outputText: responseText,
+      outputTokenCount: args.result?.usage?.outputTokens,
+      metadata,
+    });
+
+    this.config.onDecision?.(decision, {
+      toolName: "__postprocess__",
+      args: { message: responseText },
+      toolCallId: "postprocess",
+    });
+
+    // Allow / unknown → pass through
+    if (!decision.blocked && decision.outcome !== "warn" && decision.outcome !== "mask" && decision.outcome !== "require_approval") {
+      return args.messages;
+    }
+
+    // warn → fire callback, continue
+    if (decision.outcome === "warn") {
+      this.config.onPostprocessBlocked?.(decision, responseText);
+      return args.messages;
+    }
+
+    // mask → mutate the latest assistant message text and return.
+    // The SDK computes maskedText for us; we just substitute it.
+    if (decision.outcome === "mask") {
+      const maskedText = decision.maskedText ?? responseText;
+      this.config.onMask?.(decision, responseText, maskedText);
+      this.mutateLastAssistantMessage(args.messages, maskedText);
+      return args.messages;
+    }
+
+    // require_approval → fire approval callback, then halt
+    if (decision.outcome === "require_approval") {
+      this.config.onApprovalRequired?.(decision, "postprocess");
+    }
+
+    // block / require_approval → fire callback, halt with violation metadata
+    this.config.onPostprocessBlocked?.(decision, responseText);
+
+    const violation: GovernanceViolation = {
+      toolName: "__postprocess__",
+      ruleId: decision.ruleId ?? "unknown",
+      reason: decision.reason ?? "Postprocess governance policy violation",
+      decision,
+    };
+    const reason = `[GOVERNANCE] Postprocess blocked — ${decision.reason ?? "policy violation"} (rule: ${decision.ruleId ?? "unknown"})`;
+    args.abort(reason, { retry: false, metadata: { violations: [violation] } });
+    throw new Error(reason);
+  }
+
+  /**
+   * Build the EnforcementContext for a tool call. Includes the per-call
+   * metadata produced by `config.metadataProvider` (if set), merged with
+   * the static `config.metadata`. Per-call values win on conflict.
+   */
+  private async evaluateToolCall(
+    toolCall: MastraToolCallInfo,
+    args: ProcessOutputStepArgs,
+  ): Promise<EnforcementDecision> {
     const action = this.config.actionMapper
       ? this.config.actionMapper(toolCall.toolName)
       : "tool_call" as PolicyAction;
+
+    const metadata = await this.buildMetadata("tool_call", args);
 
     const ctx: EnforcementContext = {
       agentId: this.agentId!,
       agentName: this.config.agentName,
       agentLevel: this.agentLevel,
-      action, tool: toolCall.toolName,
+      action,
+      tool: toolCall.toolName,
       input: toolCall.args as Record<string, unknown> | undefined,
       sessionTokensUsed: this.config.sessionTokenTracker?.(),
+      ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
     };
     return this.governance.enforce(ctx);
+  }
+
+  /**
+   * Merge static config.metadata with the per-call metadataProvider output.
+   * Per-call values take precedence on key conflicts.
+   */
+  private async buildMetadata(
+    stage: GovernanceStage,
+    args: GovernanceLifecycleArgs,
+  ): Promise<Record<string, unknown> | undefined> {
+    const staticMeta = this.config.metadata;
+    const perCallMeta = this.config.metadataProvider
+      ? await this.config.metadataProvider(stage, args)
+      : undefined;
+
+    if (!staticMeta && !perCallMeta) return undefined;
+    return { ...(staticMeta ?? {}), ...(perCallMeta ?? {}) };
+  }
+
+  /**
+   * Pull the latest user-role message text from a Mastra message list.
+   * Handles both string content and structured (array of parts) content
+   * shapes. Returns an empty string if no user message is found.
+   */
+  private extractUserText(messages: MastraMessage[]): string {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== "user") continue;
+      return this.messageContentToText(msg.content);
+    }
+    return "";
+  }
+
+  /**
+   * Convert a Mastra message content payload to plain text.
+   *
+   * Mastra has several content shapes depending on which API path the
+   * message came from:
+   *
+   *   1. Plain string (legacy / simple agents):
+   *      content: "hello"
+   *
+   *   2. Top-level array of parts (Vercel AI SDK / UserModelMessage shape):
+   *      content: [{ type: 'text', text: 'hello' }, { type: 'image', ... }]
+   *
+   *   3. Mastra DB format 2 — an object with `parts` AND a flat `content` string:
+   *      content: { format: 2, parts: [{ type: 'text', text: 'hello' }], content: 'hello' }
+   *      This is what `agent.stream()` and `agent.generate()` see when reading
+   *      messages back from the memory store.
+   *
+   * We handle all three. For the object form we prefer `parts[]` so that
+   * structured multi-modal content is preserved correctly, falling back to
+   * the flat `content` string if `parts` is missing.
+   */
+  private messageContentToText(content: unknown): string {
+    if (typeof content === "string") return content;
+
+    // Top-level array of parts (shape #2)
+    if (Array.isArray(content)) {
+      return this.partsToText(content);
+    }
+
+    // Mastra DB format 2 object (shape #3)
+    if (content && typeof content === "object") {
+      const obj = content as Record<string, unknown>;
+      if (Array.isArray(obj.parts)) {
+        const fromParts = this.partsToText(obj.parts);
+        if (fromParts) return fromParts;
+      }
+      if (typeof obj.content === "string") {
+        return obj.content;
+      }
+      // Some shapes nest text under `text`
+      if (typeof obj.text === "string") {
+        return obj.text;
+      }
+    }
+
+    return "";
+  }
+
+  /** Extract text from an array of message parts (shape #2 or shape #3.parts). */
+  private partsToText(parts: unknown[]): string {
+    return parts
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part && typeof part === "object" && "type" in part) {
+          const p = part as { type: string; text?: string };
+          if (p.type === "text") return p.text ?? "";
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  /**
+   * Mutate the latest assistant-role message in place to use new text.
+   * Used by the postprocess `mask` outcome to substitute redacted output
+   * without requiring the integrator to handle masking themselves.
+   *
+   * Handles all three message content shapes (see messageContentToText).
+   */
+  private mutateLastAssistantMessage(messages: MastraMessage[], newText: string): void {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== "assistant") continue;
+
+      // Shape #1: Plain string content
+      if (typeof msg.content === "string") {
+        msg.content = newText;
+        return;
+      }
+
+      // Shape #2: Top-level array of parts
+      if (Array.isArray(msg.content)) {
+        this.replaceTextInParts(msg.content as unknown[], newText);
+        return;
+      }
+
+      // Shape #3: Mastra DB format 2 object — replace BOTH parts text and the
+      // flat `content` string field so downstream consumers see the masked text
+      // regardless of which they read.
+      if (msg.content && typeof msg.content === "object") {
+        const obj = msg.content as Record<string, unknown>;
+        if (Array.isArray(obj.parts)) {
+          this.replaceTextInParts(obj.parts as unknown[], newText);
+        }
+        if (typeof obj.content === "string") {
+          obj.content = newText;
+        }
+        if (typeof obj.text === "string") {
+          obj.text = newText;
+        }
+      }
+      return;
+    }
+  }
+
+  /**
+   * Replace the first text part in an array with new text. If no text part
+   * exists, append one. Mutates the array in place.
+   */
+  private replaceTextInParts(parts: unknown[], newText: string): void {
+    for (const part of parts) {
+      if (part && typeof part === "object" && "type" in part && (part as { type: string }).type === "text") {
+        (part as unknown as { text: string }).text = newText;
+        return;
+      }
+    }
+    parts.push({ type: "text", text: newText });
   }
 
   getAgentId(): string | null { return this.agentId; }

@@ -6,6 +6,12 @@
  *
  * Updated for Mastra v1.10+ (March 2026): ProcessOutputStepArgs
  * inherits from ProcessorMessageContext → ProcessorContext.
+ *
+ * Updated for governance-sdk 0.8.0: adds ProcessInputArgs and
+ * ProcessOutputResultArgs mirrors so the processor can implement
+ * processInput() (preprocess on user messages) and processOutputResult()
+ * (postprocess on the agent's final output) in addition to the existing
+ * processOutputStep() (tool-call enforcement).
  */
 
 import type { EnforcementDecision, PolicyAction } from "../policy";
@@ -50,6 +56,32 @@ export interface MastraStreamWriter {
 }
 
 /**
+ * Stage label passed to GovernanceProcessorConfig.metadataProvider.
+ * Lets a single metadata-building function distinguish where it was called from.
+ */
+export type GovernanceStage = "preprocess" | "tool_call" | "postprocess";
+
+/**
+ * Resolved generation result passed to processOutputResult.
+ * Mirror of Mastra's OutputResult.
+ */
+export interface MastraOutputResult {
+  /** The accumulated text from all steps */
+  text: string;
+  /** Token usage (cumulative across all steps) */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    [key: string]: unknown;
+  };
+  /** Why the generation finished (e.g. 'stop', 'tool-calls', 'length') */
+  finishReason?: string;
+  /** All LLM step results */
+  steps?: unknown[];
+}
+
+/**
  * Mastra ProcessOutputStepArgs — extends ProcessorMessageContext.
  *
  * Required fields come from the Mastra ProcessorContext and
@@ -79,7 +111,7 @@ export interface ProcessOutputStepArgs {
   /** Cross-step processor state */
   state: Record<string, unknown>;
   /** Per-request execution metadata — from ProcessorContext (optional) */
-  requestContext?: Record<string, unknown>;
+  requestContext?: unknown;
   /** Stream writer for emitting custom data-* chunks (optional, from ProcessorContext) */
   writer?: MastraStreamWriter;
   /** Abort signal from parent agent execution (optional, from ProcessorContext) */
@@ -87,11 +119,78 @@ export interface ProcessOutputStepArgs {
 }
 
 /**
+ * Mastra ProcessInputArgs — runs once BEFORE the LLM is called for the
+ * first time. This is where preprocess governance fires (injection scanning,
+ * input blocklists, input length, prompt-injection ML detection).
+ *
+ * Mirror of Mastra's ProcessInputArgs from @mastra/core/processors.
+ */
+export interface ProcessInputArgs {
+  /** All messages being processed (including the latest user input) */
+  messages: MastraMessage[];
+  /** Message list instance for message management */
+  messageList: unknown;
+  /** All system messages (instructions, memory) — read/modify access */
+  systemMessages: MastraMessage[];
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+  /** Retry count — from ProcessorContext */
+  retryCount: number;
+  /** Abort function — from ProcessorContext */
+  abort: MastraAbortFn;
+  /** Per-request execution metadata — from ProcessorContext (optional) */
+  requestContext?: unknown;
+  /** Stream writer for emitting custom data-* chunks (optional, from ProcessorContext) */
+  writer?: MastraStreamWriter;
+  /** Abort signal from parent agent execution (optional, from ProcessorContext) */
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Mastra ProcessOutputResultArgs — runs once AFTER the agent has finished
+ * generating, with the resolved output result. This is where postprocess
+ * governance fires (output filtering, PII redaction, sensitive-data masking).
+ *
+ * Mirror of Mastra's ProcessOutputResultArgs from @mastra/core/processors.
+ */
+export interface ProcessOutputResultArgs {
+  /** All messages including the final assistant response */
+  messages: MastraMessage[];
+  /** Message list instance for message management */
+  messageList: unknown;
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+  /** Retry count — from ProcessorContext */
+  retryCount: number;
+  /** Abort function — from ProcessorContext */
+  abort: MastraAbortFn;
+  /** Resolved generation result (final text, usage, finishReason, steps) */
+  result: MastraOutputResult;
+  /** Per-request execution metadata — from ProcessorContext (optional) */
+  requestContext?: unknown;
+  /** Stream writer for emitting custom data-* chunks (optional, from ProcessorContext) */
+  writer?: MastraStreamWriter;
+  /** Abort signal from parent agent execution (optional, from ProcessorContext) */
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Union of all argument shapes a `metadataProvider` callback may receive.
+ * The `stage` parameter tells the callback which lifecycle method called it.
+ */
+export type GovernanceLifecycleArgs =
+  | ProcessInputArgs
+  | ProcessOutputStepArgs
+  | ProcessOutputResultArgs;
+
+/**
  * Mastra Processor interface — simplified for governance use.
  *
- * The real Mastra Processor has additional optional lifecycle methods:
- * processInput, processInputStep, processOutputStream, processOutputResult.
- * We only implement processOutputStep for governance enforcement.
+ * As of governance-sdk 0.8.0, the GovernanceProcessor implements three
+ * Mastra lifecycle methods (processInput, processOutputStep, processOutputResult).
+ * Mastra also supports processInputStep and processOutputStream — those are
+ * not implemented yet (tracked for a future release).
+ *
  * Also supports __registerMastra (not mirrored here).
  */
 export interface MastraProcessorInterface {
@@ -99,7 +198,12 @@ export interface MastraProcessorInterface {
   readonly name?: string;
   readonly description?: string;
   processorIndex?: number;
+  /** Preprocess: runs once before the LLM is called */
+  processInput?(args: ProcessInputArgs): Promise<unknown> | unknown;
+  /** Per-step: runs after each LLM response, before tool execution */
   processOutputStep(args: ProcessOutputStepArgs): Promise<unknown> | unknown;
+  /** Postprocess: runs once at the end, with the resolved output */
+  processOutputResult?(args: ProcessOutputResultArgs): Promise<unknown> | unknown;
 }
 
 // ─── Processor Configuration ──────────────────────────────────
@@ -116,7 +220,13 @@ export interface GovernanceProcessorConfig {
   hasObservability?: boolean;
   hasAuditLog?: boolean;
   permissions?: Record<string, unknown>;
+  /**
+   * Static metadata merged into every enforce call's `EnforcementContext.metadata`.
+   * Per-call values from `metadataProvider` take precedence on key conflicts.
+   */
   metadata?: Record<string, unknown>;
+
+  // ─── Tool-call (processOutputStep) — existing ────────────────
   onBlocked?: (decision: EnforcementDecision, toolCall: MastraToolCallInfo) => void;
   onDecision?: (decision: EnforcementDecision, toolCall: MastraToolCallInfo) => void;
   actionMapper?: (toolName: string) => PolicyAction;
@@ -125,6 +235,65 @@ export interface GovernanceProcessorConfig {
   abortMessage?: (decision: EnforcementDecision, toolCall: MastraToolCallInfo) => string;
   retryOnBlock?: boolean;
   maxRetries?: number;
+
+  // ─── Per-call metadata enrichment — 0.8.0 ────────────────────
+  /**
+   * Per-call metadata enrichment. Called once per enforce invocation
+   * (preprocess, tool call, postprocess) and the returned object is
+   * merged into the `EnforcementContext.metadata` field that the SDK
+   * sends to the policy engine and the cloud audit log.
+   *
+   * For Mastra integrators, the `args.requestContext` field is the
+   * canonical place to read per-request data (userId, channel, threadId,
+   * etc.) — Mastra's RequestContext is plumbed through every processor
+   * lifecycle method.
+   *
+   * The promise return is supported because some integrators may need
+   * to look up routing data from a service. Avoid anything slow here —
+   * this runs synchronously inside the agent execution path.
+   */
+  metadataProvider?: (
+    stage: GovernanceStage,
+    args: GovernanceLifecycleArgs,
+  ) => Record<string, unknown> | Promise<Record<string, unknown>>;
+
+  // ─── Preprocess (processInput) — 0.8.0 ───────────────────────
+  /**
+   * Skip preprocess enforcement entirely. Default: false.
+   * Useful for legacy migration paths or for replay flows where
+   * governance has already approved the call out-of-band.
+   */
+  skipPreprocess?: boolean;
+  /**
+   * Fired when a preprocess rule blocks an inbound user message.
+   * The second arg is the user message text that was scanned.
+   */
+  onPreprocessBlocked?: (decision: EnforcementDecision, message: string) => void;
+
+  // ─── Postprocess (processOutputResult) — 0.8.0 ───────────────
+  /**
+   * Skip postprocess enforcement entirely. Default: false.
+   */
+  skipPostprocess?: boolean;
+  /**
+   * Fired when a postprocess rule blocks the agent's output.
+   * The second arg is the agent's response text that was scanned.
+   */
+  onPostprocessBlocked?: (decision: EnforcementDecision, output: string) => void;
+
+  // ─── Cross-stage callbacks — 0.8.0 ───────────────────────────
+  /**
+   * Fired when an enforcement decision returns `outcome: require_approval`
+   * at any stage. The integrator typically uses this to surface the approval
+   * payload (`decision.approval`, `decision.approvalId`) to its caller.
+   */
+  onApprovalRequired?: (decision: EnforcementDecision, stage: GovernanceStage) => void;
+  /**
+   * Fired when a postprocess rule returns `outcome: mask` and the SDK
+   * computed a redacted version of the output. The processor mutates the
+   * latest assistant message in place AFTER this callback fires.
+   */
+  onMask?: (decision: EnforcementDecision, original: string, masked: string) => void;
 }
 
 // ─── Processor Stats ──────────────────────────────────────────
