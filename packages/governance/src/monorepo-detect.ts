@@ -34,13 +34,19 @@ const AGENT_DEP_PATTERNS: Array<{ pattern: RegExp; framework: string }> = [
   { pattern: /^openai$/, framework: "openai" },
 ];
 
-/** Secondary deps that confirm an agent (not framework-specific) */
+/**
+ * Secondary deps that confirm an agent (not framework-specific).
+ *
+ * These should be deps that ONLY appear in actual agents — not generic
+ * libraries. zod was previously here but it's in every TypeScript
+ * project, so it produced false positives for any package that ships
+ * with schema validation.
+ */
 const AGENT_SIGNAL_DEPS = [
   "governance-sdk",
   "@langchain/openai",
   "@langchain/anthropic",
   "llamaindex",
-  "zod",
 ];
 
 /**
@@ -58,6 +64,15 @@ export function findPackageJsonPaths(allFiles: string[]): string[] {
 /**
  * Detect agent roots from package.json contents.
  * Call this with a map of package.json path → content.
+ *
+ * A package is only counted as an agent root when its framework
+ * dependency (e.g. `lua-cli`, `@mastra/core`) appears in `dependencies`
+ * — not in `peerDependencies` or `devDependencies` alone. Support
+ * libraries that *plug into* a framework (skill packages, tool kits,
+ * shared utilities) declare the framework as a peer dep so they don't
+ * pin a specific version, while actual agents ship with it as a runtime
+ * dep. This single distinction filters out the "we found 18 agents in
+ * a monorepo that really only has 7" class of false positives.
  */
 export function detectAgentRoots(
   packageJsonContents: Map<string, string>,
@@ -70,18 +85,17 @@ export function detectAgentRoots(
         name?: string;
         dependencies?: Record<string, string>;
         devDependencies?: Record<string, string>;
+        peerDependencies?: Record<string, string>;
       };
 
-      const allDeps = [
-        ...Object.keys(pkg.dependencies ?? {}),
-        ...Object.keys(pkg.devDependencies ?? {}),
-      ];
+      // Only runtime `dependencies` are considered for the agent
+      // signal. peer/dev deps indicate a library, not an agent.
+      const runtimeDeps = Object.keys(pkg.dependencies ?? {});
 
-      // Check for agent framework deps
       let framework: string | null = null;
       const agentDeps: string[] = [];
 
-      for (const dep of allDeps) {
+      for (const dep of runtimeDeps) {
         for (const pattern of AGENT_DEP_PATTERNS) {
           if (pattern.pattern.test(dep)) {
             if (!framework) framework = pattern.framework;
@@ -93,7 +107,7 @@ export function detectAgentRoots(
         }
       }
 
-      // Must have at least one agent-related dependency
+      // Must have at least one runtime agent-related dependency
       if (agentDeps.length === 0) continue;
 
       // Derive path — strip "/package.json" to get directory
@@ -101,7 +115,17 @@ export function detectAgentRoots(
         ? "."
         : pkgPath.replace(/\/package\.json$/, "");
 
-      const name = pkg.name ?? dir.split("/").pop() ?? dir;
+      // Display name: prefer the unscoped portion of `@scope/name` so
+      // monorepo siblings render as "the-watcher" not "@lua-agents/the-watcher".
+      // Then strip a trailing `-agent` suffix because scaffolding tools
+      // like `lua init` append it to every package name and it adds no
+      // information ("luna-agent" → "luna"). Falls back to the directory
+      // basename when no name is set.
+      const rawName = pkg.name ?? dir.split("/").pop() ?? dir;
+      const unscoped = rawName.startsWith("@") && rawName.includes("/")
+        ? rawName.slice(rawName.indexOf("/") + 1)
+        : rawName;
+      const name = unscoped.replace(/-agent$/, "") || unscoped;
 
       roots.push({ path: dir, name, framework, agentDeps });
     } catch {

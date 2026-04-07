@@ -1,6 +1,6 @@
 {
   "name": "governance-sdk",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "AI Agent Governance for TypeScript — policy enforcement, scoring, compliance, and audit for AI agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -68,6 +68,10 @@
     "./repo-patterns": {
       "types": "./dist/repo-patterns.d.ts",
       "import": "./dist/repo-patterns.js"
+    },
+    "./scanner-plugins": {
+      "types": "./dist/scanner-plugins/types.d.ts",
+      "import": "./dist/scanner-plugins/types.js"
     },
     "./policy-compose": {
       "types": "./dist/policy-compose.d.ts",

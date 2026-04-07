@@ -472,8 +472,15 @@ export type { GovernanceMetrics, MetricName, TimingName, MetricLabels, MetricsSn
 export type { GovernanceEmitter, GovernanceEvent, GovernanceEventType, GovernanceEventHandler } from "./events.js";
 export { computeSignals, computeBehavioralAdjustments, applyBehavioralAdjustments } from "./behavioral-scorer.js";
 export type { BehavioralInput, BehavioralAdjustment, BehavioralAssessment, BehavioralSignals } from "./behavioral-scorer.js";
-export { scanRepoContents, SCAN_GLOBS, SCAN_IGNORE } from "./repo-patterns.js";
-export type { CapabilityDetection, RepoScanResult } from "./repo-patterns.js";
+export { scanRepoContents, scanRepoContentsWithPlugins, SCAN_GLOBS, SCAN_IGNORE } from "./repo-patterns.js";
+export type { CapabilityDetection, RepoScanResult, ScanWithPluginsOptions } from "./repo-patterns.js";
+export type {
+  ScannerPlugin,
+  ScannerImport,
+  FileResolver,
+  ResolvedSource,
+  ExpandToolsContext,
+} from "./scanner-plugins/types.js";
 export { findPackageJsonPaths, detectAgentRoots } from "./monorepo-detect.js";
 export type { AgentRoot } from "./monorepo-detect.js";
 export { RemoteEnforcementError } from "./remote-enforce.js";

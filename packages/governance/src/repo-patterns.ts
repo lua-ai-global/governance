@@ -5,6 +5,9 @@
  * Feed it file contents, get capability detection results.
  */
 
+import { extractToolImports, parseImports, toolNamesFromImport } from "./import-lexer";
+import type { ScannerPlugin, FileResolver } from "./scanner-plugins/types.js";
+
 /** Detection result for a single capability */
 export interface CapabilityDetection {
   capability: "hasAuth" | "hasGuardrails" | "hasObservability" | "hasAuditLog";
@@ -164,19 +167,58 @@ function detectFramework(fileContents: Map<string, string>): string | null {
   return null;
 }
 
-/** Extract tool names from source code. */
-function extractTools(fileContents: Map<string, string>, framework: string | null): string[] {
+/**
+ * Extract tool names from source code using definition-based patterns
+ * only. Looks for inline tool declarations like `createTool("name")`,
+ * `implements LuaTool`, and Mastra/Vercel factory calls. Does NOT walk
+ * imports — that's the job of import-based extraction or scanner
+ * plugins, which can be added on top of this base pass.
+ */
+function extractInlineTools(
+  fileContents: Map<string, string>,
+  framework: string | null,
+): string[] {
   const tools = new Set<string>();
-  const patterns = framework === "lua"
+  const definitionPatterns = framework === "lua"
     ? [LUA_TOOL_NAME_PATTERN, ...GENERIC_TOOL_PATTERNS]
     : GENERIC_TOOL_PATTERNS;
 
   for (const [, content] of fileContents) {
-    for (const pattern of patterns) {
+    for (const pattern of definitionPatterns) {
       pattern.lastIndex = 0;
       let match;
       while ((match = pattern.exec(content)) !== null) {
         const name = match[1];
+        if (isValidToolName(name)) tools.add(name);
+      }
+    }
+  }
+  return [...tools];
+}
+
+/**
+ * Extract tool names from source code.
+ *
+ * Combines two strategies:
+ *   1. Definition matching — inline tool declarations (see extractInlineTools)
+ *   2. Import matching — framework-agnostic import lexer that finds tools
+ *      brought in from shared packages (e.g. `import dealSkill from
+ *      "@lua-agents/crm/skills/dealSkill"`). This is a fallback for repos
+ *      that don't have a scanner plugin — it's a heuristic and will pick
+ *      up skill *containers* as if they were tools. Scanner plugins give
+ *      precise results, so prefer `scanRepoContentsWithPlugins` when a
+ *      plugin is available for the repo's framework.
+ *
+ * Both strategies run on every scan regardless of framework — a repo may
+ * mix inline definitions with imported tool packages, and we want both.
+ */
+function extractTools(fileContents: Map<string, string>, framework: string | null): string[] {
+  const tools = new Set<string>(extractInlineTools(fileContents, framework));
+
+  for (const [, content] of fileContents) {
+    // Strategy 2: imported tools from shared packages
+    for (const imp of extractToolImports(content)) {
+      for (const name of toolNamesFromImport(imp)) {
         if (isValidToolName(name)) tools.add(name);
       }
     }
@@ -220,7 +262,13 @@ function extractDeps(packageJson: string): string[] {
 
 /**
  * Scan file contents for agent capabilities.
- * Feed this a Map of filePath → fileContent.
+ *
+ * Feed this a Map of filePath → fileContent. Returns a synchronous
+ * scan result using only the in-memory file contents.
+ *
+ * For framework-aware skill/tool container expansion (e.g. Lua skills
+ * that bundle multiple tools), use `scanRepoContentsWithPlugins` instead
+ * and pass the relevant scanner plugins plus an async file resolver.
  */
 export function scanRepoContents(fileContents: Map<string, string>): RepoScanResult {
   const auth = scoreCapability(fileContents, AUTH_PATTERNS);
@@ -245,6 +293,103 @@ export function scanRepoContents(fileContents: Map<string, string>): RepoScanRes
     dependencies: deps,
     scannedFiles: fileContents.size,
   };
+}
+
+/** Options for plugin-aware scanning. */
+export interface ScanWithPluginsOptions {
+  /** Framework-specific scanner plugins. Applied in order. */
+  plugins: ScannerPlugin[];
+  /**
+   * Caller-provided file resolver. Given an import specifier, return
+   * the source code of the resolved module, or null if unreachable.
+   * The resolver is responsible for any I/O — the SDK stays zero-I/O.
+   */
+  resolveFile: FileResolver;
+  /**
+   * Max number of unique specifiers to resolve per scan. Guards against
+   * accidental recursion into enormous dependency graphs. Default: 200.
+   */
+  maxResolves?: number;
+}
+
+/**
+ * Plugin-aware scan. Performs the same capability detection as
+ * `scanRepoContents` and then expands any framework-specific tool
+ * containers (e.g. a skill package that bundles several tools) into
+ * their constituent tool names by handing the import off to a matching
+ * plugin along with a shared caller-provided file resolver.
+ *
+ * Only the first plugin that claims an import is used for expansion —
+ * plugins are treated as ordered by caller preference. A plugin's
+ * `detectFramework` hook (when present) gates whether its expansion
+ * runs at all for the current repo.
+ *
+ * The scanner maintains a single `visited` set and `remainingBudget`
+ * across the whole scan, so plugins that walk relative imports won't
+ * double-resolve the same file and won't run unbounded I/O.
+ */
+export async function scanRepoContentsWithPlugins(
+  fileContents: Map<string, string>,
+  options: ScanWithPluginsOptions,
+): Promise<RepoScanResult> {
+  const base = scanRepoContents(fileContents);
+
+  const activePlugins = options.plugins.filter(
+    (p) => !p.detectFramework || p.detectFramework(fileContents),
+  );
+  if (activePlugins.length === 0) return base;
+
+  // When a plugin is active, it knows the framework's tool semantics
+  // better than the generic import-based heuristic. Start from only the
+  // inline-definition tools (precise) and let the plugin add the rest
+  // via expansion. The generic import fallback would otherwise pollute
+  // the result with skill *container* names and type imports.
+  const tools = new Set<string>(extractInlineTools(fileContents, base.framework));
+
+  const maxResolves = options.maxResolves ?? 200;
+  const visited = new Set<string>();
+  const remainingBudget = { value: maxResolves };
+  const resolvedSpecifiers = new Set<string>();
+
+  for (const [, content] of fileContents) {
+    for (const imp of parseImports(content)) {
+      if (remainingBudget.value <= 0) break;
+      if (resolvedSpecifiers.has(imp.specifier)) continue;
+      const plugin = activePlugins.find((p) => p.ownsImport(imp));
+      if (!plugin) continue;
+
+      resolvedSpecifiers.add(imp.specifier);
+      remainingBudget.value -= 1;
+
+      let resolved: Awaited<ReturnType<FileResolver>>;
+      try {
+        resolved = await options.resolveFile(imp.specifier);
+      } catch {
+        resolved = null;
+      }
+      if (!resolved) continue;
+      if (visited.has(resolved.path)) continue;
+      visited.add(resolved.path);
+
+      let expanded: string[];
+      try {
+        expanded = await plugin.expandTools(resolved.content, {
+          fromPath: resolved.path,
+          resolve: options.resolveFile,
+          visited,
+          remainingBudget,
+        });
+      } catch {
+        expanded = [];
+      }
+
+      for (const name of expanded) {
+        if (isValidToolName(name)) tools.add(name);
+      }
+    }
+  }
+
+  return { ...base, tools: [...tools] };
 }
 
 /** Files worth scanning — skip node_modules, dist, tests, assets. */
