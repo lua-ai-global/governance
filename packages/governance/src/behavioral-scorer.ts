@@ -70,6 +70,21 @@ export interface BehavioralSignals {
 const MAX_ADJUSTMENT = 20;
 const MIN_ADJUSTMENT = -20;
 
+/**
+ * Meta/lifecycle events that describe agent state changes, not runtime behavior.
+ * These are excluded from behavioral signals — registering an agent does not
+ * demonstrate observability, governance enforcement, or operational activity.
+ */
+const META_EVENT_TYPES = new Set<string>([
+  "agent_registered",
+  "agent_updated",
+  "agent_deleted",
+]);
+
+function isBehavioralEvent(e: AuditEvent): boolean {
+  return !META_EVENT_TYPES.has(e.eventType);
+}
+
 function clampAdj(v: number): number {
   return Math.max(MIN_ADJUSTMENT, Math.min(MAX_ADJUSTMENT, Math.round(v)));
 }
@@ -77,9 +92,12 @@ function clampAdj(v: number): number {
 /**
  * Extract behavioral signals from audit events.
  * Uses recency-weighted block rate: recent events count more than old ones.
+ * Meta events (agent_registered, agent_updated, agent_deleted) are excluded —
+ * they describe state changes, not runtime behavior.
  */
 export function computeSignals(input: BehavioralInput): BehavioralSignals {
-  const { events, declaredTools, config } = input;
+  const { declaredTools, config } = input;
+  const events = input.events.filter(isBehavioralEvent);
   const windowSize = config?.windowSize ?? 200;
   const recencyBias = config?.recencyBias ?? 0.7;
 
