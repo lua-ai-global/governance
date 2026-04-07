@@ -209,6 +209,13 @@ export interface MastraProcessorInterface {
 // ─── Processor Configuration ──────────────────────────────────
 
 export interface GovernanceProcessorConfig {
+  /**
+   * Optional caller-supplied agent id. When set, the processor will
+   * register with this exact id so the runtime record matches a
+   * pre-existing dashboard-scanned record (e.g. Lua's `agent.agentId`
+   * from `lua.skill.yaml`). When omitted, the SDK generates a UUID.
+   */
+  agentId?: string;
   agentName: string;
   owner: string;
   framework?: AgentFramework;

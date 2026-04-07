@@ -177,7 +177,10 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       return remote.register(input);
     }
 
-    const id = crypto.randomUUID();
+    // Honor a caller-supplied id when present (e.g. binding to a Lua
+    // agent's canonical agentId from lua.skill.yaml so the dashboard
+    // record uses the same id the runtime will send to enforce()).
+    const id = input.id ?? crypto.randomUUID();
     const assessment = assessAgent(id, input);
 
     // Persist capability booleans in metadata so re-scoring can reconstruct them

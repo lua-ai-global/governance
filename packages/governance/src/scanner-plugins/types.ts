@@ -131,4 +131,23 @@ export interface ScannerPlugin {
    * that returns true wins. When omitted, the plugin is always applied.
    */
   detectFramework?(fileContents: Map<string, string>): boolean;
+
+  /**
+   * Optional: extract framework-specific metadata from the scanned
+   * files. Used to surface canonical identifiers, config values, or
+   * any other structured data the framework's manifest carries that
+   * the generic scanner can't see.
+   *
+   * The most important field by convention is `externalId` — when set,
+   * callers (e.g. governance-web's connect-repo route) use it as the
+   * agent's canonical id at registration time so the dashboard record
+   * matches whatever id the runtime will pass to `enforce()`. For Lua
+   * this is `agent.agentId` from `lua.skill.yaml`.
+   *
+   * Plugins may also surface other framework-known fields here. The
+   * scanner doesn't interpret them — it just merges into the result.
+   */
+  extractMetadata?(
+    fileContents: Map<string, string>,
+  ): Promise<Record<string, unknown> | null> | Record<string, unknown> | null;
 }

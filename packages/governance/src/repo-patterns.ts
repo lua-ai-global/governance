@@ -24,6 +24,18 @@ export interface RepoScanResult {
   channels: string[];
   dependencies: string[];
   scannedFiles: number;
+  /**
+   * Framework-specific metadata extracted by a scanner plugin (e.g. the
+   * Lua plugin pulling `agent.agentId` out of `lua.skill.yaml`). Always
+   * undefined for plain `scanRepoContents` calls; populated by
+   * `scanRepoContentsWithPlugins` when a plugin's `extractMetadata`
+   * returns a value.
+   *
+   * The most important convention key is `externalId` — when present,
+   * callers should use it as the agent's canonical id at registration
+   * time so the dashboard record matches the runtime's enforce calls.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 interface PatternDef {
@@ -389,7 +401,29 @@ export async function scanRepoContentsWithPlugins(
     }
   }
 
-  return { ...base, tools: [...tools] };
+  // Collect framework-specific metadata from active plugins. Plugins are
+  // merged in registration order — later plugins overwrite earlier keys
+  // for the same field, but in practice only one plugin should claim a
+  // given repo (gated by detectFramework) so collisions are rare.
+  let metadata: Record<string, unknown> | undefined;
+  for (const plugin of activePlugins) {
+    if (!plugin.extractMetadata) continue;
+    let extracted: Record<string, unknown> | null;
+    try {
+      extracted = await plugin.extractMetadata(fileContents);
+    } catch {
+      extracted = null;
+    }
+    if (extracted) {
+      metadata = { ...(metadata ?? {}), ...extracted };
+    }
+  }
+
+  return {
+    ...base,
+    tools: [...tools],
+    ...(metadata ? { metadata } : {}),
+  };
 }
 
 /** Files worth scanning — skip node_modules, dist, tests, assets. */

@@ -85,6 +85,11 @@ export class GovernanceProcessor implements MastraProcessorInterface {
 
   private async doRegister(): Promise<void> {
     const registration: AgentRegistration = {
+      // Pass through the caller-supplied id when present so the runtime
+      // record binds to a pre-existing dashboard record (e.g. Lua's
+      // canonical agentId). Without this, the SDK would generate a new
+      // UUID on first register and create a duplicate row.
+      id: this.config.agentId,
       name: this.config.agentName,
       framework: this.config.framework ?? "mastra",
       owner: this.config.owner,

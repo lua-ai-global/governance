@@ -64,7 +64,7 @@
   },
   "homepage": "https://heygovernance.ai",
   "peerDependencies": {
-    "governance-sdk": ">=0.4.0"
+    "governance-sdk": "^0.8.2"
   },
   "peerDependenciesMeta": {
     "governance-sdk": {

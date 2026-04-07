@@ -73,6 +73,14 @@ export interface GovernanceAssessment {
 
 /** Agent registration input */
 export interface AgentRegistration {
+  /**
+   * Optional caller-supplied agent id. When omitted, register() generates
+   * a UUID. Provide this when binding to an existing canonical identity
+   * — e.g. a Lua agent's `agent.agentId` from `lua.skill.yaml` — so the
+   * dashboard-registered record matches the id the runtime will pass to
+   * `enforce()`. The id must be unique within the org's storage.
+   */
+  id?: string;
   name: string;
   framework: AgentFramework;
   description?: string;
