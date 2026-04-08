@@ -5,7 +5,7 @@
  * Feed it file contents, get capability detection results.
  */
 
-import { extractToolImports, parseImports, toolNamesFromImport } from "./import-lexer";
+import { extractToolImports, parseImports, toolNamesFromImport } from "./import-lexer.js";
 import type { ScannerPlugin, FileResolver } from "./scanner-plugins/types.js";
 
 /** Detection result for a single capability */
