@@ -142,6 +142,46 @@ export function requireLevel(minLevel: number): PolicyRule {
 }
 
 /**
+ * Require a cryptographically signed Ed25519 identity on every matching
+ * action. The host (API layer) must verify the signature against its cert
+ * vault BEFORE calling enforce() and set `ctx.identityVerified` and
+ * `ctx.identityCapabilityMatch` accordingly.
+ *
+ * This is the one-click "agents must prove who they are" policy. Pairs with
+ * governance-sdk/agent-identity-ed25519 for keygen + cert signing and with
+ * a host cert vault for authoritative lookups.
+ *
+ * @param opts.enforceCapabilityBinding — default true. When on, also blocks
+ *   tool calls where the tool is not listed in the verified cert's
+ *   capabilities. Set to false for identity-only enforcement.
+ */
+export function requireSignedIdentity(
+  opts: { enforceCapabilityBinding?: boolean; reason?: string } = {},
+): PolicyRule {
+  const enforceCapabilityBinding = opts.enforceCapabilityBinding !== false;
+  return {
+    id: "require-signed-identity",
+    name: enforceCapabilityBinding
+      ? "Require signed identity + capability binding"
+      : "Require signed identity",
+    condition: {
+      type: "require_signed_identity",
+      params: { enforceCapabilityBinding },
+    },
+    outcome: "block",
+    reason:
+      opts.reason ??
+      "Agent did not present a valid signed identity for this action",
+    // Priority 950 — just below kill_switch (999) so identity is verified
+    // before almost everything else. Unsigned calls fail fast, before
+    // wasting cycles on injection detection or resource checks.
+    priority: 950,
+    enabled: true,
+    stage: "process",
+  };
+}
+
+/**
  * Require a tool to be preceded by other tools in the session.
  * Example: requireSequence("delete_record", ["backup_record"])
  */

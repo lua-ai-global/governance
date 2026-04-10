@@ -76,6 +76,40 @@ export function getBuiltinConditions(
         return !requiredPrior.every((t) => ctx.toolHistory!.includes(t));
       },
     },
+    {
+      name: "require_signed_identity",
+      description:
+        "Require a valid Ed25519 identity signature verified against the host's cert vault",
+      // This condition is a MATCH when identity is NOT valid — so the rule's
+      // outcome (typically "block") fires for any request without a good
+      // signed identity.
+      //
+      // The host (API layer) is responsible for populating two booleans on
+      // the context BEFORE the policy engine runs — the SDK is synchronous
+      // and zero-dep, so it cannot do the vault lookup or crypto verify
+      // itself. The host resolves the agent's active cert, checks the
+      // signature + expiry, and checks capability binding in the same place
+      // it has the cert loaded.
+      //
+      // params:
+      //   enforceCapabilityBinding?: boolean
+      //     When true (default), also matches when the tool is not in the
+      //     verified cert's capabilities. This is the capability-narrowing
+      //     check that pays off for delegated certs. Set to false for
+      //     identity-only enforcement without per-tool scoping.
+      evaluator: (ctx, p) => {
+        // Host did not verify at all → match (block). An unverified request
+        // where identity is required is the whole point of this condition.
+        if (ctx.identityVerified !== true) return true;
+        // Capability binding is on by default — verified identities still
+        // need the requested tool to be in their cert's capability set.
+        const enforceCapabilityBinding = p.enforceCapabilityBinding !== false;
+        if (enforceCapabilityBinding && ctx.identityCapabilityMatch === false) {
+          return true;
+        }
+        return false;
+      },
+    },
     // ─── Resource limits ───────────────────────────────────────
     {
       name: "token_limit",

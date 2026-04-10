@@ -72,6 +72,37 @@ export interface EnforcementContext {
   sessionCost?: number;
   /** Current concurrent tool count for concurrent_limit evaluation */
   concurrentCount?: number;
+  /**
+   * Whether the host successfully verified the caller's Ed25519 identity
+   * against the authoritative cert vault.
+   *
+   * This field is populated by the HOST (API layer) before the policy engine
+   * runs — the SDK is zero-dep and synchronous, so it cannot do the vault
+   * lookup or crypto verify itself. The host resolves the agent's active cert,
+   * checks signature + expiry, then sets this flag accordingly. The
+   * `require_signed_identity` condition reads it.
+   *
+   * `true`  — valid signature, non-expired cert, cert exists in this org's vault
+   * `false` — verification explicitly failed (see identityFailureReason)
+   * `undefined` — host did not perform identity verification on this request
+   */
+  identityVerified?: boolean;
+  /**
+   * Whether `ctx.tool` is listed in the verified certificate's capability set.
+   * Computed by the host at the same time as `identityVerified` so the policy
+   * engine can do the capability-narrowing check with a single boolean read.
+   *
+   * `true`  — tool is in the cert's capabilities (or no tool on the request)
+   * `false` — tool is NOT in the cert's capabilities (capability escalation)
+   * `undefined` — host did not evaluate capability binding
+   */
+  identityCapabilityMatch?: boolean;
+  /**
+   * Human-readable reason when identityVerified === false.
+   * One of: "no_cert" | "expired_cert" | "missing_signature" | "invalid_signature"
+   * | "capability_not_in_cert" (or any string the host provides).
+   */
+  identityFailureReason?: string;
 }
 
 export interface EnforcementDecision {
@@ -330,6 +361,7 @@ export {
   tokenBudget,
   rateLimit,
   requireLevel,
+  requireSignedIdentity,
   requireSequence,
   timeWindow,
 } from "./policy-presets.js";

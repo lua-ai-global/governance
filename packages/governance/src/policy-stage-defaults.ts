@@ -18,6 +18,7 @@ const STAGE_MAP: Record<string, PolicyStage> = {
   tool_allowed: "process",
   action_type: "process",
   agent_level: "process",
+  require_signed_identity: "process",
   tool_sequence: "process",
   rate_limit: "process",
   token_limit: "process",
