@@ -267,7 +267,7 @@
   },
   "homepage": "https://heygovernance.ai",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.20.0",

@@ -71,6 +71,14 @@ READMEs refactored to a single **Featured** tier (10 adapters) and a
 **Specialty** tier (MCP, Bedrock) with honest scope framing. The prior
 "20 adapters" marketing claim is retired.
 
+### Breaking — drop Node 18 support
+
+`engines.node` bumped from `>=18` to `>=20`. Node 18 reached end-of-life
+in April 2025 and several existing tests (Ed25519 agent identity,
+audit-integrity HMAC chain, agent-identity tokens) require crypto
+primitives that aren't reliable on Node 18. CI matrix is now
+`[20, 22, 24]`.
+
 ## [0.8.0] - 2026-04-07
 
 ### Added — Mastra Processor: full lifecycle coverage
