@@ -24,6 +24,16 @@
   },
   "author": "Lua <hello@heylua.ai> (https://heylua.ai)",
   "license": "MIT",
+  "keywords": [
+    "governance-sdk",
+    "ai-governance",
+    "storage",
+    "postgresql",
+    "postgres",
+    "platform",
+    "audit-trail",
+    "policy-tiers"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public"

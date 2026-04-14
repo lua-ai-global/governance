@@ -11,6 +11,6 @@
     "lint": "npm run lint -w packages/governance && npm run lint -w packages/governance-platform"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }

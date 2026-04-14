@@ -15,7 +15,7 @@ npm install
 # Build all packages
 npm run build
 
-# Run tests (945+ tests)
+# Run tests
 npm test
 
 # Type-check without emitting
@@ -24,7 +24,7 @@ npm run lint
 
 ### Requirements
 
-- Node.js >= 18
+- Node.js >= 20
 - TypeScript >= 5.7
 
 ## Project Structure

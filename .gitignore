@@ -19,6 +19,8 @@ npm-debug.log*
 .agent-logs/
 .agents/
 skills-lock.json
+CLAUDE.md
+**/CLAUDE.md
 
 # ide
 .idea/
