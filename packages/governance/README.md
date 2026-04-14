@@ -6,7 +6,7 @@ AI Agent Governance for TypeScript — before-action policy enforcement, 7-dimen
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-blue)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)]()
 
-> **Thin client SDK.** Handles policy evaluation, scoring, injection detection, and framework adapters locally. Production guarantees (server-side rate limiting, distributed kill switch, durable audit) belong in your API layer — see [Governance Cloud](#governance-cloud).
+> **Thin client SDK.** Handles policy evaluation, scoring, injection detection, and framework adapters locally — runs entirely in your process, no calls home, no telemetry. When you're ready for fleet visibility, durable audit, distributed kill switch, and a hosted dashboard, point it at [Lua Governance Cloud](#governance-cloud) by setting two env vars.
 
 ---
 
@@ -594,17 +594,29 @@ config differs.
 
 ## Governance Cloud
 
-Connect to Lua Governance Cloud for production-grade enforcement:
+[Lua Governance Cloud](https://heylua.ai) is the hosted companion to this SDK. Same `createGovernance()` call — enforcement runs server-side, you get a dashboard for free.
 
 ```typescript
 const gov = createGovernance({
   serverUrl: 'https://api.heylua.ai',
   apiKey: process.env.LUA_API_KEY,
 });
-// Same API — enforcement runs server-side
 ```
 
-Enterprise features (multi-tenant, RBAC, compliance reports, anomaly detection) are in the separate `governance-sdk-enterprise` package.
+What the cloud adds on top of the OSS SDK:
+
+| OSS SDK (this package) | Governance Cloud |
+|---|---|
+| Local in-process enforcement | Distributed enforcement across your fleet |
+| In-memory kill switch | Cluster-wide kill switch (propagates instantly) |
+| In-memory audit chain | Durable Postgres audit + tamper-evident export |
+| Declarative `rateLimit` | Real per-tenant rate limiting (Redis-backed) |
+| Score in your code | Multi-tenant dashboard, scorecards, agent graph |
+| Your own Slack hooks | Webhooks, incident manager, anomaly detection |
+| Single-team policies | Multi-team RBAC + approval queues |
+| EU AI Act articles in code | Generated compliance reports + audit packs |
+
+See [heylua.ai/pricing](https://heylua.ai/pricing) for hosted plans, or self-host the cloud components — both options use the same OSS SDK underneath.
 
 ---
 
@@ -633,11 +645,11 @@ Enterprise features (multi-tenant, RBAC, compliance reports, anomaly detection) 
 
 ## Known Limitations
 
-- **`rateLimit` is declarative** — checks a caller-supplied `recentActionCount` against a threshold. The SDK does not track counts. Use the governance API with Upstash/Redis for production rate limiting.
-- **Kill switch is process-local** — won't propagate across processes. Use the governance API for distributed kill switch.
-- **Audit integrity chain is in-memory** — doesn't survive process restart. Use PostgreSQL storage adapter or governance API for durable audit.
+- **`rateLimit` is declarative** — checks a caller-supplied `recentActionCount` against a threshold. The SDK does not track counts. Use the [Lua Governance Cloud](#governance-cloud) for distributed rate limiting, or wire your own Redis counter and pass it in.
+- **Kill switch is process-local** — won't propagate across processes. Use the [Lua Governance Cloud](#governance-cloud) for cluster-wide kill switch.
+- **Audit integrity chain is in-memory** — doesn't survive process restart. Use the PostgreSQL storage adapter for durability, or the [Lua Governance Cloud](#governance-cloud) for managed Postgres + tamper-evident export.
 - **`autoMigrate` has no schema versioning** — runs `CREATE TABLE IF NOT EXISTS` only. No `ALTER TABLE`. Manage schema changes externally.
-- **Injection detection is heuristic** — regex-based (64+ patterns, 7 categories), not LLM-based. Effective for known patterns but not adaptive to novel attacks. Layer with LLM-based classifier for high-security use.
+- **Injection detection is heuristic** — regex-based (64+ patterns, 7 categories), not LLM-based. Effective for known patterns but not adaptive to novel attacks. Layer with an LLM classifier for high-security use, or use [Lua Governance Cloud](#governance-cloud)'s ML detection (DeBERTa ensemble, ~0.7% FP / ~76% recall).
 
 ---
 
