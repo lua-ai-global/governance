@@ -26,6 +26,9 @@ CLAUDE.md
 .idea/
 .vscode/
 
+# OG image source fonts (license-compatible but bulky; regenerate via scripts/build-og-image.mjs)
+scripts/og-assets/
+
 # benchmark pipeline artifacts (regeneratable via scripts)
 packages/governance/benchmark/data/raw-*.jsonl
 packages/governance/benchmark/data/merged-*.jsonl
