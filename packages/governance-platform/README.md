@@ -111,7 +111,7 @@ const platform = await createPlatformStorage({ pool });
 
 | Package | Purpose |
 |---------|---------|
-| [`governance-sdk`](https://www.npmjs.com/package/governance-sdk) | Core SDK -- policy engine, scoring, injection detection, 20 framework adapters |
+| [`governance-sdk`](https://www.npmjs.com/package/governance-sdk) | Core SDK -- policy engine, scoring, injection detection, and first-class adapters for the major JS agent frameworks |
 | `governance-sdk-platform` | **This package** -- PostgreSQL storage layer |
 
 ## License

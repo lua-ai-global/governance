@@ -4,10 +4,11 @@
 The first standalone governance SDK for TypeScript AI agents. Zero runtime dependencies. MIT license. Thin client — local policy evaluation, scoring, injection detection, and adapters. Stateful operations (rate limiting, distributed kill switch, durable audit) belong in the API layer.
 
 ## CURRENT STATE (Post-Audit)
-- **945+ tests, 0 failures** — run with `npm test`
+- **1,395+ tests, 0 failures** — run with `npm test`
 - **0 runtime dependencies** — only devDependencies (tsx, typescript)
-- **35 export paths** — core, policy, scorer, 20 framework adapters, suggest, policy-compose, events, metrics, dry-run, audit-integrity, compliance, kill-switch, storage-postgres, storage-postgres-schema, injection-detect, behavioral-scorer, repo-patterns
-- **20 framework adapters**: Mastra, Mastra Processor, Vercel AI, LangChain, OpenAI Agents, Anthropic, MCP, CrewAI, Bedrock, Genkit, Semantic Kernel, AutoGen, A2A, LlamaIndex, Cloudflare AI, Deno, Mistral, Ollama, E2B, Composio
+- **Featured adapters (full pre + post + streaming + tool coverage)**: Mastra processor, Mastra middleware, Vercel AI, OpenAI Agents, LangChain, Anthropic, Genkit, LlamaIndex, Mistral, Ollama
+- **Specialty adapters**: MCP (governed MCP server builder — input + output injection scans), Bedrock (entry-gate pre-scan + scanOutput helper; can't see internal tool calls)
+- **Python / other languages**: use the REST API directly — no JS stubs for non-TS frameworks.
 
 ## ABSOLUTE RULES
 - **Zero runtime dependencies** — NEVER add a `dependency`. Framework imports go in `peerDependencies` (optional).
@@ -41,24 +42,16 @@ src/
   plugins/
     mastra.ts           # Mastra middleware adapter
     mastra-processor.ts # Mastra Processor adapter
-    vercel-ai.ts        # Vercel AI SDK adapter
-    langchain.ts        # LangChain adapter
-    openai-agents.ts    # OpenAI Agents SDK adapter
-    anthropic.ts        # Anthropic SDK adapter
-    mcp.ts              # Model Context Protocol adapter
-    crewai.ts           # CrewAI adapter
-    bedrock.ts          # AWS Bedrock adapter
-    genkit.ts           # Firebase Genkit adapter
-    semantic-kernel.ts  # Microsoft Semantic Kernel adapter
-    autogen.ts          # AutoGen adapter
-    a2a.ts              # Agent-to-Agent Protocol adapter
-    llamaindex.ts       # LlamaIndex adapter
-    cloudflare-ai.ts    # Cloudflare AI adapter
-    deno.ts             # Deno adapter
-    mistral.ts          # Mistral AI adapter
-    ollama.ts           # Ollama adapter
-    e2b.ts              # E2B adapter
-    composio.ts         # Composio adapter
+    vercel-ai.ts        # Vercel AI SDK adapter (+ vercel-ai-middleware.ts, vercel-ai-stream.ts)
+    langchain.ts        # LangChain adapter (+ langchain-model.ts, langchain-stream.ts)
+    openai-agents.ts    # OpenAI Agents SDK adapter (+ openai-agents-guardrails.ts)
+    anthropic.ts        # Anthropic SDK adapter (+ anthropic-messages.ts, anthropic-stream.ts)
+    mcp.ts              # Model Context Protocol adapter (governed MCP server)
+    bedrock.ts          # AWS Bedrock Agents adapter (entry-gate only)
+    genkit.ts           # Firebase Genkit adapter (+ genkit-generate.ts)
+    llamaindex.ts       # LlamaIndex adapter (+ llamaindex-llm.ts)
+    mistral.ts          # Mistral AI adapter (+ mistral-messages.ts)
+    ollama.ts           # Ollama adapter (+ ollama-chat.ts)
   cli/
     init.ts             # CLI scaffolding tool
 ```

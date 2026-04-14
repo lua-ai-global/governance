@@ -31,7 +31,7 @@ npm run lint
 
 ```
 packages/
-  governance/          # Core SDK — policy enforcement, scoring, injection detection, 20 adapters
+  governance/          # Core SDK — policy enforcement, scoring, injection detection, framework adapters
   governance-platform/ # PostgreSQL storage layer — auto-migrating schema, org settings
 ```
 

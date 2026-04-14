@@ -1,5 +1,76 @@
 # Changelog
 
+## [0.9.0] - 2026-04-14
+
+### Added — full LLM lifecycle coverage across all featured adapters
+
+Every featured adapter now supports **pre-scan on user input**, **post-scan
+on model output**, **streaming post-scan** (buffered / sliding / per-chunk),
+and **tool-call enforcement**. Shared pre/post + streaming helpers live in
+`src/plugins/pre-post-enforce.ts` and `src/plugins/pre-post-stream.ts`.
+
+New exports per adapter:
+
+- **Vercel AI SDK** — `createGovernanceMiddleware` now returns a middleware
+  implementing `transformParams` (pre), `wrapGenerate` (post), `wrapStream`
+  (streaming post). Config accepts `streamMode`, `streamLookbackChunks`,
+  `streamLookbackChars`.
+- **Anthropic SDK** — `createGovernedMessages` (wraps `messages.create`),
+  `createGovernedMessageStream` (wraps `messages.stream`).
+- **LangChain** — `wrapChatModel` overrides `.invoke()` and `.stream()` with
+  governance pre/post enforcement. Prototype-preserving.
+- **OpenAI Agents SDK** — `createInputGuardrail`, `createOutputGuardrail`
+  produce SDK-native guardrail objects. Streaming post-scan is SDK-native
+  (fires at final assembly).
+- **Mastra Processor** — implements the previously-TODO'd
+  `processOutputStream` Mastra lifecycle hook with per-chunk / sliding /
+  buffered modes.
+- **Mastra middleware** — now exposes `scanInput`, `scanOutput`,
+  `scanOutputStream` helpers for explicit pre/post scanning from a custom
+  runtime loop.
+- **Genkit** — `createGovernedGenerate`, `createGovernedGenerateStream`
+  wrap `ai.generate` and `ai.generateStream`.
+- **LlamaIndex** — `wrapLlamaLLM` wraps any LLM implementing
+  `chat({ messages, stream? })`. Covers non-streaming and streaming paths.
+- **Mistral** — `createGovernedChat`, `createGovernedChatStream` wrap
+  `chat.complete` and `chat.stream`.
+- **Ollama** — `createGovernedOllamaChat`, `createGovernedOllamaChatStream`
+  wrap `ollama.chat` in both shapes.
+- **MCP** — added symmetric input injection scan on tool-call arguments
+  (`scanToolInputs`, `inputInjectionThreshold`) to match the existing
+  output scan.
+- **Bedrock** — entry-gate pre-scan on `invokeAgent` input + `scanOutput`
+  helper for post-scan after the caller drains the streamed response.
+  Internal tool calls inside a Bedrock Agent run remain opaque (server-side
+  inside AWS).
+
+### Removed
+
+Dropped 8 adapter stubs that didn't meaningfully govern anything:
+
+- `plugins/crewai`, `plugins/autogen`, `plugins/semantic-kernel` — primarily
+  Python / C# frameworks; the JS stubs don't map onto the real agent
+  runtimes. Python support is via the Lua Governance REST API.
+- `plugins/a2a` — inter-agent message protocol, not a tool-call surface.
+- `plugins/e2b` — sandbox governance is an AppArmor/seccomp-layer problem,
+  not a policy-over-tool-calls problem.
+- `plugins/deno`, `plugins/cloudflare-ai` — runtimes / raw model invocation,
+  not agent frameworks. The SDK already works in those runtimes without a
+  specific adapter.
+- `plugins/composio` — redundant; govern at the agent framework layer that
+  consumes Composio tools.
+
+The corresponding `package.json` subpath exports, peer dependencies, and
+`peerDependenciesMeta` entries have been removed. The previously-public
+barrel re-exports `GovernanceBlockedError` and `GovernanceApprovalRequiredError`
+remain available from every featured adapter.
+
+### Changed
+
+READMEs refactored to a single **Featured** tier (10 adapters) and a
+**Specialty** tier (MCP, Bedrock) with honest scope framing. The prior
+"20 adapters" marketing claim is retired.
+
 ## [0.8.0] - 2026-04-07
 
 ### Added — Mastra Processor: full lifecycle coverage

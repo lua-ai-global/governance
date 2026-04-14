@@ -1,6 +1,6 @@
 # governance-sdk
 
-AI Agent Governance for TypeScript — before-action policy enforcement, 7-dimension scoring, injection detection, and 20 framework adapters.
+AI Agent Governance for TypeScript — before-action policy enforcement, 7-dimension scoring, injection detection, and first-class adapters for the major JS agent frameworks (Mastra, Vercel AI, OpenAI Agents, LangChain, Anthropic, and more).
 
 [![Tests](https://img.shields.io/badge/tests-945%2B-brightgreen)]()
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-blue)]()
@@ -473,35 +473,66 @@ const ddl = getSchemaSQL('governance_');
 
 ## Framework Adapters
 
-20 first-class adapters. Each wraps your framework's tool execution with governance enforcement and audit logging.
+Governance requires three things to be real: a **point of interception**, a
+**deterministic agent identity**, and the **ability to block or modify** —
+not just observe after the fact. The matrix below is scoped to frameworks
+where all three hold.
 
-| Export | Framework | Main Function |
-|--------|-----------|---------------|
-| `plugins/mastra` | Mastra | `createGovernanceMiddleware(gov, config)` |
-| `plugins/mastra-processor` | Mastra Processor | `GovernanceProcessor` class |
-| `plugins/vercel-ai` | Vercel AI SDK | `createGovernedTools(gov, tools, config)` |
-| `plugins/langchain` | LangChain / LangGraph | `governTools(gov, tools, config)` |
-| `plugins/openai-agents` | OpenAI Agents SDK | `governAgent(gov, agent, config)` |
-| `plugins/anthropic` | Anthropic SDK | `governAnthropicTools(gov, tools, config)` |
-| `plugins/mcp` | Model Context Protocol | `governMCPTools(gov, tools, config)` |
-| `plugins/crewai` | CrewAI | `governCrewTools(gov, tools, config)` |
-| `plugins/bedrock` | AWS Bedrock | `governBedrockAgent(gov, agent, config)` |
-| `plugins/genkit` | Firebase Genkit | `governGenkitTools(gov, tools, config)` |
-| `plugins/semantic-kernel` | Semantic Kernel | `governKernelFunctions(gov, fns, config)` |
-| `plugins/autogen` | AutoGen | `governAutogenAgent(gov, agent, config)` |
-| `plugins/a2a` | Agent-to-Agent Protocol | `governA2AHandler(gov, handler, config)` |
-| `plugins/llamaindex` | LlamaIndex | `governLlamaTools(gov, tools, config)` |
-| `plugins/cloudflare-ai` | Cloudflare AI | `governCfTools(gov, tools, config)` |
-| `plugins/deno` | Deno | `governDenoTools(gov, tools, config)` |
-| `plugins/mistral` | Mistral AI | `governMistralTools(gov, tools, config)` |
-| `plugins/ollama` | Ollama | `governOllamaTools(gov, tools, config)` |
-| `plugins/e2b` | E2B | `governE2BSandbox(gov, sandbox, config)` |
-| `plugins/composio` | Composio | `governComposioTools(gov, tools, config)` |
+- **Input pre-scan** — preprocess-stage rules (injection detection, input
+  blocklists, token caps) run on the user prompt **before** the LLM sees it.
+- **Output post-scan** — postprocess-stage rules (PII masking, output pattern
+  blocking, output length) run on the model response **after** generation.
+- **Tool-call** — policy evaluation + audit around tool/function execution.
 
-All adapters follow the same pattern:
+### Featured — full LLM + tool coverage (pre + post + streaming + tools)
+
+| Export | Framework | Main Function(s) | Pre | Post | Stream | Tools |
+|---|---|---|:-:|:-:|:-:|:-:|
+| `plugins/mastra-processor` | Mastra Processor | `GovernanceProcessor` class | ✅ | ✅ | ✅ | ✅ |
+| `plugins/vercel-ai` | Vercel AI SDK | `createGovernedTools` / `createGovernanceMiddleware` | ✅ | ✅ | ✅ | ✅ |
+| `plugins/openai-agents` | OpenAI Agents SDK | `governAgent` / `createInputGuardrail` / `createOutputGuardrail` | ✅ | ✅ | ✅¹ | ✅ |
+| `plugins/langchain` | LangChain / LangGraph | `governTools` / `wrapChatModel` | ✅ | ✅ | ✅ | ✅ |
+| `plugins/anthropic` | Anthropic SDK | `governAnthropicTools` / `createGovernedMessages` / `createGovernedMessageStream` | ✅ | ✅ | ✅ | ✅ |
+| `plugins/genkit` | Firebase Genkit | `governGenkitTools` / `createGovernedGenerate` / `createGovernedGenerateStream` | ✅ | ✅ | ✅ | ✅ |
+| `plugins/llamaindex` | LlamaIndex | `governLlamaTools` / `wrapLlamaLLM` | ✅ | ✅ | ✅ | ✅ |
+| `plugins/mistral` | Mistral AI | `governMistralTools` / `createGovernedChat` / `createGovernedChatStream` | ✅ | ✅ | ✅ | ✅ |
+| `plugins/ollama` | Ollama | `governOllamaTools` / `createGovernedOllamaChat` / `createGovernedOllamaChatStream` | ✅ | ✅ | ✅ | ✅ |
+| `plugins/mastra` | Mastra (middleware) | `createGovernanceMiddleware` — `.scanInput` / `.scanOutput` / `.scanOutputStream` / `.wrapTools` | ✅² | ✅² | ✅² | ✅ |
+
+¹ OpenAI Agents output guardrails fire at stream final assembly (SDK-native behavior).
+² Mastra middleware exposes `scanInput` / `scanOutput` / `scanOutputStream` helpers — explicit calls you make from your runtime loop. Use `plugins/mastra-processor` for automatic lifecycle hooks via Mastra's `inputProcessors[]` / `outputProcessors[]`.
+
+### Specialty
+
+| Export | Framework | Scope |
+|---|---|---|
+| `plugins/mcp` | Model Context Protocol | Build a **governed MCP server** — input injection pre-scan on tool arguments + output injection scan on tool results + tool-call audit. For MCP servers you *consume*, govern at your agent framework layer instead. |
+| `plugins/bedrock` | AWS Bedrock Agents | **Entry-gate only.** Bedrock Agents execute internal tools server-side inside AWS — we pre-scan the `InvokeAgent` input and expose `scanOutput` for callers who've assembled the streamed completion, but we can't see individual internal tool calls. |
+
+### Python, edge runtimes, and other languages
+
+If your agent is **not TypeScript**, call the Lua Governance REST API directly —
+same policy, scoring, audit, and injection-detection endpoints the SDK uses
+locally. Native Python / Go SDKs are not shipped yet; a REST client works
+everywhere.
+
+The SDK is pure ESM with zero runtime dependencies, so it runs unmodified
+under Node, Deno, Bun, Cloudflare Workers, and other Web-standard runtimes —
+no adapter needed.
+
+
+All adapters follow the same core pattern:
 1. Register the agent with `gov.register()`
 2. Wrap tool execution with `gov.enforce()` before each call
 3. Log results to `gov.audit.log()` after each call
+
+Adapters with pre/post support add two more hooks:
+- Call `gov.enforcePreprocess()` on the user prompt before the model runs
+- Call `gov.enforcePostprocess()` on the model output before returning it
+
+Both pre/post stages are **on by default** when you adopt a pre/post-capable
+adapter. Disable per-stage with `{ preprocess: false }` or `{ postprocess: false }`
+in the adapter config.
 
 ### Mastra: full pipeline coverage (preprocess + tool calls + postprocess)
 
@@ -639,7 +670,7 @@ See [heylua.ai/pricing](https://heylua.ai/pricing) for hosted plans, or self-hos
 | 13 | `./storage-postgres-schema` | `getSchemaSQL`, `getIntegrityMigrationSQL` |
 | 14 | `./behavioral-scorer` | `computeBehavioralAdjustments`, `applyBehavioralAdjustments`, `computeSignals` |
 | 15 | `./repo-patterns` | `scanRepoContents`, `SCAN_GLOBS` |
-| 16–35 | `./plugins/*` | 20 framework adapters (see table above) |
+| 16–35 | `./plugins/*` | Framework adapters (see table above) |
 
 ---
 

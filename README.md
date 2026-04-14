@@ -208,32 +208,120 @@ const result = await fleetDryRun(gov, scenarios);
 
 ## Framework Adapters
 
-Drop-in integration with 20 agent frameworks via dedicated plugin exports:
+Governance needs three things to be real: a **point of interception** (we sit
+between the agent and the tool/LLM before it fires), a **deterministic agent
+identity** (we know who's calling), and the **ability to block or modify**
+(not just observe after the fact). The matrix below is scoped to frameworks
+where all three hold.
 
-| Framework | Import Path |
-|-----------|------------|
-| Mastra (middleware) | `governance-sdk/plugins/mastra` |
-| Mastra (processor) | `governance-sdk/plugins/mastra-processor` |
-| Vercel AI SDK | `governance-sdk/plugins/vercel-ai` |
-| LangChain | `governance-sdk/plugins/langchain` |
-| OpenAI Agents SDK | `governance-sdk/plugins/openai-agents` |
-| Anthropic SDK | `governance-sdk/plugins/anthropic` |
-| Model Context Protocol | `governance-sdk/plugins/mcp` |
-| CrewAI | `governance-sdk/plugins/crewai` |
-| AWS Bedrock | `governance-sdk/plugins/bedrock` |
-| Google Genkit | `governance-sdk/plugins/genkit` |
-| Semantic Kernel | `governance-sdk/plugins/semantic-kernel` |
-| AutoGen | `governance-sdk/plugins/autogen` |
-| A2A Protocol | `governance-sdk/plugins/a2a` |
-| LlamaIndex | `governance-sdk/plugins/llamaindex` |
-| Cloudflare AI | `governance-sdk/plugins/cloudflare-ai` |
-| Deno | `governance-sdk/plugins/deno` |
-| Mistral | `governance-sdk/plugins/mistral` |
-| Ollama | `governance-sdk/plugins/ollama` |
-| E2B | `governance-sdk/plugins/e2b` |
-| Composio | `governance-sdk/plugins/composio` |
+- **Input pre-scan** — preprocess-stage rules (injection detection, input
+  blocklists, token caps) run on the user prompt **before** the LLM sees it.
+- **Output post-scan** — postprocess-stage rules (PII masking, output pattern
+  blocking, output length) run on the model response **after** generation.
+- **Tool-call** — policy evaluation + audit logging around tool/function execution.
 
-All framework dependencies are optional peer dependencies -- install only what you use.
+### Featured — full LLM + tool coverage (pre + post + streaming + tools)
+
+| Framework | Import Path | Input pre-scan | Output post-scan | Output streaming | Tool-call |
+|---|---|:-:|:-:|:-:|:-:|
+| Mastra (processor) | `governance-sdk/plugins/mastra-processor` | ✅ | ✅ | ✅ | ✅ |
+| Vercel AI SDK | `governance-sdk/plugins/vercel-ai` | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Agents SDK | `governance-sdk/plugins/openai-agents` | ✅ | ✅ | ✅¹ | ✅ |
+| LangChain | `governance-sdk/plugins/langchain` | ✅ | ✅ | ✅ | ✅ |
+| Anthropic SDK | `governance-sdk/plugins/anthropic` | ✅ | ✅ | ✅ | ✅ |
+| Google Genkit | `governance-sdk/plugins/genkit` | ✅ | ✅ | ✅ | ✅ |
+| LlamaIndex | `governance-sdk/plugins/llamaindex` | ✅ | ✅ | ✅ | ✅ |
+| Mistral | `governance-sdk/plugins/mistral` | ✅ | ✅ | ✅ | ✅ |
+| Ollama | `governance-sdk/plugins/ollama` | ✅ | ✅ | ✅ | ✅ |
+| Mastra (middleware) | `governance-sdk/plugins/mastra` | ✅² | ✅² | ✅² | ✅ |
+
+¹ OpenAI Agents output guardrails fire at stream final assembly (SDK-native behavior).
+² Mastra middleware exposes `scanInput` / `scanOutput` / `scanOutputStream` helpers — explicit calls you make from your runtime loop, rather than automatic lifecycle hooks. Use the `mastra-processor` export if you want automatic hooks via `inputProcessors[]` / `outputProcessors[]`.
+
+### Specialty
+
+| Framework | Import Path | Scope |
+|---|---|---|
+| Model Context Protocol | `governance-sdk/plugins/mcp` | Build a **governed MCP server** — input injection pre-scan on tool arguments + output injection scan + tool-call audit for tools you publish. Not for governing MCP servers you consume (govern those at the agent framework layer). |
+| AWS Bedrock Agents | `governance-sdk/plugins/bedrock` | **Entry-gate only** — Bedrock Agents execute tools server-side inside AWS, so we can pre-scan the `InvokeAgent` input and post-scan the assembled output via `scanOutput`, but we can't see individual internal tool calls. |
+
+### Python, edge runtimes, and other languages
+
+If your agent is **not TypeScript**, use the Lua Governance REST API directly —
+it exposes the same policy, scoring, audit, and injection-detection endpoints
+the SDK uses locally. Native Python / Go SDKs are not shipped yet; a REST
+client works everywhere.
+
+The SDK itself is pure ESM with no runtime dependencies, so it runs unmodified
+under Node, Deno, Bun, Cloudflare Workers, and other Web-standard runtimes —
+no separate adapter needed.
+
+All framework dependencies are optional peer dependencies — install only what you use.
+
+### Pre/post usage — four canonical patterns
+
+**Vercel AI SDK** — `experimental_wrapLanguageModel` middleware:
+
+```ts
+import { experimental_wrapLanguageModel, generateText } from 'ai';
+import { createGovernance } from 'governance-sdk';
+import { createGovernanceMiddleware } from 'governance-sdk/plugins/vercel-ai';
+
+const gov = createGovernance({ rules: [/* ... */] });
+const { id: agentId } = await gov.register({
+  name: 'sales', framework: 'vercel-ai', owner: 'team',
+});
+
+const model = experimental_wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware: createGovernanceMiddleware(gov, { agentId }),
+});
+```
+
+**OpenAI Agents SDK** — native input/output guardrails:
+
+```ts
+import { Agent } from '@openai/agents';
+import {
+  createInputGuardrail,
+  createOutputGuardrail,
+} from 'governance-sdk/plugins/openai-agents';
+
+const agent = new Agent({
+  name: 'research',
+  instructions: '...',
+  inputGuardrails: [createInputGuardrail(gov, { agentId })],
+  outputGuardrails: [createOutputGuardrail(gov, { agentId })],
+});
+```
+
+**LangChain** — chat model wrapper:
+
+```ts
+import { ChatOpenAI } from '@langchain/openai';
+import { wrapChatModel } from 'governance-sdk/plugins/langchain';
+
+const model = new ChatOpenAI({ model: 'gpt-4o' });
+const guarded = wrapChatModel(model, gov, { agentId });
+const res = await guarded.invoke([new HumanMessage('hello')]);
+```
+
+**Anthropic SDK** — `messages.create` wrapper:
+
+```ts
+import Anthropic from '@anthropic-ai/sdk';
+import { createGovernedMessages } from 'governance-sdk/plugins/anthropic';
+
+const client = new Anthropic();
+const messages = createGovernedMessages(client.messages, gov, { agentId });
+const res = await messages.create({
+  model: 'claude-sonnet-4-5', max_tokens: 1024,
+  messages: [{ role: 'user', content: 'hi' }],
+});
+```
+
+Every pre/post adapter accepts `{ preprocess: false }` or `{ postprocess: false }`
+to disable a stage. Both stages are on by default.
 
 All adapters handle all 5 enforcement outcomes with configurable callbacks:
 
@@ -269,7 +357,7 @@ governance-sdk/behavioral-scorer
 governance-sdk/repo-patterns
 governance-sdk/storage-postgres
 governance-sdk/storage-postgres-schema
-governance-sdk/plugins/*  # 20 framework adapters
+governance-sdk/plugins/*  # Framework adapters (see table above)
 ```
 
 ## Development

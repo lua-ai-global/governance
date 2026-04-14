@@ -1,6 +1,6 @@
 {
   "name": "governance-sdk",
-  "version": "0.8.5",
+  "version": "0.9.0",
   "description": "AI Agent Governance for TypeScript — policy enforcement, scoring, compliance, and audit for AI agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -97,10 +97,6 @@
       "types": "./dist/plugins/mcp.d.ts",
       "import": "./dist/plugins/mcp.js"
     },
-    "./plugins/crewai": {
-      "types": "./dist/plugins/crewai.d.ts",
-      "import": "./dist/plugins/crewai.js"
-    },
     "./plugins/bedrock": {
       "types": "./dist/plugins/bedrock.d.ts",
       "import": "./dist/plugins/bedrock.js"
@@ -109,29 +105,9 @@
       "types": "./dist/plugins/genkit.d.ts",
       "import": "./dist/plugins/genkit.js"
     },
-    "./plugins/semantic-kernel": {
-      "types": "./dist/plugins/semantic-kernel.d.ts",
-      "import": "./dist/plugins/semantic-kernel.js"
-    },
-    "./plugins/autogen": {
-      "types": "./dist/plugins/autogen.d.ts",
-      "import": "./dist/plugins/autogen.js"
-    },
-    "./plugins/a2a": {
-      "types": "./dist/plugins/a2a.d.ts",
-      "import": "./dist/plugins/a2a.js"
-    },
     "./plugins/llamaindex": {
       "types": "./dist/plugins/llamaindex.d.ts",
       "import": "./dist/plugins/llamaindex.js"
-    },
-    "./plugins/cloudflare-ai": {
-      "types": "./dist/plugins/cloudflare-ai.d.ts",
-      "import": "./dist/plugins/cloudflare-ai.js"
-    },
-    "./plugins/deno": {
-      "types": "./dist/plugins/deno.d.ts",
-      "import": "./dist/plugins/deno.js"
     },
     "./plugins/anthropic": {
       "types": "./dist/plugins/anthropic.d.ts",
@@ -144,14 +120,6 @@
     "./plugins/ollama": {
       "types": "./dist/plugins/ollama.d.ts",
       "import": "./dist/plugins/ollama.js"
-    },
-    "./plugins/e2b": {
-      "types": "./dist/plugins/e2b.d.ts",
-      "import": "./dist/plugins/e2b.js"
-    },
-    "./plugins/composio": {
-      "types": "./dist/plugins/composio.d.ts",
-      "import": "./dist/plugins/composio.js"
     },
     "./owasp-agentic": {
       "types": "./dist/owasp-agentic.d.ts",
@@ -276,8 +244,6 @@
     "anthropic",
     "vercel-ai",
     "mastra",
-    "crewai",
-    "bedrock",
     "llamaindex",
     "human-in-the-loop",
     "approval-workflow",
@@ -306,16 +272,10 @@
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.20.0",
     "@aws-sdk/client-bedrock-agent-runtime": ">=3.0.0",
-    "@cloudflare/ai": ">=1.0.0",
-    "@composio/core": ">=0.6.0",
     "@mastra/core": ">=1.0.0",
-    "@microsoft/semantic-kernel": ">=0.1.0",
     "@mistralai/mistralai": ">=0.1.0",
     "@modelcontextprotocol/sdk": ">=1.0.0",
     "ai": ">=3.0.0",
-    "autogen": ">=0.1.0",
-    "crewai-js": ">=0.1.0",
-    "e2b": ">=0.16.0",
     "genkit": ">=0.5.0",
     "langchain": ">=0.1.0",
     "llamaindex": ">=0.1.0",
@@ -324,60 +284,18 @@
     "pg": ">=8.0.0"
   },
   "peerDependenciesMeta": {
-    "@mastra/core": {
-      "optional": true
-    },
-    "ai": {
-      "optional": true
-    },
-    "langchain": {
-      "optional": true
-    },
-    "openai-agents": {
-      "optional": true
-    },
-    "pg": {
-      "optional": true
-    },
-    "@modelcontextprotocol/sdk": {
-      "optional": true
-    },
-    "crewai-js": {
-      "optional": true
-    },
-    "@aws-sdk/client-bedrock-agent-runtime": {
-      "optional": true
-    },
-    "genkit": {
-      "optional": true
-    },
-    "@microsoft/semantic-kernel": {
-      "optional": true
-    },
-    "autogen": {
-      "optional": true
-    },
-    "llamaindex": {
-      "optional": true
-    },
-    "@cloudflare/ai": {
-      "optional": true
-    },
-    "@anthropic-ai/sdk": {
-      "optional": true
-    },
-    "@mistralai/mistralai": {
-      "optional": true
-    },
-    "ollama": {
-      "optional": true
-    },
-    "e2b": {
-      "optional": true
-    },
-    "@composio/core": {
-      "optional": true
-    }
+    "@mastra/core": { "optional": true },
+    "ai": { "optional": true },
+    "langchain": { "optional": true },
+    "openai-agents": { "optional": true },
+    "pg": { "optional": true },
+    "@modelcontextprotocol/sdk": { "optional": true },
+    "@aws-sdk/client-bedrock-agent-runtime": { "optional": true },
+    "genkit": { "optional": true },
+    "llamaindex": { "optional": true },
+    "@anthropic-ai/sdk": { "optional": true },
+    "@mistralai/mistralai": { "optional": true },
+    "ollama": { "optional": true }
   },
   "devDependencies": {
     "@types/node": "^25.4.0",

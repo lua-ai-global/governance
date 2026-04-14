@@ -8,7 +8,7 @@ Public SDK monorepo for AI Agent Governance for TypeScript. Two packages:
 ## STRUCTURE
 ```
 packages/
-  governance/          # Core SDK — policy enforcement, scoring, injection detection, 20 adapters
+  governance/          # Core SDK — policy enforcement, scoring, injection detection, framework adapters
   governance-platform/ # Platform storage — auto-migrating schema, org settings, policy tiers
 ```
 
