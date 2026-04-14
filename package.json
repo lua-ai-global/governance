@@ -1,6 +1,13 @@
 {
   "name": "governance-monorepo",
+  "version": "0.0.0",
   "private": true,
+  "description": "Monorepo root for governance-sdk and governance-sdk-platform. This package is not published — see packages/governance for the core SDK.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lua-ai-global/governance"
+  },
+  "license": "MIT",
   "workspaces": [
     "packages/governance",
     "packages/governance-platform"

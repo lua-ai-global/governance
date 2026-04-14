@@ -1,23 +1,50 @@
 # governance-sdk
 
-AI Agent Governance for TypeScript -- policy enforcement, behavioral scoring, compliance, and tamper-evident audit for AI agents. Zero runtime dependencies.
+**AI Agent Governance for TypeScript** — policy enforcement, behavioral scoring, injection detection, tamper-evident audit, and standards-mapped compliance for AI agents. **Zero runtime dependencies.**
 
 [![npm version](https://img.shields.io/npm/v/governance-sdk)](https://www.npmjs.com/package/governance-sdk)
 [![CI](https://github.com/lua-ai-global/governance/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lua-ai-global/governance/actions/workflows/ci.yml)
+[![install size](https://packagephobia.com/badge?p=governance-sdk)](https://packagephobia.com/result?p=governance-sdk)
+[![dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](./packages/governance/package.json)
+[![types](https://img.shields.io/npm/types/governance-sdk)](https://www.npmjs.com/package/governance-sdk)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 ---
 
 ## Why
 
-Every AI agent framework lets you build agents. None of them govern what those agents actually do at runtime. This SDK adds policy enforcement, behavioral scoring, injection detection, and compliance auditing to any TypeScript agent -- regardless of framework.
+Every AI agent framework lets you build agents. None of them **govern what those agents actually do at runtime**. `governance-sdk` adds policy enforcement, behavioral scoring, injection detection, and compliance auditing to any TypeScript agent — regardless of framework.
+
+Three things make governance real, and this SDK does all three:
+
+1. **Point of interception** — sits between the agent and the tool/LLM *before* it fires
+2. **Deterministic agent identity** — knows who's calling (optional Ed25519 signed tokens)
+3. **Ability to block or modify** — not just observe after the fact
+
+Everything downstream (scoring, audit, compliance) follows from those three.
+
+## How it compares
+
+| | governance-sdk | NVIDIA NeMo Guardrails | Guardrails AI | LangChain guardrails |
+|---|:-:|:-:|:-:|:-:|
+| Runtime dependencies | **0** | Python runtime + LLM | Python + validator stack | LangChain |
+| TypeScript-first | **✅** | ❌ (Python) | ❌ (Python) | ✅ |
+| Framework-agnostic | **✅ (10 adapters)** | Rails-only | Model-wrapping | LangChain-only |
+| Policy *enforcement* (block/approval/mask) | **✅** | ✅ | ✅ | Partial |
+| Behavioral scoring / trust levels | **✅** | ❌ | ❌ | ❌ |
+| Tamper-evident audit (HMAC chain) | **✅** | ❌ | ❌ | ❌ |
+| Standards mapping (EU AI Act / OWASP / NIST / ISO 42001) | **✅** | ❌ | Partial | ❌ |
+| Supply-chain / SBOM / Ed25519 identity | **✅** | ❌ | ❌ | ❌ |
+| Zero-dep embedded use in any TS runtime | **✅** | ❌ | ❌ | ❌ |
+
+`governance-sdk` is the only option that's zero-dep TypeScript, framework-agnostic, and maps to all four major AI-governance standards out of the box.
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| `governance-sdk` | Core SDK -- policy engine, scoring, injection detection, audit, compliance. Zero runtime deps. |
-| `governance-sdk-platform` | PostgreSQL storage layer -- auto-migrating schema, org settings, policy tiers. |
+| [`governance-sdk`](./packages/governance) | Core SDK — policy engine, scoring, injection detection, audit, compliance, standards mapping, 10 framework adapters. **0 runtime deps.** |
+| [`governance-sdk-platform`](./packages/governance-platform) | Optional PostgreSQL storage layer — auto-migrating schema, org settings, policy tiers. |
 
 ## Quick Start
 
@@ -114,24 +141,25 @@ GOVERNANCE_API_URL=https://api.heygovernance.ai GOVERNANCE_API_KEY=ak_... npx go
 
 ### Policy Engine
 
-Define rules that govern agent behavior at runtime. Policies return one of five outcomes: `allow`, `block`, `warn`, `require_approval`, or `mask`.
+Define rules that govern agent behavior at runtime. Policies return one of **five outcomes**: `allow`, `block`, `warn`, `require_approval`, or `mask` (non-blocking redaction).
 
-**8 preset policy builders:**
+**Preset policy builders:**
 
-- `blockTools(toolNames)` -- block specific tools from being called
-- `allowOnlyTools(toolNames)` -- whitelist-only tool access
-- `requireApproval(condition)` -- gate actions behind human approval
-- `tokenBudget(limit)` -- enforce token consumption limits
-- `rateLimit(config)` -- throttle agent requests
-- `requireLevel(level)` -- require minimum trust level
-- `requireSequence(steps)` -- enforce ordered execution steps
-- `timeWindow(config)` -- restrict actions to time windows
+- `blockTools(toolNames)` — block specific tools from being called
+- `allowOnlyTools(toolNames)` — whitelist-only tool access
+- `requireApproval(condition)` — gate actions behind human approval
+- `tokenBudget(limit)` — enforce token consumption limits
+- `rateLimit(config)` — throttle agent requests
+- `requireLevel(level)` — require minimum trust level
+- `requireSequence(steps)` — enforce ordered execution steps
+- `timeWindow(config)` — restrict actions to time windows
+- `requireSignedIdentity()` — require Ed25519 signed agent identity tokens
 
-Policies compose with `policy-compose` for complex rule sets.
+Policies compose with `policy-compose` for complex rule sets, serialize to YAML (`policy-yaml`), and ship with a fluent `policy-builder`.
 
 ### Governance Scoring
 
-7-dimension scoring model that quantifies agent trustworthiness:
+7-dimension scoring model quantifying agent trustworthiness: **identity, permissions, observability, guardrails, auditability, compliance, lifecycle.**
 
 ```typescript
 import { assessAgent, getGovernanceLevel } from 'governance-sdk/scorer';
@@ -141,22 +169,41 @@ const assessment = assessAgent('my-agent', {
   hasAuth: true, hasGuardrails: true, hasObservability: true, hasAuditLog: true,
 });
 // => { compositeScore: 87, level: 4, dimensions: { identity, permissions, ... } }
-const level = getGovernanceLevel(assessment.compositeScore);
+
+getGovernanceLevel(assessment.compositeScore);
 // => { level: 4, label: 'Certified', description: '...' }
 ```
 
+Behavioral signals (block rate, injection hits, approval misses) feed back in via `behavioral-scorer`, so the score tracks how an agent *actually* behaves in production — not just its configured posture.
+
 ### Injection Detection
 
-64+ patterns across 7 categories to detect prompt injection attacks at the input layer.
+64+ patterns across 7 categories (instruction override, role manipulation, context escape, data exfiltration, encoding, social engineering, obfuscation) with Base64/Unicode/leetspeak normalization and max-weight scoring.
 
 ```typescript
 import { detectInjection } from 'governance-sdk/injection-detect';
 
 const result = detectInjection(userInput);
 if (result.detected) {
-  // block or flag the input
+  // block or flag the input — score, matched patterns, and category available
 }
 ```
+
+**Lua Injection Benchmark (LIB)** — 6,931 labeled samples (2,096 attacks + 4,835 benign) from deepset, jackhhao, hackaprompt, Harelix, plus synthesized encoding attacks and hard negatives. Plug in any ML detector via `InjectionClassifier` interface and run: `npx tsx benchmark/scripts/run-benchmark.ts`.
+
+### Tamper-Evident Audit Trail
+
+HMAC-SHA256 hash-chained audit. Every entry binds to the cryptographic hash of the previous entry — any tampering (edit, delete, reorder) is mathematically detectable.
+
+```typescript
+import { verifyAuditIntegrity } from 'governance-sdk/audit-integrity';
+
+// After an adversary modifies, reorders, or deletes any audit row:
+const { valid, firstBrokenIndex, reason } = await verifyAuditIntegrity(entries, secret);
+// => { valid: false, firstBrokenIndex: 42, reason: 'hash_mismatch' }
+```
+
+You get **byte-level proof** of what happened, not a log file that an attacker can silently edit.
 
 ### Kill Switch
 
@@ -169,30 +216,39 @@ const killSwitch = createKillSwitch(gov);
 await killSwitch.kill('rogue-agent', 'Unauthorized data access');
 ```
 
-### Compliance
+### Standards Mapping (EU AI Act, OWASP Agentic, NIST AI RMF, ISO 42001)
 
-EU AI Act coverage with structured article mapping (6 articles, deadline tracking).
+Policy decisions, audit entries, and agent posture map to the four major AI-governance standards. Auditable out of the box — no secondary tooling required.
 
 ```typescript
-import { assessCompliance, getDaysUntilDeadline } from 'governance-sdk/compliance';
+import { assessCompliance, getDaysUntilDeadline } from 'governance-sdk/compliance'; // EU AI Act
+import { mapToOwaspAgentic } from 'governance-sdk/owasp-agentic';                    // OWASP Top 10 for LLMs / Agentic
+import { mapToNistAiRmf } from 'governance-sdk/nist-ai-rmf';                          // NIST AI RMF Govern/Map/Measure/Manage
+import { mapToIso42001 } from 'governance-sdk/iso-42001';                             // ISO/IEC 42001 controls
 
-const daysLeft = getDaysUntilDeadline();
 const report = await assessCompliance({
-  governance: gov,
-  agents: [agent],
-  auditIntegrity: true,
-  humanOversight: true,
+  governance: gov, agents: [agent],
+  auditIntegrity: true, humanOversight: true,
 });
 ```
 
-### Tamper-Evident Audit Trail
+### Agent Identity (Ed25519)
 
-HMAC-SHA256 signed audit entries. Every policy decision is logged with a cryptographic chain that detects tampering.
+Cryptographically-signed agent identity tokens. Pair with the `requireSignedIdentity()` policy to guarantee that enforce calls come from an agent that actually holds the private key, not a spoof.
 
 ```typescript
-import { verifyAuditIntegrity } from 'governance-sdk/audit-integrity';
+import { signAgentIdentity, verifyAgentIdentity } from 'governance-sdk/agent-identity-ed25519';
 
-const valid = await verifyAuditIntegrity(auditLog, secret);
+const token = await signAgentIdentity({ agentId, keys, ttlSeconds: 3600 });
+// …send token alongside enforce calls; server verifies with public key
+```
+
+### Supply Chain + SBOM
+
+Generate CycloneDX-compatible SBOMs for agent dependencies and validate supply-chain provenance.
+
+```typescript
+import { generateAgentSbom, validateSupplyChain } from 'governance-sdk/supply-chain';
 ```
 
 ### Dry-Run Simulation
@@ -204,6 +260,24 @@ import { fleetDryRun } from 'governance-sdk/dry-run';
 
 const result = await fleetDryRun(gov, scenarios);
 // => { fleetSummary: { agentsAffected: 11, blockRate: 0.12 }, results: [...] }
+```
+
+### Eval Loop + Red Team
+
+Submit traces, score them, and run adversarial red-team suites continuously.
+
+```typescript
+import { submitTrace } from 'governance-sdk/eval-trace';
+import { runRedTeam } from 'governance-sdk/eval-red-team';
+```
+
+### Federation + Sandbox
+
+Multi-org policy federation for parent/child governance relationships. Deterministic sandbox execution for running untrusted agent steps in isolation.
+
+```typescript
+import { createFederation } from 'governance-sdk/federation';
+import { runInSandbox } from 'governance-sdk/sandbox';
 ```
 
 ## Framework Adapters
@@ -243,6 +317,7 @@ where all three hold.
 | Framework | Import Path | Scope |
 |---|---|---|
 | Model Context Protocol | `governance-sdk/plugins/mcp` | Build a **governed MCP server** — input injection pre-scan on tool arguments + output injection scan + tool-call audit for tools you publish. Not for governing MCP servers you consume (govern those at the agent framework layer). |
+| MCP trust + chain audit | `governance-sdk/plugins/mcp-trust`, `governance-sdk/plugins/mcp-chain-audit` | Pin-trusted MCP server registry + end-to-end chain-of-custody audit across nested MCP invocations. |
 | AWS Bedrock Agents | `governance-sdk/plugins/bedrock` | **Entry-gate only** — Bedrock Agents execute tools server-side inside AWS, so we can pre-scan the `InvokeAgent` input and post-scan the assembled output via `scanOutput`, but we can't see individual internal tool calls. |
 
 ### Python, edge runtimes, and other languages
@@ -252,9 +327,9 @@ it exposes the same policy, scoring, audit, and injection-detection endpoints
 the SDK uses locally. Native Python / Go SDKs are not shipped yet; a REST
 client works everywhere.
 
-The SDK itself is pure ESM with no runtime dependencies, so it runs unmodified
-under Node, Deno, Bun, Cloudflare Workers, and other Web-standard runtimes —
-no separate adapter needed.
+The SDK itself is pure ESM with zero runtime dependencies, so it runs
+unmodified under Node, Deno, Bun, Cloudflare Workers, and other Web-standard
+runtimes — no separate adapter needed.
 
 All framework dependencies are optional peer dependencies — install only what you use.
 
@@ -339,26 +414,87 @@ const middleware = createGovernanceMiddleware(gov, {
 
 ## Export Paths
 
-The SDK ships 35 targeted exports so you can import only what you need:
+The SDK ships **44 targeted exports** so you can import only what you need:
 
 ```
-governance-sdk            # core: createGovernance, enforce, presets
-governance-sdk/policy     # policy types and builders
-governance-sdk/scorer     # behavioral scoring engine
-governance-sdk/injection-detect
-governance-sdk/kill-switch
-governance-sdk/compliance
-governance-sdk/audit-integrity
-governance-sdk/policy-compose
-governance-sdk/dry-run
-governance-sdk/events
-governance-sdk/metrics
-governance-sdk/behavioral-scorer
-governance-sdk/repo-patterns
-governance-sdk/storage-postgres
-governance-sdk/storage-postgres-schema
-governance-sdk/plugins/*  # Framework adapters (see table above)
+# Core
+governance-sdk                             createGovernance, enforce, presets
+governance-sdk/policy                      policy types and builders
+governance-sdk/policy-builder              fluent policy builder
+governance-sdk/policy-compose              compose + conflict resolution
+governance-sdk/policy-yaml                 serialize/deserialize policies
+governance-sdk/dry-run                     fleet dry-run simulation
+
+# Scoring
+governance-sdk/scorer                      7-dimension governance scoring
+governance-sdk/behavioral-scorer           behavioral signal adjustments
+governance-sdk/repo-patterns               repository capability detection
+
+# Injection detection
+governance-sdk/injection-detect            64+ pattern regex detector
+governance-sdk/injection-classifier        pluggable ML classifier interface
+governance-sdk/injection-benchmark         LIB — 6.9K-sample benchmark runner
+
+# Audit + identity
+governance-sdk/audit-integrity             HMAC hash-chain verification
+governance-sdk/agent-identity              agent identity tokens
+governance-sdk/agent-identity-ed25519      Ed25519 signing + verification
+governance-sdk/kill-switch                 priority-999 emergency halt
+
+# Standards / compliance
+governance-sdk/compliance                  EU AI Act (6 articles + deadlines)
+governance-sdk/owasp-agentic               OWASP Top 10 for LLMs / Agentic
+governance-sdk/nist-ai-rmf                 NIST AI RMF (Govern/Map/Measure/Manage)
+governance-sdk/iso-42001                   ISO/IEC 42001 controls
+
+# Supply chain
+governance-sdk/supply-chain                validate supply-chain provenance
+governance-sdk/supply-chain-sbom           CycloneDX SBOM generation
+
+# Eval loop + red team
+governance-sdk/eval-types                  shared eval types
+governance-sdk/eval-scorer                 trace scoring
+governance-sdk/eval-trace                  trace submission
+governance-sdk/eval-red-team               adversarial test suites
+
+# Runtime + storage
+governance-sdk/events                      typed event emitter
+governance-sdk/metrics                     Prometheus-style metrics
+governance-sdk/otel-hooks                  OpenTelemetry integration
+governance-sdk/storage-postgres            PostgreSQL storage adapter
+governance-sdk/storage-postgres-schema     schema DDL + migrations
+governance-sdk/federation                  multi-org policy federation
+governance-sdk/sandbox                     deterministic sandbox execution
+
+# Scanner + type surface
+governance-sdk/scanner-plugins             scanner plugin interface
+governance-sdk/token-types                 token type guards
+
+# Framework adapters (10 featured + 4 specialty)
+governance-sdk/plugins/mastra
+governance-sdk/plugins/mastra-processor
+governance-sdk/plugins/vercel-ai
+governance-sdk/plugins/openai-agents
+governance-sdk/plugins/langchain
+governance-sdk/plugins/anthropic
+governance-sdk/plugins/genkit
+governance-sdk/plugins/llamaindex
+governance-sdk/plugins/mistral
+governance-sdk/plugins/ollama
+governance-sdk/plugins/mcp
+governance-sdk/plugins/mcp-annotations
+governance-sdk/plugins/mcp-trust
+governance-sdk/plugins/mcp-chain-audit
+governance-sdk/plugins/bedrock
 ```
+
+## Project Stats
+
+- **0** runtime dependencies
+- **1,291** tests, 0 failures (`npm test`)
+- **44** export paths — tree-shakeable, import only what you use
+- **TypeScript strict mode**, no `any` types in source
+- **MIT licensed**
 
 ## Development
 
@@ -369,7 +505,7 @@ npm install
 # Build all packages
 npm run build
 
-# Run tests (1196 tests, 0 failures)
+# Run tests
 npm test
 
 # Type-check without emitting
@@ -378,8 +514,12 @@ npm run lint
 
 ### Requirements
 
-- Node.js >= 18
-- TypeScript >= 5.7
+- Node.js **>= 20**
+- TypeScript **>= 5.7**
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Security issues: see [SECURITY.md](./SECURITY.md).
 
 ## License
 

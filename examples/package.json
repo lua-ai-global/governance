@@ -19,7 +19,7 @@
     "hosted:all": "tsx hosted/vercel-ai.ts && tsx hosted/anthropic.ts && tsx hosted/mastra.ts && tsx hosted/langchain.ts && tsx hosted/openai-agents.ts && tsx hosted/mcp.ts"
   },
   "dependencies": {
-    "governance-sdk": "^0.8.2",
+    "governance-sdk": "^0.9.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
