@@ -41,6 +41,19 @@ import type { OutcomeCallbacks } from "./outcome-handler.js";
 
 export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
+// ─── Pre/post chat wrappers ─────────────────────────────────
+// See ./ollama-chat.ts for docs + examples.
+export type {
+  OllamaChatParams,
+  OllamaChatResponse,
+  OllamaChatChunk,
+  OllamaChatConfig,
+} from "./ollama-chat.js";
+export {
+  createGovernedOllamaChat,
+  createGovernedOllamaChatStream,
+} from "./ollama-chat.js";
+
 // ─── Shared Helpers ─────────────────────────────────────────
 
 function buildRegistration(config: GovernOllamaConfig, toolNames: string[]): AgentRegistration {

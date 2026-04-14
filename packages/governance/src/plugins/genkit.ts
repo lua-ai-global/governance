@@ -43,6 +43,20 @@ import type { OutcomeCallbacks } from "./outcome-handler.js";
 
 export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
+// ─── Pre/post generate wrappers ─────────────────────────────
+// See ./genkit-generate.ts for docs + examples.
+export type {
+  GenkitGenerateOptions,
+  GenkitGenerateResponse,
+  GenkitStreamChunk,
+  GenkitGenerateStreamResponse,
+  GenkitGenerateConfig,
+} from "./genkit-generate.js";
+export {
+  createGovernedGenerate,
+  createGovernedGenerateStream,
+} from "./genkit-generate.js";
+
 // ─── Shared Helpers ─────────────────────────────────────────
 
 function buildRegistration(config: GovernGenkitConfig, toolNames: string[]): AgentRegistration {

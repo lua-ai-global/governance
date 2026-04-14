@@ -41,6 +41,20 @@ import type { OutcomeCallbacks } from "./outcome-handler.js";
 
 export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
+// ─── Pre/post chat wrappers ─────────────────────────────────
+// See ./mistral-messages.ts for docs + examples.
+export type {
+  MistralChatClient,
+  MistralChatParams,
+  MistralChatResponse,
+  MistralStreamEvent,
+  MistralMessagesConfig,
+} from "./mistral-messages.js";
+export {
+  createGovernedChat,
+  createGovernedChatStream,
+} from "./mistral-messages.js";
+
 // ─── Shared Helpers ─────────────────────────────────────────
 
 function buildRegistration(config: GovernMistralConfig, toolNames: string[]): AgentRegistration {

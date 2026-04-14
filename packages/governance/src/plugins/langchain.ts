@@ -279,3 +279,12 @@ export async function governTools<T extends LangChainTool>(
     level: result.level,
   };
 }
+
+// ─── Pre/post model wrapper ─────────────────────────────────────
+// See ./langchain-model.ts for docs + examples.
+export type {
+  LangChainMessage,
+  LangChainChatModel,
+  LangChainModelConfig,
+} from "./langchain-model.js";
+export { wrapChatModel } from "./langchain-model.js";

@@ -48,6 +48,19 @@ import type { OutcomeCallbacks } from "./outcome-handler.js";
 
 export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
+// ─── Pre/post guardrails ────────────────────────────────────
+// See ./openai-agents-guardrails.ts for docs + examples.
+export type {
+  OpenAIInputGuardrail,
+  OpenAIOutputGuardrail,
+  OpenAIGuardrailConfig,
+  GuardrailOutputInfo,
+} from "./openai-agents-guardrails.js";
+export {
+  createInputGuardrail,
+  createOutputGuardrail,
+} from "./openai-agents-guardrails.js";
+
 // ─── Shared Helpers ─────────────────────────────────────────
 
 function buildRegistration(config: GovernAgentConfig, toolNames: string[], description?: string): AgentRegistration {

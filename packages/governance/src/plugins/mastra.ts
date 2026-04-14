@@ -43,6 +43,9 @@ import type {
 import type { AgentRegistration, AgentFramework } from "../types";
 import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 import type { OutcomeCallbacks } from "./outcome-handler.js";
+import { enforcePreprocess, enforcePostprocess } from "./pre-post-enforce.js";
+import { enforcePostprocessStream } from "./pre-post-stream.js";
+import type { StreamMode } from "./pre-post-stream.js";
 
 // ─── Middleware Types ───────────────────────────────────────────
 
@@ -85,6 +88,12 @@ export interface GovernanceMiddlewareConfig {
   actionMapper?: (toolName: string) => PolicyAction;
   /** Track token usage per session */
   sessionTokenTracker?: () => number;
+  /** Streaming post-scan mode for scanOutputStream (default: "buffered") */
+  streamMode?: StreamMode;
+  /** Sliding mode: chunks to hold back (default 2) */
+  streamLookbackChunks?: number;
+  /** Sliding mode: chars to hold back */
+  streamLookbackChars?: number;
 }
 
 export interface GovernanceMiddleware {
@@ -109,6 +118,29 @@ export interface GovernanceMiddleware {
   wrapTools: <T extends Record<string, (input: Record<string, unknown>) => Promise<unknown>>>(
     tools: T,
   ) => T;
+  /**
+   * Pre-scan a user input string (e.g. the latest user message) BEFORE the
+   * LLM runs. Throws GovernanceBlockedError on block. Returns the text to
+   * use (possibly masked).
+   */
+  scanInput: (userText: string) => Promise<string>;
+  /**
+   * Post-scan a model output string AFTER generation, BEFORE returning to
+   * the user. Throws GovernanceBlockedError on block. Returns the text to
+   * emit (possibly masked).
+   */
+  scanOutput: (outputText: string) => Promise<string>;
+  /**
+   * Wrap an output token stream with post-scan enforcement. See
+   * pre-post-stream.ts for mode semantics (buffered/sliding/per-chunk).
+   */
+  scanOutputStream: <ChunkT>(
+    source: AsyncIterable<ChunkT>,
+    options: {
+      extractText: (chunk: ChunkT) => string;
+      buildMaskedChunk?: (originalChunk: ChunkT, maskedText: string) => ChunkT;
+    },
+  ) => AsyncIterable<ChunkT>;
 }
 
 // Re-export error types from shared outcome handler
@@ -229,6 +261,62 @@ export async function createGovernanceMiddleware(
     return wrapped as T;
   }
 
+  // Pre/post parity with the mastra-processor adapter. These are explicit
+  // calls the integrator makes — different from the processor's automatic
+  // Mastra lifecycle hooks — suitable when you're wiring governance into
+  // a custom runtime loop rather than plugging into inputProcessors[] /
+  // outputProcessors[].
+  const callbacks: OutcomeCallbacks = config as OutcomeCallbacks;
+
+  async function scanInput(userText: string): Promise<string> {
+    const pre = await enforcePreprocess(governance, userText, {
+      agentId: result.id,
+      agentName: config.agentName,
+      agentLevel: result.level,
+      metadata: config.metadata,
+      sessionTokensUsed: config.sessionTokenTracker?.(),
+      callbacks,
+      toolName: "mastra.scanInput",
+    });
+    return pre.text;
+  }
+
+  async function scanOutput(outputText: string): Promise<string> {
+    const post = await enforcePostprocess(governance, outputText, {
+      agentId: result.id,
+      agentName: config.agentName,
+      agentLevel: result.level,
+      metadata: config.metadata,
+      sessionTokensUsed: config.sessionTokenTracker?.(),
+      callbacks,
+      toolName: "mastra.scanOutput",
+    });
+    return post.text;
+  }
+
+  function scanOutputStream<ChunkT>(
+    source: AsyncIterable<ChunkT>,
+    options: {
+      extractText: (chunk: ChunkT) => string;
+      buildMaskedChunk?: (originalChunk: ChunkT, maskedText: string) => ChunkT;
+    },
+  ): AsyncIterable<ChunkT> {
+    return enforcePostprocessStream(governance, source, {
+      agentId: result.id,
+      agentName: config.agentName,
+      agentLevel: result.level,
+      metadata: config.metadata,
+      sessionTokensUsed: config.sessionTokenTracker?.(),
+      callbacks,
+      toolName: "mastra.scanOutputStream",
+      streamMode: config.streamMode,
+      streamLookbackChunks: config.streamLookbackChunks,
+      streamLookbackChars: config.streamLookbackChars,
+      extractText: options.extractText,
+      buildMaskedChunk: options.buildMaskedChunk,
+    });
+  }
+
   return {
     agentId: result.id,
     score: result.score,
@@ -238,5 +326,8 @@ export async function createGovernanceMiddleware(
     governance,
     wrapTool,
     wrapTools,
+    scanInput,
+    scanOutput,
+    scanOutputStream,
   };
 }

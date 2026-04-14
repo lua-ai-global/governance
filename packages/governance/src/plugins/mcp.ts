@@ -122,6 +122,36 @@ export async function createGovernedMCP(
     const args = request.params.arguments;
     const startTime = Date.now();
 
+    // Input pre-scan — symmetric to the output injection scan below.
+    // Walks the incoming tool arguments for textual fields and scans each
+    // for injection patterns BEFORE we call the tool handler. On detection
+    // we block with a GovernanceBlockedError so the caller sees a structured
+    // failure (audit event + policy violation) rather than silent pass-through.
+    if (config.scanToolInputs !== false) {
+      const textInputs = collectTextInputs(args);
+      for (const text of textInputs) {
+        const scan = detectInjection(text, {
+          threshold: config.inputInjectionThreshold ?? 0.6,
+        });
+        if (scan.detected) {
+          await audit(toolName, "failure", {
+            injectionInInput: true, score: scan.score, patterns: scan.patterns,
+          });
+          throw new GovernanceBlockedError(
+            {
+              blocked: true,
+              reason: `Injection detected in tool input (score: ${scan.score})`,
+              ruleId: null,
+              outcome: "block",
+              evaluatedAt: new Date().toISOString(),
+              rulesEvaluated: 0,
+            },
+            toolName,
+          );
+        }
+      }
+    }
+
     await enforce(toolName, args);
 
     try {
@@ -243,4 +273,29 @@ function safeStringify(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+/**
+ * Walk an arbitrary tool-call arguments object and collect every string leaf
+ * for injection scanning. Handles nested objects and arrays. Skips short
+ * strings that are unlikely to contain meaningful payloads.
+ */
+function collectTextInputs(args: unknown, depth = 0): string[] {
+  if (depth > 10) return []; // guard against pathological nesting
+  const out: string[] = [];
+  const visit = (v: unknown): void => {
+    if (typeof v === "string") {
+      if (v.length >= 8) out.push(v);
+      return;
+    }
+    if (Array.isArray(v)) {
+      for (const item of v) visit(item);
+      return;
+    }
+    if (v && typeof v === "object") {
+      for (const val of Object.values(v as Record<string, unknown>)) visit(val);
+    }
+  };
+  visit(args);
+  return out;
 }

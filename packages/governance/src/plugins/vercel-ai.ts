@@ -230,3 +230,12 @@ export async function createGovernedTools<
     audit,
   };
 }
+
+// Pre/post middleware lives in `vercel-ai-middleware.ts` — see README.
+export type {
+  VercelLanguageModelMiddleware,
+  VercelLanguageModelParams,
+  VercelGenerateResult,
+  VercelMiddlewareConfig,
+} from "./vercel-ai-middleware.js";
+export { createGovernanceMiddleware } from "./vercel-ai-middleware.js";

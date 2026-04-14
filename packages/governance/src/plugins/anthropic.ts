@@ -43,6 +43,25 @@ import type { OutcomeCallbacks } from "./outcome-handler.js";
 
 export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 
+// ─── Pre/post messages wrapper ──────────────────────────────
+// See ./anthropic-messages.ts for docs + examples.
+export type {
+  AnthropicMessagesClient,
+  AnthropicMessagesCreateParams,
+  AnthropicMessage,
+  AnthropicMessagesConfig,
+} from "./anthropic-messages.js";
+export { createGovernedMessages } from "./anthropic-messages.js";
+
+// ─── Streaming messages wrapper ─────────────────────────────
+// See ./anthropic-stream.ts for docs + examples.
+export type {
+  AnthropicStreamEvent,
+  AnthropicStreamParams,
+  AnthropicStreamConfig,
+} from "./anthropic-stream.js";
+export { createGovernedMessageStream } from "./anthropic-stream.js";
+
 // ─── Shared Helpers ─────────────────────────────────────────
 
 function buildRegistration(config: GovernAnthropicConfig, toolNames: string[]): AgentRegistration {

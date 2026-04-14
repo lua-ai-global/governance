@@ -45,6 +45,7 @@ export type {
 
 import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 import type { OutcomeCallbacks } from "./outcome-handler.js";
+import { enforcePreprocess, enforcePostprocess } from "./pre-post-enforce.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 
@@ -113,6 +114,23 @@ export async function createGovernedBedrock(
 
   async function invokeAgent(input: BedrockInvokeAgentInput): Promise<unknown> {
     const toolName = `bedrock:${input.agentId}:${input.agentAliasId}`;
+
+    // Pre-scan on the user's inputText BEFORE Bedrock receives it. This is
+    // entry-gate only — Bedrock Agents execute their internal tool calls
+    // inside AWS, so we don't see them individually. What we CAN gate is
+    // the prompt coming in and the final text coming out.
+    if ((config.preprocess ?? true) && input.inputText) {
+      await enforcePreprocess(governance, input.inputText, {
+        agentId: result.id,
+        agentName: config.agentName,
+        agentLevel: result.level,
+        metadata: config.metadata,
+        sessionTokensUsed: config.sessionTokenTracker?.(),
+        callbacks: config as OutcomeCallbacks,
+        toolName: "bedrock.invokeAgent:pre",
+      });
+    }
+
     await enforce(toolName, {
       agentId: input.agentId,
       agentAliasId: input.agentAliasId,
@@ -131,6 +149,32 @@ export async function createGovernedBedrock(
       });
       throw error;
     }
+  }
+
+  /**
+   * Post-scan helper for callers who've already assembled the Bedrock
+   * response text. Bedrock's invokeAgent returns a streamed completion,
+   * and deserialization is caller-specific (they decode the chunk bytes);
+   * we expose this so callers can post-scan after their own assembly:
+   *
+   *   const response = await invokeAgent({...});
+   *   const text = await assembleBedrockResponse(response);
+   *   const safeText = await scanOutput(text);
+   *
+   * Returns the (possibly masked) text. Throws on block.
+   */
+  async function scanOutput(outputText: string): Promise<string> {
+    if (!(config.postprocess ?? true)) return outputText;
+    const post = await enforcePostprocess(governance, outputText, {
+      agentId: result.id,
+      agentName: config.agentName,
+      agentLevel: result.level,
+      metadata: config.metadata,
+      sessionTokensUsed: config.sessionTokenTracker?.(),
+      callbacks: config as OutcomeCallbacks,
+      toolName: "bedrock.invokeAgent:post",
+    });
+    return post.text;
   }
 
   async function guardActionGroup(invocation: BedrockActionGroupInvocation): Promise<EnforcementDecision> {
@@ -175,6 +219,7 @@ export async function createGovernedBedrock(
     invokeAgent,
     guardActionGroup,
     guardToolUse,
+    scanOutput,
     agentId: result.id,
     score: result.score,
     level: result.level,

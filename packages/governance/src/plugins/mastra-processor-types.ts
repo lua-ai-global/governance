@@ -186,10 +186,10 @@ export type GovernanceLifecycleArgs =
 /**
  * Mastra Processor interface — simplified for governance use.
  *
- * As of governance-sdk 0.8.0, the GovernanceProcessor implements three
- * Mastra lifecycle methods (processInput, processOutputStep, processOutputResult).
- * Mastra also supports processInputStep and processOutputStream — those are
- * not implemented yet (tracked for a future release).
+ * As of governance-sdk 0.9.0, the GovernanceProcessor implements four
+ * Mastra lifecycle methods: processInput, processOutputStep,
+ * processOutputResult, and processOutputStream (per-chunk streaming).
+ * processInputStep is not implemented (agentic-loop step, not per-chunk input).
  *
  * Also supports __registerMastra (not mirrored here).
  */
@@ -204,6 +204,35 @@ export interface MastraProcessorInterface {
   processOutputStep(args: ProcessOutputStepArgs): Promise<unknown> | unknown;
   /** Postprocess: runs once at the end, with the resolved output */
   processOutputResult?(args: ProcessOutputResultArgs): Promise<unknown> | unknown;
+  /**
+   * Per-chunk streaming: runs for each chunk during agent.stream(). Return
+   * the part (optionally modified), return null/undefined to drop the chunk,
+   * or call args.abort(...) to tripwire.
+   */
+  processOutputStream?(
+    args: ProcessOutputStreamArgs,
+  ): Promise<MastraStreamChunk | null | undefined> | MastraStreamChunk | null | undefined;
+}
+
+/** Minimal shape of a Mastra stream chunk we care about. */
+export interface MastraStreamChunk {
+  type: string;
+  /** Text-delta chunks carry a `payload.text` string. */
+  payload?: { text?: string; [k: string]: unknown };
+  [k: string]: unknown;
+}
+
+/** Args for processOutputStream (per-chunk streaming hook). */
+export interface ProcessOutputStreamArgs {
+  part: MastraStreamChunk;
+  streamParts?: MastraStreamChunk[];
+  state?: Record<string, unknown>;
+  messageList?: unknown;
+  abort: (reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never;
+  requestContext?: unknown;
+  retryCount?: number;
+  writer?: unknown;
+  abortSignal?: AbortSignal;
 }
 
 // ─── Processor Configuration ──────────────────────────────────
@@ -287,6 +316,27 @@ export interface GovernanceProcessorConfig {
    * The second arg is the agent's response text that was scanned.
    */
   onPostprocessBlocked?: (decision: EnforcementDecision, output: string) => void;
+
+  // ─── Streaming postprocess (processOutputStream) — 0.9.0 ─────
+  /**
+   * Skip per-chunk streaming postprocess entirely. When true, streamed
+   * chunks pass through untouched and governance only fires via
+   * processOutputResult at the end of the stream. Default: false.
+   */
+  skipStreamPostprocess?: boolean;
+  /**
+   * Streaming post-scan mode. Default: "per-chunk" (Mastra's native shape).
+   *   - "per-chunk": scan each chunk in isolation, mask if needed
+   *   - "sliding": hold back chunks (via state) to catch cross-chunk patterns
+   *   - "buffered": suppress per-chunk scanning; rely on processOutputResult instead
+   */
+  streamMode?: "per-chunk" | "sliding" | "buffered";
+  /** Sliding mode: chunks to hold back (default 2). */
+  streamLookbackChunks?: number;
+  /** Sliding mode: chars to hold back (overrides chunk count when exceeded). */
+  streamLookbackChars?: number;
+  /** Fired when a stream chunk is blocked by a rule. */
+  onStreamBlocked?: (decision: EnforcementDecision, chunkText: string) => void;
 
   // ─── Cross-stage callbacks — 0.8.0 ───────────────────────────
   /**

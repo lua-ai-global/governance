@@ -41,6 +41,18 @@ export type {
 import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 import type { OutcomeCallbacks } from "./outcome-handler.js";
 
+// ─── Pre/post LLM wrapper ───────────────────────────────────
+// See ./llamaindex-llm.ts for docs + examples.
+export type {
+  LlamaChatMessage,
+  LlamaChatRequest,
+  LlamaChatResponse,
+  LlamaChatResponseChunk,
+  LlamaLLM,
+  LlamaLLMConfig,
+} from "./llamaindex-llm.js";
+export { wrapLlamaLLM } from "./llamaindex-llm.js";
+
 // ─── Blocked Error ──────────────────────────────────────────
 
 export { GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";

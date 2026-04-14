@@ -173,3 +173,65 @@ describe("createGovernanceMiddleware", () => {
     await assert.rejects(mw.beforeToolCall("search"), { name: "GovernanceBlockedError" });
   });
 });
+
+// ─── Pre/post parity ────────────────────────────────────────
+
+describe("mastra middleware — scanInput / scanOutput / scanOutputStream", () => {
+  test("scanInput: allow passes text through", async () => {
+    const { createGovernance } = await import("../index");
+    const gov = createGovernance();
+    const mw = await createGovernanceMiddleware(gov, {
+      agentName: "pre-parity", owner: "t",
+    });
+    const out = await mw.scanInput("hello world");
+    assert.equal(out, "hello world");
+  });
+
+  test("scanInput: block throws GovernanceBlockedError", async () => {
+    const { createGovernance, inputBlocklist } = await import("../index");
+    const gov = createGovernance({
+      rules: [inputBlocklist(["forbidden"])],
+    });
+    const mw = await createGovernanceMiddleware(gov, {
+      agentName: "pre-parity-block", owner: "t",
+    });
+    await assert.rejects(
+      () => mw.scanInput("please do forbidden thing"),
+      { name: "GovernanceBlockedError" },
+    );
+  });
+
+  test("scanOutput: mask returns redacted text", async () => {
+    const { createGovernance, maskOutputPattern } = await import("../index");
+    const gov = createGovernance({
+      rules: [maskOutputPattern("\\d{3}-\\d{2}-\\d{4}", "g")],
+    });
+    const mw = await createGovernanceMiddleware(gov, {
+      agentName: "post-mask", owner: "t",
+    });
+    const out = await mw.scanOutput("ssn 123-45-6789 leak");
+    assert.ok(!/123-45-6789/.test(out), `expected masked, got: ${out}`);
+  });
+
+  test("scanOutputStream: blocks cross-chunk pattern (buffered default)", async () => {
+    const { createGovernance, outputPattern } = await import("../index");
+    const gov = createGovernance({ rules: [outputPattern("SECRET", "g")] });
+    const mw = await createGovernanceMiddleware(gov, {
+      agentName: "stream-test", owner: "t",
+    });
+
+    async function* chunks() {
+      yield { text: "SEC" };
+      yield { text: "RET" };
+    }
+
+    const guarded = mw.scanOutputStream(chunks(), {
+      extractText: (c) => c.text,
+    });
+
+    await assert.rejects(async () => {
+      const out: { text: string }[] = [];
+      for await (const c of guarded) out.push(c);
+    }, { name: "GovernanceBlockedError" });
+  });
+});

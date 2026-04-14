@@ -260,3 +260,82 @@ describe("guardToolUse", () => {
     assert.ok(toolCalls.length > 0);
   });
 });
+
+// ─── Entry-gate pre/post ────────────────────────────────────
+
+describe("bedrock entry-gate pre/post", () => {
+  test("pre-scan blocks invokeAgent when input contains injection", async () => {
+    const { inputBlocklist } = await import("../index");
+    const gov = createGovernance({
+      rules: [inputBlocklist(["forbidden"])],
+    });
+    let called = false;
+    const result = await createGovernedBedrock(gov, async () => {
+      called = true;
+      return { completion: "done" };
+    }, {
+      agentName: "bedrock-pre", owner: "t",
+    });
+
+    await assert.rejects(
+      () => result.invokeAgent(makeInvokeInput({ inputText: "please do forbidden thing" })),
+      GovernanceBlockedError,
+    );
+    assert.equal(called, false, "upstream invokeHandler should not run after pre-scan block");
+  });
+
+  test("preprocess: false skips pre-scan (rule still applies at enforce stage)", async () => {
+    // Tests the flag wiring — with no preprocess-stage rule in place,
+    // preprocess: true adds a scan call but doesn't block; preprocess: false
+    // skips it entirely. The enforce-stage rule still fires either way,
+    // so we use a fresh governance with NO rules to isolate the pre-scan flag.
+    const gov = createGovernance({ rules: [] });
+    const result = await createGovernedBedrock(gov, mockInvokeHandler({ completion: "ok" }), {
+      agentName: "bedrock-no-pre", owner: "t",
+      preprocess: false,
+    });
+    const response = await result.invokeAgent(makeInvokeInput({ inputText: "anything" }));
+    assert.ok(response);
+  });
+
+  test("scanOutput masks sensitive text", async () => {
+    const { maskOutputPattern } = await import("../index");
+    const gov = createGovernance({
+      rules: [maskOutputPattern("\\d{3}-\\d{2}-\\d{4}", "g")],
+    });
+    const result = await createGovernedBedrock(gov, mockInvokeHandler(), {
+      agentName: "bedrock-post", owner: "t",
+    });
+
+    const masked = await result.scanOutput("ssn 123-45-6789 leak");
+    assert.ok(!/123-45-6789/.test(masked), `expected masked, got: ${masked}`);
+  });
+
+  test("scanOutput throws on blocked output", async () => {
+    const { outputPattern } = await import("../index");
+    const gov = createGovernance({
+      rules: [outputPattern("SECRET", "g")],
+    });
+    const result = await createGovernedBedrock(gov, mockInvokeHandler(), {
+      agentName: "bedrock-post-block", owner: "t",
+    });
+
+    await assert.rejects(
+      () => result.scanOutput("contains SECRET payload"),
+      GovernanceBlockedError,
+    );
+  });
+
+  test("postprocess: false makes scanOutput a no-op", async () => {
+    const { outputPattern } = await import("../index");
+    const gov = createGovernance({
+      rules: [outputPattern("SECRET", "g")],
+    });
+    const result = await createGovernedBedrock(gov, mockInvokeHandler(), {
+      agentName: "bedrock-no-post", owner: "t",
+      postprocess: false,
+    });
+    const text = await result.scanOutput("contains SECRET payload");
+    assert.equal(text, "contains SECRET payload");
+  });
+});

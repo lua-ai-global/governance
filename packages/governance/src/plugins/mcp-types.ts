@@ -170,6 +170,10 @@ export interface GovernMCPConfig {
   scanToolOutputs?: boolean;
   /** Injection detection threshold for tool outputs (default: 0.6) */
   outputInjectionThreshold?: number;
+  /** Whether to scan tool INPUT text for injection patterns (default: true) */
+  scanToolInputs?: boolean;
+  /** Injection detection threshold for tool inputs (default: 0.6) */
+  inputInjectionThreshold?: number;
   /** Optional trace collector for eval — captures tool call spans */
   traceCollector?: TraceCollector;
 }

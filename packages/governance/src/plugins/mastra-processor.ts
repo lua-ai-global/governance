@@ -27,18 +27,23 @@ import type {
   MastraProcessorInterface,
   MastraToolCallInfo,
   MastraMessage,
+  MastraStreamChunk,
   ProcessInputArgs,
   ProcessOutputStepArgs,
   ProcessOutputResultArgs,
+  ProcessOutputStreamArgs,
   GovernanceLifecycleArgs,
   GovernanceStage,
   GovernanceProcessorConfig,
   GovernanceViolation,
   ProcessorStats,
 } from "./mastra-processor-types.js";
+import { governStreamChunk } from "./mastra-processor-stream.js";
 
 // Re-export all types
 export type {
+  MastraStreamChunk,
+  ProcessOutputStreamArgs,
   MastraToolCallInfo,
   MastraAbortOptions,
   GovernanceViolation,
@@ -489,6 +494,41 @@ export class GovernanceProcessor implements MastraProcessorInterface {
       }
     }
     parts.push({ type: "text", text: newText });
+  }
+
+  /**
+   * Mastra calls this for each chunk emitted by `agent.stream()`. We route
+   * through governStreamChunk (mastra-processor-stream.ts) which handles
+   * the three streaming modes (per-chunk, sliding, buffered).
+   *
+   * Preprocess already ran at processInput time, so we only post-scan here.
+   * On block, governStreamChunk calls args.abort() to tripwire the stream.
+   */
+  async processOutputStream(
+    args: ProcessOutputStreamArgs,
+  ): Promise<MastraStreamChunk | null | undefined> {
+    await this.ensureRegistered();
+    if (!this.agentId) return args.part;
+
+    // Mastra's callback shapes are framework-specific (e.g. onBlocked takes
+    // a MastraToolCallInfo) and don't line up with the generic OutcomeCallbacks
+    // contract used by the shared pre/post helpers. Build an adapter view so
+    // governStreamChunk can drive generic callbacks while preserving any
+    // Mastra-specific side effects the integrator wired up.
+    const genericCallbacks: import("./outcome-handler.js").OutcomeCallbacks = {
+      onMask: (decision, _toolName, masked) => {
+        this.config.onMask?.(decision, "", masked);
+      },
+    };
+
+    return governStreamChunk(
+      args,
+      this.governance,
+      this.config,
+      this.agentId,
+      this.agentLevel,
+      genericCallbacks,
+    );
   }
 
   getAgentId(): string | null { return this.agentId; }

@@ -164,6 +164,15 @@ export interface GovernBedrockConfig {
   onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (toolName: string) => PolicyAction;
   sessionTokenTracker?: () => number;
+  /**
+   * Pre-scan the user inputText before invokeAgent runs (default: true).
+   * Entry-gate only — Bedrock Agents execute internal tool calls server-side
+   * inside AWS, so we can't see individual tool calls. We CAN gate the prompt
+   * going in and the final response text coming out.
+   */
+  preprocess?: boolean;
+  /** Post-scan tag — consumed by the scanOutput helper (default: true). */
+  postprocess?: boolean;
 }
 
 // ─── Results ────────────────────────────────────────────────
@@ -175,6 +184,12 @@ export interface GovernedBedrockResult {
   guardActionGroup: (invocation: BedrockActionGroupInvocation) => Promise<EnforcementDecision>;
   /** Guard a tool_use block from Converse API response */
   guardToolUse: (block: BedrockToolUseBlock) => Promise<EnforcementDecision>;
+  /**
+   * Post-scan assembled Bedrock response text. Use after your own code has
+   * drained invokeAgent's streamed chunks and assembled them into text.
+   * Returns the (possibly masked) text; throws GovernanceBlockedError on block.
+   */
+  scanOutput: (outputText: string) => Promise<string>;
   agentId: string;
   score: number;
   level: number;
