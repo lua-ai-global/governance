@@ -29,8 +29,6 @@ import { createPolicyEngine } from "./policy.js";
 import { createMemoryStorage } from "./storage.js";
 import { createRemoteEnforcer, validateRemoteConfig } from "./remote-enforce.js";
 import { computeBehavioralAdjustments, applyBehavioralAdjustments } from "./behavioral-scorer.js";
-import { computeEvalAdjustments, applyEvalAdjustments } from "./eval-scorer.js";
-import { createTraceCollector } from "./eval-trace.js";
 import {
   canonicalize as canonicalizeAuditEvent,
   hmacSha256,
@@ -41,7 +39,6 @@ import {
 import type { AgentRegistration, GovernanceAssessment, FleetSummary } from "./types.js";
 import type { PolicyRule, PolicyEngine, PolicyStage, EnforcementContext, EnforcementDecision } from "./policy.js";
 import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
-import type { EvalResult, TraceCollector } from "./eval-types.js";
 
 /**
  * Post-execution outcome payload for `gov.recordOutcome()`. Framework
@@ -179,17 +176,6 @@ export interface GovernanceInstance {
   addRule: (rule: PolicyRule) => void;
   /** Remove a policy rule by ID */
   removeRule: (ruleId: string) => void;
-  /** Eval loop — submit results from inspect-ai / PyRIT / Garak / your own harness */
-  eval: {
-    /** Submit eval results for an agent (feeds into scoring via score()) */
-    submit: (result: EvalResult) => void;
-    /** Get recent eval results for an agent */
-    getResults: (agentId: string) => EvalResult[];
-    /** Clear eval results for an agent */
-    clear: (agentId: string) => void;
-    /** Trace collector for wiring into framework adapters */
-    traces: TraceCollector;
-  };
   /** Test API connectivity. Returns status without throwing. */
   connect: () => Promise<{ connected: boolean; mode: string; latencyMs: number }>;
   /** Current connection status (cached from last enforce/connect call). */
@@ -305,12 +291,6 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
         fallbackMode: config.fallbackMode,
       })
     : null;
-
-  // Eval stores — in-memory, capped per agent and total agents
-  const evalResultStore = new Map<string, EvalResult[]>();
-  const traceCollector = createTraceCollector({ maxTraces: 200 });
-  const MAX_EVAL_RESULTS_PER_AGENT = 100;
-  const MAX_EVAL_AGENTS = 1000;
 
   async function register(input: AgentRegistration) {
     if (remote) {
@@ -433,15 +413,6 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       );
     }
 
-    // Apply eval adjustments from submitted eval results
-    const evalResults = evalResultStore.get(agentId) ?? [];
-    if (evalResults.length > 0) {
-      const evalAssessment = computeEvalAdjustments({ results: evalResults });
-      assessment.dimensions = applyEvalAdjustments(
-        assessment.dimensions, evalAssessment.adjustments,
-      );
-    }
-
     // Recompute composite score from adjusted dimensions
     const newScore = computeCompositeScore(assessment.dimensions);
     const newLevel = getGovernanceLevel(newScore);
@@ -465,7 +436,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     }));
     const fleet = assessFleet(registrations);
 
-    // Apply behavioral + eval adjustments to each agent assessment
+    // Apply behavioral adjustments to each agent assessment
     for (const assessment of fleet.assessments) {
       const agent = agents.find((a) => a.id === assessment.agentId);
       if (!agent) continue;
@@ -478,14 +449,6 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
         });
         assessment.dimensions = applyBehavioralAdjustments(
           assessment.dimensions, behavioral.adjustments,
-        );
-      }
-
-      const evalResults = evalResultStore.get(agent.id) ?? [];
-      if (evalResults.length > 0) {
-        const evalAssessment = computeEvalAdjustments({ results: evalResults });
-        assessment.dimensions = applyEvalAdjustments(
-          assessment.dimensions, evalAssessment.adjustments,
         );
       }
 
@@ -578,31 +541,6 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     policies.removeRule(ruleId);
   }
 
-  const evalApi = {
-    submit(result: EvalResult): void {
-      if (!evalResultStore.has(result.agentId)) {
-        // Evict oldest agent entry when at capacity
-        if (evalResultStore.size >= MAX_EVAL_AGENTS) {
-          const oldest = evalResultStore.keys().next().value!;
-          evalResultStore.delete(oldest);
-        }
-        evalResultStore.set(result.agentId, []);
-      }
-      const results = evalResultStore.get(result.agentId)!;
-      results.push(result);
-      if (results.length > MAX_EVAL_RESULTS_PER_AGENT) {
-        results.splice(0, results.length - MAX_EVAL_RESULTS_PER_AGENT);
-      }
-    },
-    getResults(agentId: string): EvalResult[] {
-      return evalResultStore.get(agentId) ?? [];
-    },
-    clear(agentId: string): void {
-      evalResultStore.delete(agentId);
-    },
-    traces: traceCollector,
-  };
-
   const noopStatus = () => ({ connected: true, mode: "local" as const, latencyMs: 0 });
 
   const integrityChain = integrity
@@ -655,7 +593,6 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     recordOutcome,
     score: scoreAgentFn, scoreFleet: scoreFleetFn,
     policies: readonlyPolicies, storage, addRule, removeRule,
-    eval: evalApi,
     connect: remote ? remote.connect : async () => noopStatus(),
     status: remote ? remote.status : noopStatus,
     waitForApproval: remote
