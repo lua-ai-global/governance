@@ -54,7 +54,14 @@ detection — nothing more. To pre-empt scope questions:
   ≈ 0.48 on the 6,931-sample LIB corpus. Layer in an ML classifier via the
   `InjectionClassifier` interface for production coverage.
 - **Compliance mapping is self-assessment**, not legal advice or certification.
-- **Eval is in-memory**, not a durable eval store.
+- **No built-in observability or eval pipeline.** The `metrics` and
+  `otel-hooks` exports produce passive in-memory data structures you serialize
+  to your own monitoring system; they are NOT OpenInference-compliant and NOT
+  a replacement for Phoenix, Langfuse, Braintrust, or a real OpenTelemetry
+  exporter. A first-class OTel/OpenInference exporter is on the roadmap.
+- **No built-in eval store.** `gov.eval.*` was removed in 0.11. Use inspect-ai,
+  PyRIT, Garak, Phoenix, Langfuse, or your harness of choice and route results
+  into your audit stream via `gov.audit.log()`.
 - **Simulator does not replay side effects** — it evaluates policy outcomes
   against synthetic scenarios, it does not execute tools.
 - **`enforce()` does not hash-chain by default** — opt in with
@@ -208,11 +215,12 @@ getGovernanceLevel(assessment.compositeScore);
 // => { level: 4, label: 'Certified', description: '...' }
 ```
 
-Behavioral signals (block rate, injection hits, approval misses) can be
-fed in via `behavioral-scorer.computeBehavioralAdjustments()` so the score
-reflects how an agent *has* behaved, not just its configured posture. This
-is an opt-in call — the SDK does not automatically ingest live audit
-events; you query your audit stream and pass results to the adjuster.
+Behavioral signals (block rate, injection hits, approval misses) are
+available via the optional `behavioral-scorer` module — feed them in to
+adjust the score against how the agent *has* behaved, not just its
+configured posture. This is opt-in and not wired by default; we plan to
+promote dynamic trust scoring as a first-class feature in a future
+release.
 
 **Weight rationale + inflation risk**: the default weights
 (identity/permissions 1.5; guardrails 1.3; observability 1.2;
@@ -457,32 +465,6 @@ const result = await simulateFleetPolicy(gov, scenarios);
 // => { fleetSummary: { agentsAffected: 11, blockRate: 0.12 }, results: [...] }
 ```
 
-### Eval traces
-
-Capture agent operation traces (spans, tool calls, LLM invocations) into an
-in-memory collector, retrieve them per-agent, and pipe them into your own
-metric evaluator. The SDK does **not** ship a built-in LLM-as-judge; metric
-generation is your responsibility (wire in your Claude/OpenAI/local model of
-choice).
-
-```typescript
-import { createTraceCollector, submitTrace } from 'governance-sdk/eval-trace';
-
-const traces = createTraceCollector({ maxTraces: 200 });
-submitTrace(traces, {
-  agentId: 'luna',
-  input: 'What deals closed this week?',
-  output: '3 deals totaling $45k',
-  spans: [{ operation: 'tool_call', toolName: 'search', success: true, latencyMs: 120 }],
-});
-```
-
-For adversarial-LLM / jailbreak testing, use a dedicated harness like
-[inspect-ai](https://github.com/UKGovernmentBEIS/inspect_ai),
-[PyRIT](https://github.com/Azure/PyRIT), or
-[Garak](https://github.com/leondz/garak) and submit results via your own
-pipeline.
-
 ## Framework Adapters
 
 Governance needs three things to be real: a **point of interception** (we sit
@@ -617,7 +599,7 @@ const middleware = createGovernanceMiddleware(gov, {
 
 ## Export Paths
 
-The SDK ships **49 targeted exports** so you can import only what you need:
+The SDK ships **44 targeted exports** so you can import only what you need:
 
 ```
 # Core
@@ -641,7 +623,6 @@ governance-sdk/injection-benchmark         LIB — 6.9K-sample benchmark runner
 # Audit + identity
 governance-sdk/audit-integrity             HMAC hash-chain primitives (createIntegrityAudit, verifyAuditIntegrity)
 governance-sdk/audit-integrity-verify      standalone chain verifier (for offline audit)
-governance-sdk/action-recorder             runWithOutcome() — record action success/failure into the chain
 governance-sdk/agent-identity              agent identity tokens
 governance-sdk/agent-identity-ed25519      Ed25519 signing + verification
 governance-sdk/kill-switch                 priority-999 emergency halt
@@ -652,23 +633,21 @@ governance-sdk/owasp-agentic               OWASP Top 10 for LLMs / Agentic
 governance-sdk/nist-ai-rmf                 NIST AI RMF (Govern/Map/Measure/Manage)
 governance-sdk/iso-42001                   ISO/IEC 42001 controls
 
-# Eval
-governance-sdk/eval-types                  shared eval types
-governance-sdk/eval-scorer                 trace scoring
-governance-sdk/eval-trace                  trace submission
-
-# Runtime + storage
-governance-sdk/events                      typed event emitter
-governance-sdk/metrics                     in-memory counter / timing snapshots (serialize to your monitoring system)
-governance-sdk/otel-hooks                  OTel-compatible span data (zero OTel deps; wire to your own tracer)
+# Storage
 governance-sdk/storage-postgres            PostgreSQL storage adapter
 governance-sdk/storage-postgres-schema     schema DDL + migrations
+
+# Optional observability primitives — passive in-memory, host wires to its own
+# monitoring; NOT OpenInference-compliant. A real OTel exporter is on the roadmap.
+governance-sdk/events                      typed event emitter
+governance-sdk/metrics                     in-memory counter / timing snapshots
+governance-sdk/otel-hooks                  governance-prefixed span shape (passive — user must wire)
 
 # Scanner + type surface
 governance-sdk/scanner-plugins             scanner plugin interface
 governance-sdk/token-types                 token type guards
 
-# Framework adapters (10 featured + 4 specialty)
+# Framework adapters (10 featured + 3 specialty)
 governance-sdk/plugins/mastra
 governance-sdk/plugins/mastra-processor
 governance-sdk/plugins/vercel-ai
@@ -680,17 +659,19 @@ governance-sdk/plugins/llamaindex
 governance-sdk/plugins/mistral
 governance-sdk/plugins/ollama
 governance-sdk/plugins/mcp
-governance-sdk/plugins/mcp-annotations
 governance-sdk/plugins/mcp-trust
 governance-sdk/plugins/mcp-chain-audit
 governance-sdk/plugins/bedrock
 ```
 
+`runWithOutcome()` (a thin helper around `gov.recordOutcome`) is exposed at the
+top-level package export — `import { runWithOutcome } from 'governance-sdk'`.
+
 ## Project Stats
 
 - **0** runtime dependencies
-- **1,348** tests, 0 failures (`npm test`)
-- **49** export paths — tree-shakeable, import only what you use
+- **1,328** tests, 0 failures (`npm test`)
+- **44** export paths — tree-shakeable, import only what you use
 - **TypeScript strict mode**, no `any` types in source
 - **MIT licensed**
 

@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.11.0] - 2026-04-15 — Scope honesty pass 2
+
+This release follows up the 0.10 cleanup with another round of cuts based on
+a feature-by-feature audit against actual `governance-cloud` consumers and
+the major competitors (Microsoft `agent-governance-toolkit`, NeMo Guardrails,
+Phoenix, Langfuse, Braintrust). Removes 5 modules with no consumers and no
+competitor treating them as load-bearing features, and clarifies framing
+around 4 more that ship but were oversold as built-in observability / eval
+infrastructure. **1,328 tests** pass with **0 failures**.
+
+### Removed (BREAKING)
+
+- **`governance-sdk/eval-trace`**, **`governance-sdk/eval-scorer`**,
+  **`governance-sdk/eval-types`**, and the **`gov.eval`** field on
+  `GovernanceInstance`. The in-memory trace ring buffer + naive
+  eval-adjustment scoring loop was unused by every audited consumer and
+  easily mistaken for a real eval pipeline. Use a dedicated harness
+  (inspect-ai, PyRIT, Garak, Phoenix, Langfuse, Braintrust) and route
+  results to your audit stream via `gov.audit.log()`.
+- **`governance-sdk/plugins/mcp-annotations`** — annotation-rule generator
+  was a static template, not a runtime governance feature.
+- **`governance-sdk/supply-chain-sbom`** — proprietary `LuaAgentSBOM`
+  capability manifest with no producers or consumers. The CycloneDX
+  exporter (`governance-sdk/supply-chain-cyclonedx`) and the supply-chain
+  policy primitive (`governance-sdk/supply-chain`) remain.
+- **`GovernMCPConfig.traceCollector`** field — removed alongside `gov.eval`.
+  Tool-call audit events still fire via `gov.audit`.
+
+### Demoted (no API change — README framing only)
+
+- **`metrics`**, **`otel-hooks`**, **`action-recorder`**,
+  **`behavioral-scorer`** — remain shipped, but no longer headlined as
+  built-in observability / eval / dynamic-trust features. A real OTel +
+  OpenInference exporter and a TrustEngine promotion of behavioral
+  scoring are on the roadmap.
+
+### Migration
+
+- `gov.eval.submit(...)` callers: stop calling. Eval results should land
+  in your existing audit stream or your harness's own store.
+- `import { generateAgentSBOM } from 'governance-sdk/supply-chain-sbom'`:
+  if you need an SBOM, use `governance-sdk/supply-chain-cyclonedx` instead
+  (CycloneDX 1.5, validates against the official schema).
+- `import { generateAnnotationRules } from 'governance-sdk/plugins/mcp-annotations'`:
+  no replacement; build annotation-aware rules directly with `policy-builder`
+  or `policy-yaml`.
+- `traceCollector` in `createGovernedMCP(...)` config: drop the field.
+
+### Stats
+
+- 49 → **44** export paths
+- 1,358 → **1,328** tests (drop of 30 from removed test files)
+- 0 runtime dependencies (unchanged)
+
 ## [0.10.0] - 2026-04-15 — Scope honesty release
 
 This release tightens the SDK to the surface we can defend, and is honest
