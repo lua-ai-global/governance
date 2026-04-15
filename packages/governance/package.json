@@ -161,6 +161,10 @@
       "types": "./dist/audit-integrity-verify.d.ts",
       "import": "./dist/audit-integrity-verify.js"
     },
+    "./action-recorder": {
+      "types": "./dist/action-recorder.d.ts",
+      "import": "./dist/action-recorder.js"
+    },
     "./plugins/mcp-trust": {
       "types": "./dist/plugins/mcp-trust.d.ts",
       "import": "./dist/plugins/mcp-trust.js"

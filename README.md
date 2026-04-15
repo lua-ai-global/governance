@@ -254,22 +254,53 @@ sequence number + canonicalised event body**, so any edit, deletion, or
 reorder-via-sequence-renumbering breaks verification. Constant-time hash
 comparison throughout — no timing oracle.
 
-**Opt-in**, not on by default. The core `gov.enforce()` path writes audit
-events directly via your storage adapter. Wrap it with `createIntegrityAudit()`
-to start a hash-chained log, and use the standalone `verifyAuditIntegrity()`
-to re-verify an exported chain offline (e.g. on a separate auditor machine).
+**Opt-in via a single config flag.** Pass `integrityAudit: { signingKey }` to
+`createGovernance()` and every audit write the SDK makes is chained
+automatically — no separate wrapper, no ceremony:
 
 ```typescript
-import { createIntegrityAudit, verifyAuditIntegrity } from 'governance-sdk/audit-integrity';
+import { createGovernance, runWithOutcome } from 'governance-sdk';
+import { verifyAuditIntegrity } from 'governance-sdk/audit-integrity-verify';
 
-const integrity = createIntegrityAudit(gov, { signingKey: process.env.AUDIT_SECRET! });
-await integrity.log({ agentId: 'bot', eventType: 'tool_call', outcome: 'allow', severity: 'info' });
+const gov = createGovernance({
+  rules: [/* ... */],
+  integrityAudit: {
+    signingKey: process.env.AUDIT_SECRET!,
+    onFailure: 'allow',   // or 'block' to fail-closed on chain errors
+  },
+});
 
-// Anywhere with the chain snapshot + the shared secret:
-const snapshot = await integrity.export();
-const { valid, brokenAt, breakDetail } = await verifyAuditIntegrity(snapshot, process.env.AUDIT_SECRET!);
-// => { valid: false, brokenAt: 42, breakDetail: 'Hash mismatch at sequence 42: event <id> content has been modified' }
+// Every one of these is HMAC-chained:
+await gov.register({ name: 'sales-bot', framework: 'mastra', owner: 'team' });
+await gov.enforce({ agentId, action: 'tool_call', tool: 'search' });
+
+// Close the decision → outcome loop with runWithOutcome():
+const result = await runWithOutcome(gov, { agentId, tool: 'search' }, async () => {
+  return await searchApi.query(q);
+});
+// ↑ success (or failure, with error + duration) auto-recorded in the chain
+
+// Verify the chain offline, anywhere, with just the secret:
+const chain = await gov.integrityChain!.export();
+const { valid, brokenAt, breakDetail } = await verifyAuditIntegrity(chain, process.env.AUDIT_SECRET!);
 ```
+
+**What gets chained (when `integrityAudit` is set):**
+
+| Event type | Written by | What it captures |
+|---|---|---|
+| `agent_registered` | `gov.register()` | name, framework, owner, initial score |
+| `policy_evaluation` | `gov.enforce()` | agent, action, tool, rule matched, outcome, reason |
+| `policy_evaluation_preprocess` / `_postprocess` | `gov.enforcePreprocess()` / `Postprocess()` | stage-scoped enforcement result |
+| `action_outcome` | `gov.recordOutcome()` or `runWithOutcome()` | success / failure, duration, tokens, output summary, error |
+| `agent_killed` | `killSwitch.kill()` | agent, reason, killedBy |
+| *(caller-supplied)* | `gov.audit.log()` | anything you pass — custom LLM calls, approvals, etc. |
+
+**What is NOT automatically chained:** anything you log directly via
+`storage.createAuditEvent()` (bypasses the chain), anything your host app
+does outside governance (raw `fetch()`, filesystem I/O without going through
+a governed tool), and anything the agent did between `enforce()` calls that
+didn't invoke `enforce()` or `recordOutcome()` itself.
 
 **Honest caveats:**
 
@@ -282,6 +313,10 @@ const { valid, brokenAt, breakDetail } = await verifyAuditIntegrity(snapshot, pr
   anchor — a chain of N events truncated to N-1 events still verifies as a
   consistent chain of N-1 events. The adversarial test suite documents this
   limitation explicitly.
+- `integrityAudit.onFailure: 'allow'` (default) means a storage failure
+  creates a chain gap that `verifyAuditIntegrity` will detect; set
+  `'block'` to reject the enforce() call instead when you can't tolerate
+  gaps.
 
 ### Kill Switch
 
@@ -667,7 +702,9 @@ governance-sdk/injection-classifier        pluggable ML classifier interface
 governance-sdk/injection-benchmark         LIB — 6.9K-sample benchmark runner
 
 # Audit + identity
-governance-sdk/audit-integrity             HMAC hash-chain verification
+governance-sdk/audit-integrity             HMAC hash-chain primitives (createIntegrityAudit, verifyAuditIntegrity)
+governance-sdk/audit-integrity-verify      standalone chain verifier (for offline audit)
+governance-sdk/action-recorder             runWithOutcome() — record action success/failure into the chain
 governance-sdk/agent-identity              agent identity tokens
 governance-sdk/agent-identity-ed25519      Ed25519 signing + verification
 governance-sdk/kill-switch                 priority-999 emergency halt

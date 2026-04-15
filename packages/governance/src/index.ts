@@ -31,10 +31,43 @@ import { createRemoteEnforcer, validateRemoteConfig } from "./remote-enforce.js"
 import { computeBehavioralAdjustments, applyBehavioralAdjustments } from "./behavioral-scorer.js";
 import { computeEvalAdjustments, applyEvalAdjustments } from "./eval-scorer.js";
 import { createTraceCollector } from "./eval-trace.js";
+import {
+  canonicalize as canonicalizeAuditEvent,
+  hmacSha256,
+  GENESIS_HASH,
+  type AuditIntegrity,
+  type IntegrityAuditEvent,
+} from "./audit-integrity.js";
 import type { AgentRegistration, GovernanceAssessment, FleetSummary } from "./types.js";
 import type { PolicyRule, PolicyEngine, PolicyStage, EnforcementContext, EnforcementDecision } from "./policy.js";
 import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
 import type { EvalResult, TraceCollector } from "./eval-types.js";
+
+/**
+ * Post-execution outcome payload for `gov.recordOutcome()`. Framework
+ * adapters build this after a tool / LLM / governed-action returns and
+ * pass it back so the audit chain covers "decision → outcome."
+ */
+export interface ActionOutcome {
+  agentId: string;
+  /** The tool / action that ran — matches what was on the EnforcementContext. */
+  tool?: string;
+  action?: string;
+  /** Whether the action succeeded without throwing. */
+  success: boolean;
+  /** Wall-clock duration in ms. */
+  durationMs?: number;
+  /** Output summary — callers should redact sensitive content before passing. */
+  output?: unknown;
+  /** Error message if `success === false`. */
+  error?: string;
+  /** Tokens consumed by the action (LLM calls). */
+  tokensUsed?: number;
+  /** Optional ruleId that the preceding enforce() matched, to link the outcome back to the decision. */
+  policyRuleId?: string;
+  /** Optional extra fields. */
+  detail?: Record<string, unknown>;
+}
 
 // Re-export storage types (other modules import from ./index)
 export type { GovernanceStorage, StoredAgent, AuditEvent, AuditOutcome, AuditQueryFilters } from "./storage.js";
@@ -59,6 +92,32 @@ export interface GovernanceConfig {
   fallbackMode?: "allow" | "block";
   /** Called when a fire-and-forget audit write fails. Audit errors never block enforcement. */
   onAuditError?: (error: unknown) => void;
+  /**
+   * Wire tamper-evident (HMAC-SHA256 hash-chained) audit into EVERY event
+   * the SDK writes — registrations, enforce decisions, `audit.log()` calls,
+   * `recordOutcome()` calls, kill-switch events. When set, every write is
+   * intercepted and appended to a signed chain that `verifyAuditIntegrity`
+   * can re-check offline.
+   *
+   * Honesty notes:
+   *  - Only events routed through THIS governance instance get chained.
+   *    Host-level logging your app does independently is not covered.
+   *  - Plain HMAC is tamper-evident to holders of the signing secret;
+   *    if the secret leaks, history is rewritable. Rotate + pair with an
+   *    external anchor for defence-in-depth.
+   */
+  integrityAudit?: {
+    /** HMAC secret. Rotate regularly. */
+    signingKey: string;
+    /**
+     * What to do when a chain write fails (storage down, async contention):
+     *  - `"allow"` (default) — log via `onAuditError`, proceed anyway. Chain
+     *    may have a gap; `verifyAuditIntegrity` will detect it.
+     *  - `"block"` — throw from `enforce()` so the decision is NOT applied.
+     *    Guarantees no gaps at the cost of availability.
+     */
+    onFailure?: "allow" | "block";
+  };
 }
 
 /** Read-only view of the policy engine — addRule/removeRule are not exposed */
@@ -80,6 +139,27 @@ export interface GovernanceInstance {
   enforcePreprocess: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
   /** Evaluate only postprocess-stage rules */
   enforcePostprocess: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
+  /**
+   * Record what actually happened AFTER an enforce()-approved action ran.
+   * Framework adapters call this after the tool/LLM invocation returns so
+   * the audit chain covers "decision → outcome," not just the decision.
+   *
+   * Safe to call even when `integrityAudit` isn't configured — the event
+   * is written to plain storage. When integrity IS on, it's HMAC-chained
+   * alongside everything else.
+   */
+  recordOutcome: (outcome: ActionOutcome) => Promise<AuditEvent>;
+  /**
+   * Integrity-audit helpers. Only populated when `integrityAudit` is
+   * configured on createGovernance(). Exports the signed chain for
+   * offline verification via `verifyAuditIntegrity`.
+   */
+  integrityChain?: {
+    /** Export the full chain (or a filtered slice) as IntegrityAuditEvent[]. */
+    export: (filters?: AuditQueryFilters) => Promise<IntegrityAuditEvent[]>;
+    /** Chain stats: latest sequence, latest hash, algorithm. */
+    stats: () => { latestSequence: number; latestHash: string; algorithm: string };
+  };
   audit: {
     log: (event: Omit<AuditEvent, "id" | "createdAt">) => Promise<AuditEvent>;
     query: (filters: AuditQueryFilters) => Promise<AuditEvent[]>;
@@ -152,6 +232,66 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     defaultOutcome: config.defaultOutcome,
   });
 
+  // ── Integrity audit chain (opt-in) ───────────────────────────
+  //
+  // When `integrityAudit` is configured, every write routed through
+  // `writeAudit()` gets HMAC-SHA256 hash-chained. Chain state (lastHash,
+  // sequence) lives in the closure, serialised via `chainLock` so
+  // concurrent writes don't fork the chain.
+  const integrity = config.integrityAudit;
+  let chainLastHash = GENESIS_HASH;
+  let chainSequence = 0;
+  let chainLock: Promise<unknown> = Promise.resolve();
+  const integrityIndex = new Map<string, AuditIntegrity>();
+
+  async function writeAudit(
+    event: Omit<AuditEvent, "id" | "createdAt">,
+  ): Promise<AuditEvent> {
+    const full: AuditEvent = {
+      ...event,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!integrity) {
+      // Plain path — as before.
+      return storage.createAuditEvent(full);
+    }
+
+    // Chained path. Serialise via chainLock so sequence is race-free.
+    // On failure we preserve the chainLastHash/chainSequence (don't bump)
+    // so the next write attempts the same slot — avoids silent gaps.
+    const result = chainLock.then(async () => {
+      const previousHash = chainLastHash;
+      const nextSequence = chainSequence + 1;
+      const canonical = canonicalizeAuditEvent(full, previousHash, nextSequence);
+      const hash = await hmacSha256(integrity.signingKey, canonical);
+      const integrityMeta: AuditIntegrity = {
+        hash,
+        previousHash,
+        sequence: nextSequence,
+        signedAt: new Date().toISOString(),
+      };
+      // Persist the event WITHOUT mutating its canonical fields — the
+      // integrity metadata is kept in the in-memory `integrityIndex`
+      // keyed by event id. `integrityChain.export()` joins them back.
+      // If you need the integrity metadata written to durable storage
+      // (e.g. for backup + offline verification on a separate machine),
+      // call `integrityChain.export()` and persist the result yourself.
+      const stored = await storage.createAuditEvent(full);
+      chainLastHash = hash;
+      chainSequence = nextSequence;
+      integrityIndex.set(full.id, integrityMeta);
+      return stored;
+    });
+
+    chainLock = result.catch(() => {
+      /* lock must advance even on failure */
+    });
+
+    return result; // throws on failure — callers decide policy
+  }
+
   const remote = config.serverUrl
     ? createRemoteEnforcer({
         serverUrl: config.serverUrl,
@@ -206,15 +346,21 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       updatedAt: new Date().toISOString(),
     });
 
-    storage.createAuditEvent({
-      id: crypto.randomUUID(),
+    // With integrity on, await the chain write so sequence ordering is
+    // deterministic (and fail-closed mode can reject). Without integrity,
+    // fire-and-forget for the legacy behaviour.
+    const regWrite = writeAudit({
       agentId: id,
       eventType: "agent_registered",
       outcome: "success",
       severity: "info",
       detail: { score: assessment.compositeScore, level: assessment.level.level, status: assessment.status },
-      createdAt: new Date().toISOString(),
-    }).catch((err: unknown) => { onAuditError?.(err); });
+    });
+    if (integrity) {
+      try { await regWrite; } catch (err) { onAuditError?.(err); if (integrity.onFailure === "block") throw err; }
+    } else {
+      regWrite.catch((err: unknown) => { onAuditError?.(err); });
+    }
 
     return { id: stored.id, score: assessment.compositeScore, level: assessment.level.level, status: assessment.status, assessment };
   }
@@ -226,27 +372,35 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 
     const decision = policies.evaluate(ctx);
 
-    // Audit is off the hot path — fire-and-forget, never blocks enforcement.
-    // NOTE: events written here are NOT hash-chained by default. The integrity
-    // chain (see `./audit-integrity`) is an opt-in helper — wrap your audit
-    // sink with `createIntegrityAudit()` if you need tamper-evident events.
-    storage.createAuditEvent({
-      id: crypto.randomUUID(),
+    // When integrityAudit is configured, we AWAIT the chain write so
+    // sequencing is deterministic (and onFailure:"block" can veto the
+    // decision). Without integrity, keep the legacy fire-and-forget path
+    // to stay off the hot path.
+    const writePromise = writeAudit({
       agentId: ctx.agentId,
       eventType: "policy_evaluation",
       outcome: decision.outcome,
       severity: decision.blocked ? "warning" : "info",
       detail: { action: ctx.action, tool: ctx.tool, ruleId: decision.ruleId, reason: decision.reason, rulesEvaluated: decision.rulesEvaluated },
       policyRuleId: decision.ruleId ?? undefined,
-      createdAt: new Date().toISOString(),
-    }).catch((err: unknown) => { onAuditError?.(err); });
+    });
+    if (integrity) {
+      try {
+        await writePromise;
+      } catch (err) {
+        onAuditError?.(err);
+        if (integrity.onFailure === "block") throw err;
+      }
+    } else {
+      writePromise.catch((err: unknown) => { onAuditError?.(err); });
+    }
 
     return decision;
   }
 
   const audit = {
     async log(event: Omit<AuditEvent, "id" | "createdAt">): Promise<AuditEvent> {
-      return storage.createAuditEvent({ ...event, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
+      return writeAudit(event);
     },
     async query(filters: AuditQueryFilters): Promise<AuditEvent[]> {
       return storage.queryAuditEvents(filters);
@@ -379,16 +533,24 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 
     const decision = policies.evaluateStage(ctx, stage);
 
-    storage.createAuditEvent({
-      id: crypto.randomUUID(),
+    const writePromise = writeAudit({
       agentId: ctx.agentId,
       eventType: `policy_evaluation_${stage}`,
       outcome: decision.outcome,
       severity: decision.blocked ? "warning" : "info",
       detail: { action: ctx.action, tool: ctx.tool, ruleId: decision.ruleId, reason: decision.reason, stage },
       policyRuleId: decision.ruleId ?? undefined,
-      createdAt: new Date().toISOString(),
-    }).catch((err: unknown) => { onAuditError?.(err); });
+    });
+    if (integrity) {
+      try {
+        await writePromise;
+      } catch (err) {
+        onAuditError?.(err);
+        if (integrity.onFailure === "block") throw err;
+      }
+    } else {
+      writePromise.catch((err: unknown) => { onAuditError?.(err); });
+    }
 
     return decision;
   }
@@ -439,8 +601,54 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 
   const noopStatus = () => ({ connected: true, mode: "local" as const, latencyMs: 0 });
 
+  const integrityChain = integrity
+    ? {
+        async export(filters?: AuditQueryFilters): Promise<IntegrityAuditEvent[]> {
+          const events = await storage.queryAuditEvents({
+            ...filters,
+            limit: undefined,
+            offset: undefined,
+          });
+          const sorted = [...events].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          return sorted
+            .filter((e) => integrityIndex.has(e.id))
+            .map((e) => ({
+              ...e,
+              integrity: integrityIndex.get(e.id)!,
+            }));
+        },
+        stats() {
+          return {
+            latestSequence: chainSequence,
+            latestHash: chainLastHash,
+            algorithm: "hmac-sha256",
+          };
+        },
+      }
+    : undefined;
+
+  async function recordOutcome(outcome: ActionOutcome): Promise<AuditEvent> {
+    return writeAudit({
+      agentId: outcome.agentId,
+      eventType: "action_outcome",
+      outcome: outcome.success ? "success" : "failure",
+      severity: outcome.success ? "info" : "warning",
+      detail: {
+        tool: outcome.tool,
+        action: outcome.action,
+        durationMs: outcome.durationMs,
+        tokensUsed: outcome.tokensUsed,
+        error: outcome.error,
+        output: outcome.output,
+        ...(outcome.detail ?? {}),
+      },
+      policyRuleId: outcome.policyRuleId,
+    });
+  }
+
   const instance: GovernanceInstance = {
     register, enforce, enforcePreprocess, enforcePostprocess, audit,
+    recordOutcome,
     score: scoreAgentFn, scoreFleet: scoreFleetFn,
     policies: readonlyPolicies, storage, addRule, removeRule,
     eval: evalApi,
@@ -449,6 +657,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     waitForApproval: remote
       ? remote.waitForApproval
       : async () => "timeout" as const,
+    ...(integrityChain ? { integrityChain } : {}),
   };
 
   return instance;
@@ -489,6 +698,8 @@ export type { PolicySet, ConflictStrategy, ComposeConfig, ComposeResult, PolicyC
 export { getDefaultStage } from "./policy-stage-defaults.js";
 export { inputBlocklist, inputLength, inputPattern, networkAllowlist, scopeBoundary, costBudget, concurrentLimit, outputLength, outputPattern, sensitiveDataFilter, maskSensitiveOutput, maskOutputPattern } from "./policy-presets-extended.js";
 export { mlInjectionGuard } from "./policy-presets.js";
+export { runWithOutcome } from "./action-recorder.js";
+export type { RunWithOutcomeOptions } from "./action-recorder.js";
 export { SENSITIVE_PATTERNS, getSensitivePatterns } from "./conditions/sensitive-patterns.js";
 export type { SensitivePattern } from "./conditions/sensitive-patterns.js";
 export { maskSensitiveData, maskPattern, maskBlocklistTerms } from "./mask.js";
