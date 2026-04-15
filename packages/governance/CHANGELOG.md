@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.11.1] - 2026-04-16 — Sync npm README with repo
+
+The `packages/governance/README.md` (the file npm publishes) had drifted ~3
+release cycles behind the repo-root README. This patch syncs the two so
+npm users see the same content GitHub viewers see — including the "What
+this is NOT" scope disclosures, the 0.11 module removals, and the
+behavioral-scorer demotion. Relative links normalized to absolute GitHub
+URLs so they resolve correctly when read on npmjs.com.
+
+No code changes. SDK behavior identical to 0.11.0.
+
 ## [0.11.0] - 2026-04-15 — Scope honesty pass 2
 
 This release follows up the 0.10 cleanup with another round of cuts based on

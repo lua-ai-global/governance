@@ -5,9 +5,9 @@
 [![npm version](https://img.shields.io/npm/v/governance-sdk)](https://www.npmjs.com/package/governance-sdk)
 [![CI](https://github.com/lua-ai-global/governance/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lua-ai-global/governance/actions/workflows/ci.yml)
 [![install size](https://packagephobia.com/badge?p=governance-sdk)](https://packagephobia.com/result?p=governance-sdk)
-[![dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](./packages/governance/package.json)
+[![dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://github.com/lua-ai-global/governance/blob/main/packages/governance/package.json)
 [![types](https://img.shields.io/npm/types/governance-sdk)](https://www.npmjs.com/package/governance-sdk)
-[![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/lua-ai-global/governance/blob/main/LICENSE)
 
 ---
 
@@ -34,17 +34,49 @@ Everything downstream (scoring, audit, compliance) follows from those three.
 | Behavioral scoring / trust levels | **✅** | ❌ | ❌ | ❌ |
 | Tamper-evident audit (HMAC chain) | **✅** | ❌ | ❌ | ❌ |
 | Standards mapping (EU AI Act / OWASP / NIST / ISO 42001) | **✅** | ❌ | Partial | ❌ |
-| Supply-chain / SBOM / Ed25519 identity | **✅** | ❌ | ❌ | ❌ |
+| Ed25519 agent identity | **✅** | ❌ | ❌ | ❌ |
 | Zero-dep embedded use in any TS runtime | **✅** | ❌ | ❌ | ❌ |
 
 `governance-sdk` is the only option that's zero-dep TypeScript, framework-agnostic, and maps to all four major AI-governance standards out of the box.
+
+## What this is NOT
+
+The SDK is a **thin client** for local policy evaluation, scoring, and
+detection — nothing more. To pre-empt scope questions:
+
+- **Kill switch is per-process**, not fleet-wide. Distributed halt lives in
+  Lua Governance Cloud or your own pub/sub.
+- **No sandbox.** `node:vm` is not a security boundary (per Node docs). Use
+  containers, gVisor, or Firecracker for untrusted code.
+- **No federation.** Cross-org policy replication and signed posture exchange
+  are not currently shipped in either the SDK or Lua Governance Cloud.
+- **Injection detection is high-precision / low-recall** — regex baseline F1
+  ≈ 0.48 on the 6,931-sample LIB corpus. Layer in an ML classifier via the
+  `InjectionClassifier` interface for production coverage.
+- **Compliance mapping is self-assessment**, not legal advice or certification.
+- **No built-in observability or eval pipeline.** The `metrics` and
+  `otel-hooks` exports produce passive in-memory data structures you serialize
+  to your own monitoring system; they are NOT OpenInference-compliant and NOT
+  a replacement for Phoenix, Langfuse, Braintrust, or a real OpenTelemetry
+  exporter. A first-class OTel/OpenInference exporter is on the roadmap.
+- **No built-in eval store.** `gov.eval.*` was removed in 0.11. Use inspect-ai,
+  PyRIT, Garak, Phoenix, Langfuse, or your harness of choice and route results
+  into your audit stream via `gov.audit.log()`.
+- **Simulator does not replay side effects** — it evaluates policy outcomes
+  against synthetic scenarios, it does not execute tools.
+- **`enforce()` does not hash-chain by default** — opt in with
+  `integrityAudit: { signingKey }` for tamper-evident audit.
+- **Cloud `register()` is a synthetic confirmation** — the API auto-registers
+  on first `enforce()`.
+- **No built-in red team / jailbreak harness.** Use inspect-ai, PyRIT, or
+  Garak — a policy-only harness would be easily mistaken for model coverage.
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| [`governance-sdk`](./packages/governance) | Core SDK — policy engine, scoring, injection detection, audit, compliance, standards mapping, 10 framework adapters. **0 runtime deps.** |
-| [`governance-sdk-platform`](./packages/governance-platform) | Optional PostgreSQL storage layer — auto-migrating schema, org settings, policy tiers. |
+| [`governance-sdk`](https://github.com/lua-ai-global/governance/tree/main/packages/governance) | Core SDK — policy engine, scoring, injection detection, audit, compliance, standards mapping, 10 framework adapters. **0 runtime deps.** |
+| [`governance-sdk-platform`](https://github.com/lua-ai-global/governance/tree/main/packages/governance-platform) | Optional PostgreSQL storage layer — auto-migrating schema, org settings, policy tiers. |
 
 ## Quick Start
 
@@ -72,7 +104,7 @@ import { createGovernance, blockTools, rateLimit } from 'governance-sdk';
 const governance = createGovernance({
   rules: [
     blockTools(['shell_exec', 'eval']),
-    rateLimit({ maxRequests: 100, windowMs: 60_000 }),
+    rateLimit(100, 60_000),  // 100 actions per 60s — host populates ctx.recentActionCount
   ],
 });
 
@@ -149,7 +181,16 @@ Define rules that govern agent behavior at runtime. Policies return one of **fiv
 - `allowOnlyTools(toolNames)` — whitelist-only tool access
 - `requireApproval(condition)` — gate actions behind human approval
 - `tokenBudget(limit)` — enforce token consumption limits
-- `rateLimit(config)` — throttle agent requests
+- `rateLimit(config)` — throttle agent requests. **Stateless** — the rule
+  reads `ctx.recentActionCount`, which your host populates. Durable
+  distributed rate limiting belongs in your API layer.
+
+**Extended presets** (also exported from the main package): `inputBlocklist`,
+`inputLength`, `inputPattern`, `networkAllowlist`, `scopeBoundary`,
+`costBudget`, `concurrentLimit`, `outputLength`, `outputPattern`,
+`sensitiveDataFilter`, `maskSensitiveOutput`, `maskOutputPattern`. Most
+rely on the host supplying relevant `ctx.*` fields (token counts, domain,
+cost, etc.) — like `rateLimit`, they are declarative gates, not accumulators.
 - `requireLevel(level)` — require minimum trust level
 - `requireSequence(steps)` — enforce ordered execution steps
 - `timeWindow(config)` — restrict actions to time windows
@@ -174,11 +215,33 @@ getGovernanceLevel(assessment.compositeScore);
 // => { level: 4, label: 'Certified', description: '...' }
 ```
 
-Behavioral signals (block rate, injection hits, approval misses) feed back in via `behavioral-scorer`, so the score tracks how an agent *actually* behaves in production — not just its configured posture.
+Behavioral signals (block rate, injection hits, approval misses) are
+available via the optional `behavioral-scorer` module — feed them in to
+adjust the score against how the agent *has* behaved, not just its
+configured posture. This is opt-in and not wired by default; we plan to
+promote dynamic trust scoring as a first-class feature in a future
+release.
+
+**Weight rationale + inflation risk**: the default weights
+(identity/permissions 1.5; guardrails 1.3; observability 1.2;
+auditability/compliance 1.0; lifecycle 0.8) are opinionated, not
+research-validated. Override with a custom weight map if your risk profile
+differs. Also: the scorer trusts self-reported `hasAuth`/`hasGuardrails`/
+`hasObservability`/`hasAuditLog` booleans at face value — to defend against
+score inflation, cross-check callers' claims against
+`scanRepoContents(fileContents)` from `governance-sdk/repo-patterns` and
+flag mismatches. See `src/scorer-dimensions.ts` header comment and
+`src/scorer-inflation.test.ts` for the full pattern.
 
 ### Injection Detection
 
-54 patterns across 7 categories (instruction override, role manipulation, context escape, data exfiltration, encoding, social engineering, obfuscation) with Base64/Unicode/leetspeak normalization and max-weight scoring.
+54 regex patterns across 7 categories (instruction override, role manipulation,
+context escape, data exfiltration, encoding attack, social engineering,
+obfuscation). Input normalisation includes: zero-width character stripping,
+NFKC Unicode folding (fullwidth/compatibility variants → ASCII), leetspeak
+de-obfuscation (`1gn0r3 pr3v10us 1nstruct10ns` → `ignore previous
+instructions`), and Base64 decode-and-rescan. Scoring is max-pattern-weight
++ multi-pattern and multi-category boosts, capped at 1.0.
 
 ```typescript
 import { detectInjection } from 'governance-sdk/injection-detect';
@@ -189,25 +252,111 @@ if (result.detected) {
 }
 ```
 
-**Lua Injection Benchmark (LIB)** — 6,931 labeled samples (2,096 attacks + 4,835 benign) from deepset, jackhhao, hackaprompt, Harelix, plus synthesized encoding attacks and hard negatives. Plug in any ML detector via `InjectionClassifier` interface and run: `npx tsx benchmark/scripts/run-benchmark.ts`.
+**Lua Injection Benchmark (LIB)** — 6,931 labeled samples (2,096 attacks +
+4,835 benign) across 12 sources: TrustAIRLab in-the-wild jailbreak prompts
+(1,779), databricks-dolly-15k (1,490), neuralchemy prompt-injection-dataset
+(990), jackhhao jailbreak-classification (538), reshabhs SPML (537),
+OpenAssistant oasst2 (463), synthesized encoding attacks (458),
+llm-semantic-router jailbreak-detection (371), deepset prompt-injections
+(114), JailbreakBench JBB-Behaviors (106), synthesized hard negatives (75),
+walledai JailbreakHub (10).
+
+**Shipped regex detector baseline on the full 6,931 samples** (reproducible
+via `benchmark/scripts/run-full-baseline.ts`; committed report at
+[`benchmark/data/lua-injection-benchmark-v1-regex-baseline.json`](https://github.com/lua-ai-global/governance/blob/main/packages/governance/benchmark/data/lua-injection-benchmark-v1-regex-baseline.json)):
+
+| Metric | Value |
+|---|---|
+| Precision | 68.51% |
+| Recall | 37.26% |
+| F1 | 48.27% |
+| Accuracy | 75.85% |
+| False-positive rate | 7.43% |
+
+Reading this honestly: the zero-dep regex detector is a high-precision /
+low-recall first layer — good for catching common attack phrasings with few
+false positives on benign text, but not a replacement for an ML classifier
+on adversarial corpora. Layer in an ML detector via the `InjectionClassifier`
+interface (reference implementation in the `governance-ml` package) if you
+need stronger recall against in-the-wild jailbreak prompts.
 
 ### Tamper-Evident Audit Trail
 
-HMAC-SHA256 hash-chained audit. Every entry binds to the cryptographic hash of the previous entry — any tampering (edit, delete, reorder) is mathematically detectable.
+HMAC-SHA256 hash-chained audit. Each entry's hash covers the **previous hash +
+sequence number + canonicalised event body**, so any edit, deletion, or
+reorder-via-sequence-renumbering breaks verification. Constant-time hash
+comparison throughout — no timing oracle.
+
+**Opt-in via a single config flag.** Pass `integrityAudit: { signingKey }` to
+`createGovernance()` and every audit write the SDK makes is chained
+automatically — no separate wrapper, no ceremony:
 
 ```typescript
-import { verifyAuditIntegrity } from 'governance-sdk/audit-integrity';
+import { createGovernance, runWithOutcome } from 'governance-sdk';
+import { verifyAuditIntegrity } from 'governance-sdk/audit-integrity-verify';
 
-// After an adversary modifies, reorders, or deletes any audit row:
-const { valid, firstBrokenIndex, reason } = await verifyAuditIntegrity(entries, secret);
-// => { valid: false, firstBrokenIndex: 42, reason: 'hash_mismatch' }
+const gov = createGovernance({
+  rules: [/* ... */],
+  integrityAudit: {
+    signingKey: process.env.AUDIT_SECRET!,
+    onFailure: 'allow',   // or 'block' to fail-closed on chain errors
+  },
+});
+
+// Every one of these is HMAC-chained:
+await gov.register({ name: 'sales-bot', framework: 'mastra', owner: 'team' });
+await gov.enforce({ agentId, action: 'tool_call', tool: 'search' });
+
+// Close the decision → outcome loop with runWithOutcome():
+const result = await runWithOutcome(gov, { agentId, tool: 'search' }, async () => {
+  return await searchApi.query(q);
+});
+// ↑ success (or failure, with error + duration) auto-recorded in the chain
+
+// Verify the chain offline, anywhere, with just the secret:
+const chain = await gov.integrityChain!.export();
+const { valid, brokenAt, breakDetail } = await verifyAuditIntegrity(chain, process.env.AUDIT_SECRET!);
 ```
 
-You get **byte-level proof** of what happened, not a log file that an attacker can silently edit.
+**What gets chained (when `integrityAudit` is set):**
+
+| Event type | Written by | What it captures |
+|---|---|---|
+| `agent_registered` | `gov.register()` | name, framework, owner, initial score |
+| `policy_evaluation` | `gov.enforce()` | agent, action, tool, rule matched, outcome, reason |
+| `policy_evaluation_preprocess` / `_postprocess` | `gov.enforcePreprocess()` / `Postprocess()` | stage-scoped enforcement result |
+| `action_outcome` | `gov.recordOutcome()` or `runWithOutcome()` | success / failure, duration, tokens, output summary, error |
+| `agent_killed` | `killSwitch.kill()` | agent, reason, killedBy |
+| *(caller-supplied)* | `gov.audit.log()` | anything you pass — custom LLM calls, approvals, etc. |
+
+**What is NOT automatically chained:** anything you log directly via
+`storage.createAuditEvent()` (bypasses the chain), anything your host app
+does outside governance (raw `fetch()`, filesystem I/O without going through
+a governed tool), and anything the agent did between `enforce()` calls that
+didn't invoke `enforce()` or `recordOutcome()` itself.
+
+**Honest caveats:**
+
+- Plain HMAC chains are only tamper-evident to holders of the signing secret.
+  If the secret leaks, history is rewritable by the leaker. Rotate secrets
+  regularly and pair with an external anchor (periodic checkpoint committed
+  to git / a ledger / an external audit service) if you need defence in
+  depth.
+- Truncation from the tail alone is **NOT** detectable without an external
+  anchor — a chain of N events truncated to N-1 events still verifies as a
+  consistent chain of N-1 events. The adversarial test suite documents this
+  limitation explicitly.
+- `integrityAudit.onFailure: 'allow'` (default) means a storage failure
+  creates a chain gap that `verifyAuditIntegrity` will detect; set
+  `'block'` to reject the enforce() call instead when you can't tolerate
+  gaps.
 
 ### Kill Switch
 
-Emergency halt for any agent, enforced at priority 999 (overrides all other policies).
+Emergency halt for any agent, enforced via a reserved-priority policy rule
+(999). User-supplied rules are clamped to a max priority of 998 by the
+engine, so the kill switch remains unconditionally top priority — no
+"attacker rule at 1000 beats the kill switch" hole.
 
 ```typescript
 import { createKillSwitch } from 'governance-sdk/kill-switch';
@@ -216,50 +365,98 @@ const killSwitch = createKillSwitch(gov);
 await killSwitch.kill('rogue-agent', 'Unauthorized data access');
 ```
 
-### Standards Mapping (EU AI Act, OWASP Agentic, NIST AI RMF, ISO 42001)
+**Scope: per-process, not distributed.** The authoritative kill state lives
+in-memory on the instance where `kill()` was called. Storage is best-effort
+updated so other instances can discover the kill, but they do NOT re-query
+storage on every `enforce()` — that would hurt the thin-client design. For
+fleet-wide guaranteed halt, route through the governance-cloud remote
+`enforce` API or publish kill events over pub/sub and call `kill()` on
+every instance.
 
-Policy decisions, audit entries, and agent posture map to the four major AI-governance standards. Auditable out of the box — no secondary tooling required.
+### Standards self-assessments (EU AI Act, OWASP Agentic, NIST AI RMF, ISO 42001)
+
+Each module emits a **self-assessment report** mapping governance state to a
+subset of the named framework. These are engineering tools for posture
+tracking — **not** legal advice, not regulatory certifications, and not
+substitutes for qualified counsel or a chartered auditor. Each report output
+includes its own disclaimer field so downstream consumers see the caveat.
+
+Scope disclosures:
+
+- **EU AI Act** (Reg. (EU) 2024/1689) — covers Arts. 9, 11, 12, 14, 15, 50 only.
+  Does NOT model prohibited practices (Art 5-7), data governance (Art 10), or
+  GPAI obligations beyond transparency (Arts 51-56). Deadlines are computed
+  per-article using the phased enforcement schedule (2025-02-02 prohibited
+  practices, 2025-08-02 GPAI transparency, 2026-08-02 high-risk obligations,
+  2027-08-02 post-market + downstream).
+- **OWASP Agentic** — maps governance state to 10 agentic-threat categories
+  (our "AA-01…AA-10" numbering is an internal convention; not the official
+  OWASP Top 10 for LLMs 2025 numbering). Inspired by OWASP work, not endorsed
+  by it.
+- **NIST AI RMF** — 14 subcategories across Govern/Map/Measure/Manage. Does
+  NOT yet cover the NIST AI 600-1 GenAI Profile controls (2024).
+- **ISO/IEC 42001:2023** — clauses 4-6 and 8-10. Does NOT model the 39 Annex A
+  informative controls.
 
 ```typescript
-import { assessCompliance, getDaysUntilDeadline } from 'governance-sdk/compliance'; // EU AI Act
-import { mapToOwaspAgentic } from 'governance-sdk/owasp-agentic';                    // OWASP Top 10 for LLMs / Agentic
-import { mapToNistAiRmf } from 'governance-sdk/nist-ai-rmf';                          // NIST AI RMF Govern/Map/Measure/Manage
-import { mapToIso42001 } from 'governance-sdk/iso-42001';                             // ISO/IEC 42001 controls
+import { mapToEuAiAct }      from 'governance-sdk/compliance';     // EU AI Act (6 articles) — preferred
+import { mapToOwaspAgentic } from 'governance-sdk/owasp-agentic';   // alias of assessOwaspAgentic
+import { mapToNistAiRmf }    from 'governance-sdk/nist-ai-rmf';     // alias of assessNistAiRmf
+import { mapToIso42001 }     from 'governance-sdk/iso-42001';       // alias of assessIso42001
 
-const report = await assessCompliance({
+const report = await mapToEuAiAct({
   governance: gov, agents: [agent],
   auditIntegrity: true, humanOversight: true,
 });
+// report.disclaimer — embedded "not legal advice" notice
+// report.phasedDeadlines — { prohibitedPractices, gpaiTransparency, highRiskObligations, postMarketAndDownstream }
 ```
 
 ### Agent Identity (Ed25519)
 
-Cryptographically-signed agent identity tokens. Pair with the `requireSignedIdentity()` policy to guarantee that enforce calls come from an agent that actually holds the private key, not a spoof.
+Cryptographically-signed agent identity tokens using Ed25519 (RFC 8032) via
+`crypto.subtle`. Zero runtime dependencies. Tokens include a nonce (`jti`),
+expiry (`exp`), optional `kid` for key rotation, and the agent's public key
+so any verifier can re-check the signature.
+
+Pair with the `requireSignedIdentity()` policy to guarantee that enforce
+calls come from an agent that actually holds the private key. Note that the
+policy checks a boolean (`ctx.identityVerified`) that your host layer sets
+after calling `verifyAgentIdentity()` — the SDK itself stays zero-state.
 
 ```typescript
-import { signAgentIdentity, verifyAgentIdentity } from 'governance-sdk/agent-identity-ed25519';
+import {
+  createEd25519Identity,
+  signAgentIdentity,
+  verifyAgentIdentity,
+} from 'governance-sdk/agent-identity-ed25519';
 
-const token = await signAgentIdentity({ agentId, keys, ttlSeconds: 3600 });
-// …send token alongside enforce calls; server verifies with public key
+const identity = createEd25519Identity();
+const keys = await identity.generateKeyPair();
+
+const token = await signAgentIdentity({
+  agentId: 'sales-bot',
+  keys,
+  ttlSeconds: 3600,
+  kid: 'v2',                  // optional: pick-by-id on rotation
+  capabilities: ['search'],   // optional: capability assertions
+});
+
+// On the receiving side:
+const result = await verifyAgentIdentity(token, {
+  pinnedPublicKeyHex: pinnedKey,  // optional but recommended — see below
+});
+// => { valid: true, agentId: 'sales-bot' }
 ```
 
-### Supply Chain Validation + SBOM
+**Pin your public keys.** A token self-describes the public key it was signed
+with, so without pinning you're verifying "someone signed this" rather than
+"the expected agent signed this." Use `pinnedPublicKeyHex` whenever you
+already know which key the agent should be using.
 
-Validate agent dependencies (tools, MCP servers, API endpoints) against an
-approved-registry allowlist, and emit CycloneDX 1.5 SBOMs from npm
-lockfiles. Allowlist validation, not provenance / signatures / SLSA.
-Yarn, pnpm, and cargo are not supported.
+### Dry-Run Simulation
 
-```typescript
-import { validateSupplyChain } from 'governance-sdk/supply-chain';
-import { generateCycloneDxSbom } from 'governance-sdk/supply-chain-cyclonedx';
-```
-
-### Policy Simulator
-
-Evaluate policies against scenarios without enforcing. Scope: policy
-*decisions* only — does not advance rate-limit counters, token budgets,
-or approval queues.
+Test policies against scenarios without affecting production.
 
 ```typescript
 import { simulateFleetPolicy } from 'governance-sdk/dry-run';
@@ -267,72 +464,6 @@ import { simulateFleetPolicy } from 'governance-sdk/dry-run';
 const result = await simulateFleetPolicy(gov, scenarios);
 // => { fleetSummary: { agentsAffected: 11, blockRate: 0.12 }, results: [...] }
 ```
-
-### Eval Loop
-
-Collect traces from your agent runs and submit eval results from your
-preferred adversarial harness (inspect-ai, PyRIT, Garak, your own).
-Results feed into the behavioral scorer.
-
-```typescript
-import { submitTrace } from 'governance-sdk/eval-trace';
-
-// gov.eval.submit(...) — feed external eval results back into scoring.
-// gov.eval.traces — wire into framework adapters to capture run traces.
-```
-
-The SDK does not ship its own jailbreak-testing red team. That belongs
-in a dedicated tool — we provide the integration point.
-
-## What this is NOT
-
-`governance-sdk` is a thin, in-process TypeScript policy engine. It is
-deliberately small and deliberately boring. Know these limits before
-adopting:
-
-- **Kill switch is per-process.** Each replica has its own. Distributed
-  kill state needs Redis, a control plane, or our hosted service. The
-  SDK does not ship one.
-
-- **No sandbox.** We previously shipped a `node:vm` sandbox. We removed
-  it: `node:vm` is not a security boundary. Use OS-level isolation
-  (containers, gVisor, Firecracker) for untrusted code.
-
-- **Injection detection is regex + an optional ML hook.** The built-in
-  detector scores F1 ≈ 0.48 on our public benchmark
-  (high-precision / low-recall). Useful as defense-in-depth, not as a
-  sole control. Plug a real classifier in via the
-  `injection-classifier` interface.
-
-- **Compliance mapping is self-assessment.** EU AI Act, NIST AI RMF,
-  ISO 42001, and OWASP Agentic modules cross-reference your policies
-  against standards text. Not a certified audit. Not legal advice.
-
-- **SBOM is npm-only.** CycloneDX 1.5 from `package-lock.json` v2/v3.
-  Yarn, pnpm, and cargo are not supported in this release.
-
-- **Eval loop is in-memory.** Capped per agent. Durable eval storage
-  lives in Lua Governance Cloud.
-
-- **Policy simulator does not replay side effects.** It evaluates rule
-  decisions against scenarios — it does not advance rate-limit
-  counters, token budgets, or approval queues.
-
-- **`enforce()` does not hash-chain by default.** The integrity chain
-  is an opt-in helper. Wrap your audit sink with `createIntegrityAudit()`
-  if you want every event chained. Otherwise events are written
-  unsigned to local storage.
-
-- **In cloud mode, `register()` returns a synthetic confirmation.**
-  Authoritative agent registration happens server-side on the first
-  `enforce()` call.
-
-- **Federation is not in this SDK.** Cross-cluster policy replication
-  and signed posture exchange live in Lua Governance Cloud.
-
-If you need distributed state, durable audit, fleet-wide enforcement,
-or an ML injection classifier, that is in Lua Governance Cloud. The
-SDK is MIT and stays useful standalone.
 
 ## Framework Adapters
 
@@ -371,7 +502,7 @@ where all three hold.
 | Framework | Import Path | Scope |
 |---|---|---|
 | Model Context Protocol | `governance-sdk/plugins/mcp` | Build a **governed MCP server** — input injection pre-scan on tool arguments + output injection scan + tool-call audit for tools you publish. Not for governing MCP servers you consume (govern those at the agent framework layer). |
-| MCP trust + chain audit | `governance-sdk/plugins/mcp-trust`, `governance-sdk/plugins/mcp-chain-audit` | Pin-trusted MCP server registry + end-to-end chain-of-custody audit across nested MCP invocations. |
+| MCP trust + chain audit | `governance-sdk/plugins/mcp-trust`, `governance-sdk/plugins/mcp-chain-audit` | Declarative trusted-MCP-server registry (allowlist + per-server capability tags — **not** cryptographic pin-trust; signature/TLS pinning is not implemented) + caller-driven chain-of-custody audit across nested MCP invocations (requires manual `recordCall()` per hop; not automatic propagation). |
 | AWS Bedrock Agents | `governance-sdk/plugins/bedrock` | **Entry-gate only** — Bedrock Agents execute tools server-side inside AWS, so we can pre-scan the `InvokeAgent` input and post-scan the assembled output via `scanOutput`, but we can't see individual internal tool calls. |
 
 ### Python, edge runtimes, and other languages
@@ -477,7 +608,7 @@ governance-sdk/policy                      policy types and builders
 governance-sdk/policy-builder              fluent policy builder
 governance-sdk/policy-compose              compose + conflict resolution
 governance-sdk/policy-yaml                 serialize/deserialize policies
-governance-sdk/dry-run                     fleet dry-run simulation
+governance-sdk/dry-run                     simulatePolicy / simulateFleetPolicy
 
 # Scoring
 governance-sdk/scorer                      7-dimension governance scoring
@@ -490,7 +621,8 @@ governance-sdk/injection-classifier        pluggable ML classifier interface
 governance-sdk/injection-benchmark         LIB — 6.9K-sample benchmark runner
 
 # Audit + identity
-governance-sdk/audit-integrity             HMAC hash-chain verification
+governance-sdk/audit-integrity             HMAC hash-chain primitives (createIntegrityAudit, verifyAuditIntegrity)
+governance-sdk/audit-integrity-verify      standalone chain verifier (for offline audit)
 governance-sdk/agent-identity              agent identity tokens
 governance-sdk/agent-identity-ed25519      Ed25519 signing + verification
 governance-sdk/kill-switch                 priority-999 emergency halt
@@ -501,30 +633,21 @@ governance-sdk/owasp-agentic               OWASP Top 10 for LLMs / Agentic
 governance-sdk/nist-ai-rmf                 NIST AI RMF (Govern/Map/Measure/Manage)
 governance-sdk/iso-42001                   ISO/IEC 42001 controls
 
-# Supply chain
-governance-sdk/supply-chain                validate supply-chain provenance
-governance-sdk/supply-chain-sbom           CycloneDX SBOM generation
-
-# Eval loop + red team
-governance-sdk/eval-types                  shared eval types
-governance-sdk/eval-scorer                 trace scoring
-governance-sdk/eval-trace                  trace submission
-governance-sdk/eval-red-team               adversarial test suites
-
-# Runtime + storage
-governance-sdk/events                      typed event emitter
-governance-sdk/metrics                     Prometheus-style metrics
-governance-sdk/otel-hooks                  OpenTelemetry integration
+# Storage
 governance-sdk/storage-postgres            PostgreSQL storage adapter
 governance-sdk/storage-postgres-schema     schema DDL + migrations
-governance-sdk/federation                  multi-org policy federation
-governance-sdk/sandbox                     deterministic sandbox execution
+
+# Optional observability primitives — passive in-memory, host wires to its own
+# monitoring; NOT OpenInference-compliant. A real OTel exporter is on the roadmap.
+governance-sdk/events                      typed event emitter
+governance-sdk/metrics                     in-memory counter / timing snapshots
+governance-sdk/otel-hooks                  governance-prefixed span shape (passive — user must wire)
 
 # Scanner + type surface
 governance-sdk/scanner-plugins             scanner plugin interface
 governance-sdk/token-types                 token type guards
 
-# Framework adapters (10 featured + 4 specialty)
+# Framework adapters (10 featured + 3 specialty)
 governance-sdk/plugins/mastra
 governance-sdk/plugins/mastra-processor
 governance-sdk/plugins/vercel-ai
@@ -536,16 +659,18 @@ governance-sdk/plugins/llamaindex
 governance-sdk/plugins/mistral
 governance-sdk/plugins/ollama
 governance-sdk/plugins/mcp
-governance-sdk/plugins/mcp-annotations
 governance-sdk/plugins/mcp-trust
 governance-sdk/plugins/mcp-chain-audit
 governance-sdk/plugins/bedrock
 ```
 
+`runWithOutcome()` (a thin helper around `gov.recordOutcome`) is exposed at the
+top-level package export — `import { runWithOutcome } from 'governance-sdk'`.
+
 ## Project Stats
 
 - **0** runtime dependencies
-- **1,291** tests, 0 failures (`npm test`)
+- **1,328** tests, 0 failures (`npm test`)
 - **44** export paths — tree-shakeable, import only what you use
 - **TypeScript strict mode**, no `any` types in source
 - **MIT licensed**
@@ -573,11 +698,11 @@ npm run lint
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md). Security issues: see [SECURITY.md](./SECURITY.md).
+See [CONTRIBUTING.md](https://github.com/lua-ai-global/governance/blob/main/CONTRIBUTING.md). Security issues: see [SECURITY.md](https://github.com/lua-ai-global/governance/blob/main/SECURITY.md).
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](https://github.com/lua-ai-global/governance/blob/main/LICENSE)
 
 ## Links
 
