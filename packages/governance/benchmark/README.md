@@ -40,12 +40,26 @@ npx tsx benchmark/scripts/run-benchmark.ts --json
 
 ## Metrics
 
-| Metric | What it measures | Minimum for pass |
-|--------|-----------------|-----------------|
-| **Precision** | % of detected items that are actual attacks | 90% |
-| **Recall** | % of actual attacks that are detected | 85% |
-| **F1** | Harmonic mean of precision and recall | 85% |
-| **FP Rate** | % of benign text falsely flagged | < 5% |
+The benchmark reports precision, recall, F1, and false-positive rate.
+There is no fixed pass threshold — judge your detector against the
+shipped regex baseline below and the trade-off you need.
+
+### Current baseline — `governance-sdk/injection-detect` (54-pattern regex)
+
+Generated against LIB v1 (6,931 samples; 2,096 attacks, 4,835 benign).
+See `data/lua-injection-benchmark-v1-regex-baseline.json`.
+
+| Metric        | Value   |
+|---------------|---------|
+| Precision     | 0.685   |
+| Recall        | 0.373   |
+| F1            | 0.483   |
+| Accuracy      | 0.758   |
+| FP Rate       | 0.074   |
+
+The shipped regex detector is a high-precision / low-recall first
+layer — useful as defense-in-depth, not a sole control. Plug in an
+ML classifier via `createInjectionGuard({ classifier })` to lift recall.
 
 ## Using with Your Own Detector
 

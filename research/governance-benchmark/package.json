@@ -1,7 +1,8 @@
 {
   "name": "governance-sdk-benchmark",
   "version": "0.1.0",
-  "description": "Agent Governance Benchmark (AGB) — the industry-standard evaluation dataset for AI agent injection detection. 10K+ samples across agent-specific attack categories with hard negatives.",
+  "private": true,
+  "description": "EXPERIMENTAL research artifact. Evaluation dataset and harness for AI agent injection detection. Not published to npm.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -50,10 +51,6 @@
   ],
   "author": "Lua <hello@heylua.ai> (https://heylua.ai)",
   "license": "MIT",
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org",
-    "access": "public"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/lua-ai-global/governance",

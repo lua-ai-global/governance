@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.10.0] - 2026-04-15 — Scope honesty release
+
+This release tightens the SDK to the surface we can defend, and is honest
+about everything it doesn't do. No new features. The remaining
+**1,348 tests** pass with **0 failures**.
+
+### Removed (BREAKING)
+
+- **`governance-sdk/federation`** — was advisory-only posture exchange
+  with no distributed protocol or signature enforcement. Cross-cluster
+  policy replication and signed posture exchange live in Lua Governance
+  Cloud.
+- **`governance-sdk/sandbox`** — was a `node:vm` wrapper. `node:vm` is
+  not a security boundary (per Node docs; see CVE-2023-32002-class
+  escapes). Use OS-level isolation (containers, gVisor, Firecracker)
+  for untrusted code. Action-gating is still available as ordinary
+  policy rules.
+- **`governance-sdk/eval-red-team`** and **`gov.eval.runRedTeam(...)`** —
+  was a policy-effectiveness audit, not adversarial jailbreak testing.
+  Use a dedicated harness (inspect-ai, PyRIT, Garak) and submit results
+  via `gov.eval.submit(...)`.
+- **`packages/governance-benchmark`** moved to `research/governance-benchmark/`
+  and marked private. It is a research artifact (dataset + harness with
+  no shipped ML model) and was never published to npm in shippable form.
+
+### Renamed (additive — old names still work for one minor)
+
+- `dryRun` → **`simulatePolicy`** (preferred)
+- `fleetDryRun` → **`simulateFleetPolicy`** (preferred)
+- `assessCompliance` → **`mapToEuAiAct`** (preferred), matching
+  the existing `mapToIso42001` / `mapToNistAiRmf` / `mapToOwaspAgentic`.
+
+### Documentation
+
+- New **"What this is NOT"** section in the SDK README that pre-empts
+  scope questions: kill switch is per-process, sandbox is gone,
+  injection F1 ≈ 0.48, compliance mapping is self-assessment, SBOM is
+  npm-only, eval is in-memory, simulator does not replay side effects,
+  `enforce()` does not hash-chain by default, cloud `register()` is
+  a synthetic confirmation, federation lives in Cloud.
+- Fixed pattern-count drift: README now says **54 patterns** (matching
+  the source files and the published baseline), not "64+".
+- Benchmark README now reports the **actual baseline numbers**
+  (precision 0.685, recall 0.373, F1 0.483, FP rate 0.074) rather than
+  aspirational "≥85%" pass thresholds.
+- Clarified scope in `supply-chain.ts` JSDoc: this is allowlist
+  validation, not provenance / SLSA / signatures.
+- Clarified `remote-enforce.ts` `register()` returns a synthetic
+  confirmation; the API auto-registers on first `enforce()`.
+- Clarified that `enforce()` writes audit events un-chained by default;
+  use `createIntegrityAudit()` for tamper-evident audit.
+
+### Migration
+
+- If you imported from `governance-sdk/federation`, `governance-sdk/sandbox`,
+  or `governance-sdk/eval-red-team` — those subpaths are gone. Federation
+  + signed posture exchange is in Lua Governance Cloud. Sandbox: use
+  OS-level isolation. Red team: use inspect-ai / PyRIT / Garak.
+- If you called `gov.eval.runRedTeam(...)`, it no longer exists. Submit
+  results from your own harness via `gov.eval.submit(...)`.
+- If you used `dryRun` / `fleetDryRun` / `assessCompliance`, those still
+  work — but `simulatePolicy` / `simulateFleetPolicy` / `mapToEuAiAct`
+  are the preferred names going forward.
+
 ## [0.9.0] - 2026-04-14
 
 ### Added — full LLM lifecycle coverage across all featured adapters

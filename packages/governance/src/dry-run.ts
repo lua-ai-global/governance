@@ -1,9 +1,13 @@
 /**
- * Dry Run — test policies against your fleet without enforcing.
+ * Policy Simulator — evaluate policy decisions against scenarios without enforcing.
  *
  * Essential for CI/CD pipelines, policy reviews, and migration planning.
- * Simulates enforcement against registered agents and returns what
- * WOULD have been blocked, without actually blocking anything.
+ * Returns what WOULD have been blocked, without actually blocking anything.
+ *
+ * SCOPE: This evaluates policy *decisions* only. It does NOT simulate
+ * stateful side effects — rate-limit counters, token budgets, and approval
+ * queues are not advanced. For end-to-end behavior testing, use a real
+ * staging environment.
  */
 
 import type { GovernanceInstance, StoredAgent } from "./index.js";
@@ -249,3 +253,19 @@ export async function fleetDryRun(
     testedAt: new Date().toISOString(),
   };
 }
+
+
+// ─── Aliases (preferred names; dryRun / fleetDryRun retained for compat) ──
+
+/**
+ * Preferred name for {@link dryRun}. Identical behavior; rename for clarity.
+ * "Simulate" is more accurate than "dry run" — this evaluates policy decisions,
+ * not stateful side effects.
+ */
+export const simulatePolicy = dryRun;
+
+/**
+ * Preferred name for {@link fleetDryRun}. Identical behavior; rename for clarity.
+ */
+export const simulateFleetPolicy = fleetDryRun;
+

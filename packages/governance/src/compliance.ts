@@ -269,3 +269,16 @@ function partial(id: string, evidence: string, remediation?: string): Requiremen
 function fail(id: string, evidence: string, remediation?: string): RequirementAssessment {
   return { requirementId: id, status: "non-compliant", evidence, remediation };
 }
+
+
+// ─── Aliases ──────────────────────────────────────────────────────
+
+/**
+ * Preferred name for {@link assessCompliance}. Identical behavior; rename
+ * for consistency with mapToIso42001 / mapToNistAiRmf / mapToOwaspAgentic.
+ *
+ * NOTE: This is policy-to-standard *self-assessment*. It is NOT a certified
+ * audit and does NOT constitute legal advice.
+ */
+export const mapToEuAiAct = assessCompliance;
+

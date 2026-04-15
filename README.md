@@ -662,7 +662,7 @@ governance-sdk/behavioral-scorer           behavioral signal adjustments
 governance-sdk/repo-patterns               repository capability detection
 
 # Injection detection
-governance-sdk/injection-detect            64+ pattern regex detector
+governance-sdk/injection-detect            54-pattern regex detector
 governance-sdk/injection-classifier        pluggable ML classifier interface
 governance-sdk/injection-benchmark         LIB — 6.9K-sample benchmark runner
 

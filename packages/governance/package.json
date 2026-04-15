@@ -1,6 +1,6 @@
 {
   "name": "governance-sdk",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "AI Agent Governance for TypeScript — policy enforcement, scoring, compliance, and audit for AI agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -181,14 +181,6 @@
       "types": "./dist/policy-yaml.d.ts",
       "import": "./dist/policy-yaml.js"
     },
-    "./federation": {
-      "types": "./dist/federation.d.ts",
-      "import": "./dist/federation.js"
-    },
-    "./sandbox": {
-      "types": "./dist/sandbox.d.ts",
-      "import": "./dist/sandbox.js"
-    },
     "./iso-42001": {
       "types": "./dist/iso-42001.d.ts",
       "import": "./dist/iso-42001.js"
@@ -212,10 +204,6 @@
     "./eval-trace": {
       "types": "./dist/eval-trace.d.ts",
       "import": "./dist/eval-trace.js"
-    },
-    "./eval-red-team": {
-      "types": "./dist/eval-red-team.d.ts",
-      "import": "./dist/eval-red-team.js"
     }
   },
   "files": [

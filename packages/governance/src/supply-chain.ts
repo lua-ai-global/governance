@@ -1,8 +1,13 @@
 /**
- * governance-sdk — Agent Supply Chain Security
+ * governance-sdk — Agent Supply Chain Validation
  *
- * Declare agent dependencies, validate against approved registries,
- * and enforce supply chain policies. Addresses OWASP AA-03.
+ * Declare agent dependencies and validate them against an approved-registry
+ * allowlist (tools, MCP servers, API endpoints). Addresses OWASP AA-03.
+ *
+ * SCOPE: This is allowlist validation, not provenance verification.
+ * It does not check signatures, attestations, or SLSA levels. For SBOM
+ * generation see `./supply-chain-cyclonedx` (npm lockfiles only —
+ * yarn / pnpm / cargo not supported).
  *
  * @example
  * ```ts

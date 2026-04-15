@@ -178,7 +178,7 @@ Behavioral signals (block rate, injection hits, approval misses) feed back in vi
 
 ### Injection Detection
 
-64+ patterns across 7 categories (instruction override, role manipulation, context escape, data exfiltration, encoding, social engineering, obfuscation) with Base64/Unicode/leetspeak normalization and max-weight scoring.
+54 patterns across 7 categories (instruction override, role manipulation, context escape, data exfiltration, encoding, social engineering, obfuscation) with Base64/Unicode/leetspeak normalization and max-weight scoring.
 
 ```typescript
 import { detectInjection } from 'governance-sdk/injection-detect';
@@ -243,42 +243,96 @@ const token = await signAgentIdentity({ agentId, keys, ttlSeconds: 3600 });
 // …send token alongside enforce calls; server verifies with public key
 ```
 
-### Supply Chain + SBOM
+### Supply Chain Validation + SBOM
 
-Generate CycloneDX-compatible SBOMs for agent dependencies and validate supply-chain provenance.
+Validate agent dependencies (tools, MCP servers, API endpoints) against an
+approved-registry allowlist, and emit CycloneDX 1.5 SBOMs from npm
+lockfiles. Allowlist validation, not provenance / signatures / SLSA.
+Yarn, pnpm, and cargo are not supported.
 
 ```typescript
-import { generateAgentSbom, validateSupplyChain } from 'governance-sdk/supply-chain';
+import { validateSupplyChain } from 'governance-sdk/supply-chain';
+import { generateCycloneDxSbom } from 'governance-sdk/supply-chain-cyclonedx';
 ```
 
-### Dry-Run Simulation
+### Policy Simulator
 
-Test policies against scenarios without affecting production.
+Evaluate policies against scenarios without enforcing. Scope: policy
+*decisions* only — does not advance rate-limit counters, token budgets,
+or approval queues.
 
 ```typescript
-import { fleetDryRun } from 'governance-sdk/dry-run';
+import { simulateFleetPolicy } from 'governance-sdk/dry-run';
 
-const result = await fleetDryRun(gov, scenarios);
+const result = await simulateFleetPolicy(gov, scenarios);
 // => { fleetSummary: { agentsAffected: 11, blockRate: 0.12 }, results: [...] }
 ```
 
-### Eval Loop + Red Team
+### Eval Loop
 
-Submit traces, score them, and run adversarial red-team suites continuously.
+Collect traces from your agent runs and submit eval results from your
+preferred adversarial harness (inspect-ai, PyRIT, Garak, your own).
+Results feed into the behavioral scorer.
 
 ```typescript
 import { submitTrace } from 'governance-sdk/eval-trace';
-import { runRedTeam } from 'governance-sdk/eval-red-team';
+
+// gov.eval.submit(...) — feed external eval results back into scoring.
+// gov.eval.traces — wire into framework adapters to capture run traces.
 ```
 
-### Federation + Sandbox
+The SDK does not ship its own jailbreak-testing red team. That belongs
+in a dedicated tool — we provide the integration point.
 
-Multi-org policy federation for parent/child governance relationships. Deterministic sandbox execution for running untrusted agent steps in isolation.
+## What this is NOT
 
-```typescript
-import { createFederation } from 'governance-sdk/federation';
-import { runInSandbox } from 'governance-sdk/sandbox';
-```
+`governance-sdk` is a thin, in-process TypeScript policy engine. It is
+deliberately small and deliberately boring. Know these limits before
+adopting:
+
+- **Kill switch is per-process.** Each replica has its own. Distributed
+  kill state needs Redis, a control plane, or our hosted service. The
+  SDK does not ship one.
+
+- **No sandbox.** We previously shipped a `node:vm` sandbox. We removed
+  it: `node:vm` is not a security boundary. Use OS-level isolation
+  (containers, gVisor, Firecracker) for untrusted code.
+
+- **Injection detection is regex + an optional ML hook.** The built-in
+  detector scores F1 ≈ 0.48 on our public benchmark
+  (high-precision / low-recall). Useful as defense-in-depth, not as a
+  sole control. Plug a real classifier in via the
+  `injection-classifier` interface.
+
+- **Compliance mapping is self-assessment.** EU AI Act, NIST AI RMF,
+  ISO 42001, and OWASP Agentic modules cross-reference your policies
+  against standards text. Not a certified audit. Not legal advice.
+
+- **SBOM is npm-only.** CycloneDX 1.5 from `package-lock.json` v2/v3.
+  Yarn, pnpm, and cargo are not supported in this release.
+
+- **Eval loop is in-memory.** Capped per agent. Durable eval storage
+  lives in Lua Governance Cloud.
+
+- **Policy simulator does not replay side effects.** It evaluates rule
+  decisions against scenarios — it does not advance rate-limit
+  counters, token budgets, or approval queues.
+
+- **`enforce()` does not hash-chain by default.** The integrity chain
+  is an opt-in helper. Wrap your audit sink with `createIntegrityAudit()`
+  if you want every event chained. Otherwise events are written
+  unsigned to local storage.
+
+- **In cloud mode, `register()` returns a synthetic confirmation.**
+  Authoritative agent registration happens server-side on the first
+  `enforce()` call.
+
+- **Federation is not in this SDK.** Cross-cluster policy replication
+  and signed posture exchange live in Lua Governance Cloud.
+
+If you need distributed state, durable audit, fleet-wide enforcement,
+or an ML injection classifier, that is in Lua Governance Cloud. The
+SDK is MIT and stays useful standalone.
 
 ## Framework Adapters
 
@@ -431,7 +485,7 @@ governance-sdk/behavioral-scorer           behavioral signal adjustments
 governance-sdk/repo-patterns               repository capability detection
 
 # Injection detection
-governance-sdk/injection-detect            64+ pattern regex detector
+governance-sdk/injection-detect            54-pattern regex detector
 governance-sdk/injection-classifier        pluggable ML classifier interface
 governance-sdk/injection-benchmark         LIB — 6.9K-sample benchmark runner
 

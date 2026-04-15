@@ -31,12 +31,10 @@ import { createRemoteEnforcer, validateRemoteConfig } from "./remote-enforce.js"
 import { computeBehavioralAdjustments, applyBehavioralAdjustments } from "./behavioral-scorer.js";
 import { computeEvalAdjustments, applyEvalAdjustments } from "./eval-scorer.js";
 import { createTraceCollector } from "./eval-trace.js";
-import { runRedTeam } from "./eval-red-team.js";
 import type { AgentRegistration, GovernanceAssessment, FleetSummary } from "./types.js";
 import type { PolicyRule, PolicyEngine, PolicyStage, EnforcementContext, EnforcementDecision } from "./policy.js";
 import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
 import type { EvalResult, TraceCollector } from "./eval-types.js";
-import type { RedTeamConfig, RedTeamReport } from "./eval-red-team.js";
 
 // Re-export storage types (other modules import from ./index)
 export type { GovernanceStorage, StoredAgent, AuditEvent, AuditOutcome, AuditQueryFilters } from "./storage.js";
@@ -97,7 +95,7 @@ export interface GovernanceInstance {
   addRule: (rule: PolicyRule) => void;
   /** Remove a policy rule by ID */
   removeRule: (ruleId: string) => void;
-  /** Eval loop — submit results, access traces, run red team */
+  /** Eval loop — submit results from inspect-ai / PyRIT / Garak / your own harness */
   eval: {
     /** Submit eval results for an agent (feeds into scoring via score()) */
     submit: (result: EvalResult) => void;
@@ -107,8 +105,6 @@ export interface GovernanceInstance {
     clear: (agentId: string) => void;
     /** Trace collector for wiring into framework adapters */
     traces: TraceCollector;
-    /** Run adversarial policy effectiveness suite */
-    runRedTeam: (agentId: string, config?: RedTeamConfig) => Promise<RedTeamReport>;
   };
   /** Test API connectivity. Returns status without throwing. */
   connect: () => Promise<{ connected: boolean; mode: string; latencyMs: number }>;
@@ -230,7 +226,10 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
 
     const decision = policies.evaluate(ctx);
 
-    // Audit is off the hot path — fire-and-forget, never blocks enforcement
+    // Audit is off the hot path — fire-and-forget, never blocks enforcement.
+    // NOTE: events written here are NOT hash-chained by default. The integrity
+    // chain (see `./audit-integrity`) is an opt-in helper — wrap your audit
+    // sink with `createIntegrityAudit()` if you need tamper-evident events.
     storage.createAuditEvent({
       id: crypto.randomUUID(),
       agentId: ctx.agentId,
@@ -436,9 +435,6 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       evalResultStore.delete(agentId);
     },
     traces: traceCollector,
-    async runRedTeam(agentId: string, redTeamConfig?: RedTeamConfig): Promise<RedTeamReport> {
-      return runRedTeam(instance, agentId, redTeamConfig);
-    },
   };
 
   const noopStatus = () => ({ connected: true, mode: "local" as const, latencyMs: 0 });

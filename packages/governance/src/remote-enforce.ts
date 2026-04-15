@@ -173,8 +173,13 @@ export function createRemoteEnforcer(config: RemoteConfig) {
   }
 
   /**
-   * Remote register is a local-only operation — the API auto-registers
-   * agents on first enforce call, so no dedicated endpoint exists.
+   * In cloud mode, this returns a SYNTHETIC confirmation. There is no
+   * dedicated remote register endpoint — the API auto-registers agents
+   * on the first `enforce()` call. The returned `score` / `level` are
+   * placeholder zeros; authoritative values arrive after first enforce.
+   *
+   * If you need a registration receipt before any enforcement happens,
+   * use local mode (no `serverUrl`) or call the cloud REST API directly.
    */
   async function remoteRegister(input: AgentRegistration): Promise<RemoteRegisterResult> {
     return {
