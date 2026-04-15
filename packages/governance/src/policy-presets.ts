@@ -105,9 +105,20 @@ export function tokenBudget(maxTokens: number): PolicyRule {
 /**
  * Rate-limit agent actions within a time window.
  *
+ * **STATELESSNESS CONTRACT**: the SDK's policy engine is a thin client — it
+ * does NOT track action counts internally. The `rate_limit` condition
+ * reads `ctx.recentActionCount` from the enforcement context, which the
+ * **host** is responsible for populating before calling `gov.enforce()`.
+ *
+ * This is deliberate: durable, distributed, race-free rate limiting belongs
+ * in your API layer (Redis INCR, a rate-limit service, etc.), not in an
+ * in-process SDK. If you need zero-config rate limiting and are okay with
+ * per-process correctness only, wire up an in-memory counter in your
+ * enforce wrapper — see governance-cloud/ for a reference.
+ *
  * @param maxActions - Maximum actions allowed in the window
  * @param windowMs - Window duration in milliseconds
- * @returns A PolicyRule with priority 60 that blocks when rate exceeded
+ * @returns A PolicyRule with priority 60 that blocks when `ctx.recentActionCount > maxActions`
  */
 export function rateLimit(maxActions: number, windowMs: number): PolicyRule {
   return {
@@ -217,5 +228,48 @@ export function timeWindow(
     priority: 50,
     enabled: true,
     stage: "process",
+  };
+}
+
+/**
+ * Block when a caller-supplied ML injection score exceeds the threshold.
+ *
+ * The policy engine is synchronous by design (zero-dep, no hidden I/O), so
+ * async ML classifiers cannot run inside `enforce()` directly. Pattern:
+ *
+ *   1. Your host wrapper runs an ML classifier (e.g. `hybridDetect()` from
+ *      `governance-sdk/injection-classifier`, or a Groq/Prompt-Guard-2 call).
+ *   2. Host sets `ctx.mlInjectionScore` and optionally `ctx.mlInjectionCategories`.
+ *   3. Host calls `gov.enforce(ctx)` — this preset reads the score and
+ *      blocks when it meets or exceeds `threshold`.
+ *
+ * Pair with `createInjectionGuard()` (the built-in regex detector) for
+ * defence in depth. Regex catches known syntactic attacks with low FPR;
+ * ML catches the rest.
+ */
+export function mlInjectionGuard(opts: {
+  threshold?: number;
+  requireCategory?: string;
+  reason?: string;
+  id?: string;
+} = {}): PolicyRule {
+  const threshold = opts.threshold ?? 0.5;
+  return {
+    id: opts.id ?? "ml-injection-guard",
+    name: `ML injection guard (threshold ${threshold})`,
+    condition: {
+      type: "ml_injection_guard",
+      params: {
+        threshold,
+        ...(opts.requireCategory !== undefined ? { requireCategory: opts.requireCategory } : {}),
+      },
+    },
+    outcome: "block",
+    reason:
+      opts.reason ??
+      "ML classifier flagged input as injection (host-supplied ctx.mlInjectionScore)",
+    priority: 130, // between tool allowlist (90) and requireSignedIdentity (950)
+    enabled: true,
+    stage: "preprocess",
   };
 }

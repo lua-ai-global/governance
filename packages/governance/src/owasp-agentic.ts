@@ -1,7 +1,13 @@
 /**
- * governance-sdk — OWASP Top 10 for Agentic Applications Assessment
+ * governance-sdk — OWASP-inspired agentic threats self-assessment
  *
- * Assesses governance configuration against the OWASP Agentic Security Top 10 (2026).
+ * Assesses governance configuration against 10 agentic-threat categories
+ * (`OWASP-AA-01` … `OWASP-AA-10`). The AA- prefix is an internal Lua
+ * numbering convention inspired by OWASP's work on agentic AI threats.
+ * It is NOT the official OWASP Top 10 for LLMs 2025 (LLM01-LLM10) nor
+ * the community T1-T15 Agentic threat draft. Treat this module as a
+ * governance-posture checklist, not an OWASP-endorsed certification.
+ *
  * Risk definitions are in owasp-agentic-articles.ts.
  */
 
@@ -80,6 +86,12 @@ export async function assessOwaspAgentic(
     generatedAt: new Date().toISOString(),
     risksCovered: riskAssessments.filter((r) => r.coverage !== "non-compliant").length,
     risksTotal: OWASP_AGENTIC_RISKS.length,
+    scope:
+      "10 agentic-threat categories labelled 'OWASP-AA-01' through 'OWASP-AA-10' " +
+      "— an internal numbering convention inspired by OWASP's work on agentic " +
+      "AI threats, NOT the official OWASP Top 10 for LLMs 2025 schema (LLM01- " +
+      "LLM10) or the community T1-T15 Agentic threat draft. Treat this as a " +
+      "governance posture checklist, not an OWASP-endorsed certification.",
   };
 }
 
@@ -213,8 +225,24 @@ async function assessRequirement(
         : partial(id, "No inter-agent governance configured", "Use the A2A governance adapter for agent-to-agent communication");
 
     // AA-10: Rogue Agents
-    case "aa10-kill-switch":
-      return ok(id, "Kill switch available at priority 999 with quarantine capability");
+    case "aa10-kill-switch": {
+      // Fail unless an actual kill-switch rule has been injected into the
+      // policy engine. Previously this returned `ok` unconditionally — a
+      // compliance false positive that flagged governance configs with no
+      // incident-response capability as "compliant."
+      const rules = governance.policies.getRules();
+      const hasKillSwitch = rules.some((r) => r.id.startsWith("__kill_switch__"));
+      if (hasKillSwitch) {
+        return ok(id, "Kill switch active (priority 999 reserved rule); user rules are clamped to 998");
+      }
+      // Storage-only quarantine (status update without a rule) is not
+      // sufficient — the rule is what actually blocks enforce() calls.
+      return fail(
+        id,
+        "No kill-switch rule registered — agents cannot be halted via enforce()",
+        "Create a kill switch with createKillSwitch(gov) so rogue agents can be instantly blocked",
+      );
+    }
     case "aa10-behavioral-scoring": {
       if (agents.length === 0) return fail(id, "No agents registered for behavioral monitoring", "Register agents to enable behavioral scoring");
       const scored = agents.filter((a) => a.compositeScore > 0);

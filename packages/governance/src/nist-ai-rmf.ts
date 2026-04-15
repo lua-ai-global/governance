@@ -1,7 +1,19 @@
 /**
- * governance-sdk — NIST AI Risk Management Framework Assessment
+ * governance-sdk — NIST AI RMF 1.0 self-assessment (selected subcategories)
  *
- * Assesses governance configuration against NIST AI RMF 1.0 functions.
+ * Assesses governance configuration against **14 subcategories** across the
+ * 4 NIST AI Risk Management Framework 1.0 functions (Govern / Map /
+ * Measure / Manage). The full framework has ~100 subcategories — this
+ * module covers a subset that has a direct SDK-level mapping. For the
+ * rest, you will need external evidence.
+ *
+ * Does NOT yet cover **NIST AI 600-1 (GenAI Profile, July 2024)**. That is
+ * on the roadmap — it adds 50+ generative-AI-specific controls (data
+ * privacy, synthetic-content risks, environmental impact, human-AI
+ * configuration) that require additional signals the SDK doesn't currently
+ * surface. Contributions welcome.
+ *
+ * This is a self-assessment helper, not a certified NIST assessment.
  * Function definitions are in nist-ai-rmf-articles.ts.
  *
  * Reference: https://www.nist.gov/artificial-intelligence/ai-risk-management-framework
@@ -78,6 +90,13 @@ export async function assessNistAiRmf(
     criticalGaps,
     recommendations,
     generatedAt: new Date().toISOString(),
+    standardVersion: "NIST AI RMF 1.0",
+    scope:
+      "Covers 14 subcategories across Govern/Map/Measure/Manage. Does NOT " +
+      "cover the NIST AI 600-1 (GenAI Profile, July 2024) controls — those " +
+      "require signals outside the SDK's current visibility and are on the " +
+      "roadmap. This is a self-assessment helper, not a certified NIST " +
+      "assessment.",
   };
 }
 

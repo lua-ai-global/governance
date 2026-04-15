@@ -8,7 +8,34 @@
 import type { AgentRegistration, DimensionResult, ScoreDimension } from "./types.js";
 
 // ─── Dimension Weights ──────────────────────────────────────────
-
+//
+// RATIONALE (see also docs/scoring-rationale.md):
+//
+// These weights are calibrated around a simple question — "if this
+// dimension is weak, how likely is it that the agent causes a harmful
+// incident in production?"
+//
+//   identity       (1.5) — if you can't tell who's calling, every other
+//                           control is weakened. Anchors the whole model.
+//   permissions    (1.5) — tool / scope over-grant is the #1 cause of
+//                           "the agent did the wrong thing" incidents.
+//   guardrails     (1.3) — prevent-before-action controls stop most
+//                           classes of runtime harm.
+//   observability  (1.2) — you can only respond to incidents you can see.
+//   auditability   (1.0) — post-hoc forensics; important, but only AFTER
+//                           the incident has already occurred.
+//   compliance     (1.0) — standards mapping; procedural, downstream of
+//                           the above controls.
+//   lifecycle      (0.8) — owner / version / description metadata;
+//                           contributes to governance maturity but
+//                           doesn't itself prevent incidents.
+//
+// These are opinionated defaults, not a research-validated model. If your
+// risk profile differs (e.g. in highly-regulated industries where
+// `compliance` is load-bearing), override with a custom weight map.
+// Weights are multiplied against per-dimension 0-100 scores and averaged
+// into the 0-100 composite — so "identity weighted 1.5" means a 20-point
+// gap in identity costs ~1.87x as much as a 20-point gap in lifecycle.
 export const DIMENSION_WEIGHTS: Record<ScoreDimension, number> = {
   identity: 1.5,
   permissions: 1.5,

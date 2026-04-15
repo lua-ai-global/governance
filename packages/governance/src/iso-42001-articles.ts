@@ -38,6 +38,10 @@ export interface Iso42001Report {
   criticalGaps: string[];
   recommendations: string[];
   generatedAt: string;
+  /** Version of the standard this report targets. */
+  standardVersion?: string;
+  /** Human-readable scope caveat surfaced in the JSON output. */
+  scope?: string;
 }
 
 // ─── Clause Definitions ─────────────────────────────────────

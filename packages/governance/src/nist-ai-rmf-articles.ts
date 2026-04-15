@@ -44,6 +44,10 @@ export interface NistAiRmfReport {
   criticalGaps: string[];
   recommendations: string[];
   generatedAt: string;
+  /** Version of the standard this report targets. */
+  standardVersion?: string;
+  /** Human-readable scope caveat surfaced in the JSON output. */
+  scope?: string;
 }
 
 // ─── Function Definitions ───────────────────────────────────

@@ -47,6 +47,8 @@ export interface OwaspAgenticReport {
   generatedAt: string;
   risksCovered: number;
   risksTotal: number;
+  /** Human-readable scope caveat surfaced in the JSON output. */
+  scope?: string;
 }
 
 // ─── Risk Definitions ───────────────────────────────────────

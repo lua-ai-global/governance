@@ -1,9 +1,24 @@
 /**
  * Kill Switch — instant agent shutdown for emergencies.
  *
- * When an agent goes rogue, you need to kill it in one call.
- * The kill switch integrates with the policy engine to block
- * ALL actions from disabled agents, no exceptions.
+ * Injects a priority-999 policy rule into the current governance instance
+ * to block ALL actions from a killed agent. Storage is best-effort updated
+ * (`status: "quarantined"`) so other instances polling storage can learn
+ * about the kill — but **the authoritative kill state lives in-memory on
+ * the instance where `kill()` was called**.
+ *
+ * Scope: **per-process**. For fleet-wide kills across multiple SDK
+ * instances, either:
+ *   - route all enforce() calls through a shared `remote-enforce` API
+ *     that holds the kill state centrally, OR
+ *   - have each instance re-query storage before each enforce() call
+ *     (off by default — the SDK is a thin client), OR
+ *   - publish kill events over a pub/sub channel and call `kill()` on
+ *     every instance as they arrive.
+ *
+ * Treat the SDK-level kill switch as "last-resort local brake," not
+ * "distributed emergency stop." For guaranteed fleet-wide halt, use the
+ * governance-cloud API.
  *
  * @example
  * ```ts

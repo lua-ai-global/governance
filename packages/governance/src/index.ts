@@ -492,6 +492,7 @@ export { composePolicies, securityBaseline, complianceOverlay, platformDefaults 
 export type { PolicySet, ConflictStrategy, ComposeConfig, ComposeResult, PolicyConflict } from "./policy-compose.js";
 export { getDefaultStage } from "./policy-stage-defaults.js";
 export { inputBlocklist, inputLength, inputPattern, networkAllowlist, scopeBoundary, costBudget, concurrentLimit, outputLength, outputPattern, sensitiveDataFilter, maskSensitiveOutput, maskOutputPattern } from "./policy-presets-extended.js";
+export { mlInjectionGuard } from "./policy-presets.js";
 export { SENSITIVE_PATTERNS, getSensitivePatterns } from "./conditions/sensitive-patterns.js";
 export type { SensitivePattern } from "./conditions/sensitive-patterns.js";
 export { maskSensitiveData, maskPattern, maskBlocklistTerms } from "./mask.js";

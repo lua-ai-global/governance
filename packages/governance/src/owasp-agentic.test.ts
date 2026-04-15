@@ -73,13 +73,26 @@ describe("OWASP Agentic Top 10", () => {
     assert.ok(report.recommendations.length > 0);
   });
 
-  it("kill switch is always available (AA-10)", async () => {
+  it("AA-10 kill-switch requirement is non-compliant with no kill switch registered", async () => {
     const gov = createGovernance();
     const report = await assessOwaspAgentic({ governance: gov, agents: [] });
     const aa10 = report.risks.find((r) => r.article === "OWASP-AA-10");
-    assert.ok(aa10);
-    const killReq = aa10.requirements.find((r) => r.requirementId === "aa10-kill-switch");
+    const killReq = aa10!.requirements.find((r) => r.requirementId === "aa10-kill-switch");
     assert.ok(killReq);
-    assert.equal(killReq.status, "compliant");
+    assert.equal(killReq!.status, "non-compliant", "stub used to pass here — now demands a real kill switch");
+    assert.ok(killReq!.remediation);
+  });
+
+  it("AA-10 kill-switch requirement is compliant once createKillSwitch(gov) has run", async () => {
+    const { createKillSwitch } = await import("./kill-switch");
+    const gov = createGovernance();
+    const agent = await gov.register({ name: "bot", framework: "mastra", owner: "t" });
+    const ks = createKillSwitch(gov);
+    await ks.kill(agent.id, "incident");
+    const report = await assessOwaspAgentic({ governance: gov, agents: [agent] });
+    const killReq = report.risks
+      .find((r) => r.article === "OWASP-AA-10")!
+      .requirements.find((r) => r.requirementId === "aa10-kill-switch");
+    assert.equal(killReq!.status, "compliant");
   });
 });

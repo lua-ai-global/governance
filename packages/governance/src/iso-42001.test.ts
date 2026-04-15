@@ -14,6 +14,16 @@ describe("ISO 42001", () => {
     assert.equal(mapToIso42001, assessIso42001);
   });
 
+  it("report embeds standard version + Annex A scope caveat", async () => {
+    const { createGovernance } = await import("./index");
+    const gov = createGovernance({});
+    const report = await assessIso42001({ governance: gov, agents: [] });
+    assert.equal(report.standardVersion, "ISO/IEC 42001:2023");
+    assert.ok(report.scope, "scope caveat missing");
+    assert.match(report.scope!, /Annex A/);
+    assert.match(report.scope!, /not a certified audit/i);
+  });
+
   it("each clause has requirements with unique IDs", () => {
     const ids = getIsoClauses().flatMap((c) => c.requirements.map((r) => r.id));
     assert.equal(ids.length, new Set(ids).size, "Duplicate requirement IDs");

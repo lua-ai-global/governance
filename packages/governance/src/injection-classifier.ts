@@ -4,6 +4,22 @@
  * Defines a pluggable classifier interface for ML-based injection detection.
  * The OSS SDK ships the interface; commercial packages provide implementations.
  *
+ * **Integration with the synchronous policy engine:**
+ * The core policy engine is synchronous by design (zero-dep, no hidden I/O).
+ * Async ML classifiers cannot run inside `gov.enforce()`. Instead:
+ *
+ *   1. In your host wrapper, call `hybridDetect(input, { threshold })` on
+ *      the user prompt. That invokes the classifier + regex detector and
+ *      returns a merged score.
+ *   2. Populate `ctx.mlInjectionScore` (and optionally
+ *      `ctx.mlInjectionCategories`) on the `EnforcementContext`.
+ *   3. Add `mlInjectionGuard({ threshold })` to your rule set. The sync
+ *      evaluator reads the pre-computed score and blocks when it fires.
+ *
+ * This keeps the SDK fast and dependency-free while letting you layer any
+ * ML detector (Lakera, Prompt-Guard-2 via Groq, a local ONNX DeBERTa, …)
+ * into the enforcement path.
+ *
  * @example
  * ```ts
  * import { setInjectionClassifier, getInjectionClassifier } from 'governance-sdk/injection-classifier';

@@ -1,7 +1,14 @@
 /**
- * governance-sdk — ISO/IEC 42001 Compliance Assessment
+ * governance-sdk — ISO/IEC 42001:2023 self-assessment (NOT a certified audit)
  *
- * Assesses governance configuration against ISO 42001 AI Management System clauses.
+ * Assesses governance configuration against **clauses 4, 5, 6, 8, 9, 10**
+ * of ISO/IEC 42001:2023 (AI management system). Does NOT model the 39
+ * informative controls in Annex A — those cover operational practices
+ * (information security, supply chain risk, model documentation,
+ * transparency, human oversight) that require process-level evidence
+ * outside the SDK's visibility. This is a self-assessment helper, not a
+ * substitute for a chartered ISO 42001 audit.
+ *
  * Clause definitions are in iso-42001-articles.ts.
  */
 
@@ -76,6 +83,12 @@ export async function assessIso42001(
     criticalGaps,
     recommendations,
     generatedAt: new Date().toISOString(),
+    standardVersion: "ISO/IEC 42001:2023",
+    scope:
+      "Covers clauses 4, 5, 6, 8, 9, 10 of ISO/IEC 42001:2023. Does NOT " +
+      "model the 39 informative controls in Annex A. This is a self-" +
+      "assessment helper, not a certified audit — consult a chartered " +
+      "auditor before relying on this output for certification evidence.",
   };
 }
 

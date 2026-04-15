@@ -14,6 +14,14 @@ describe("NIST AI RMF", () => {
     assert.equal(mapToNistAiRmf, assessNistAiRmf);
   });
 
+  it("report embeds standard version + GenAI Profile scope caveat", async () => {
+    const gov = createGovernance({});
+    const report = await assessNistAiRmf({ governance: gov, agents: [] });
+    assert.equal(report.standardVersion, "NIST AI RMF 1.0");
+    assert.ok(report.scope);
+    assert.match(report.scope!, /GenAI Profile|NIST AI 600-1/);
+  });
+
   it("each function has requirements", () => {
     for (const fn of getNistFunctions()) {
       assert.ok(fn.requirements.length > 0, `${fn.id} has no requirements`);
@@ -31,7 +39,7 @@ describe("NIST AI RMF", () => {
         blockTools(["shell_exec"]),
         requireApproval(["payment"]),
         tokenBudget(100_000),
-        rateLimit({ maxActions: 50, windowMs: 60_000 }),
+        rateLimit(50, 60_000),
       ],
     });
 

@@ -72,7 +72,7 @@ import { createGovernance, blockTools, rateLimit } from 'governance-sdk';
 const governance = createGovernance({
   rules: [
     blockTools(['shell_exec', 'eval']),
-    rateLimit({ maxRequests: 100, windowMs: 60_000 }),
+    rateLimit(100, 60_000),  // 100 actions per 60s — host populates ctx.recentActionCount
   ],
 });
 
@@ -149,7 +149,16 @@ Define rules that govern agent behavior at runtime. Policies return one of **fiv
 - `allowOnlyTools(toolNames)` — whitelist-only tool access
 - `requireApproval(condition)` — gate actions behind human approval
 - `tokenBudget(limit)` — enforce token consumption limits
-- `rateLimit(config)` — throttle agent requests
+- `rateLimit(config)` — throttle agent requests. **Stateless** — the rule
+  reads `ctx.recentActionCount`, which your host populates. Durable
+  distributed rate limiting belongs in your API layer.
+
+**Extended presets** (also exported from the main package): `inputBlocklist`,
+`inputLength`, `inputPattern`, `networkAllowlist`, `scopeBoundary`,
+`costBudget`, `concurrentLimit`, `outputLength`, `outputPattern`,
+`sensitiveDataFilter`, `maskSensitiveOutput`, `maskOutputPattern`. Most
+rely on the host supplying relevant `ctx.*` fields (token counts, domain,
+cost, etc.) — like `rateLimit`, they are declarative gates, not accumulators.
 - `requireLevel(level)` — require minimum trust level
 - `requireSequence(steps)` — enforce ordered execution steps
 - `timeWindow(config)` — restrict actions to time windows
@@ -174,7 +183,22 @@ getGovernanceLevel(assessment.compositeScore);
 // => { level: 4, label: 'Certified', description: '...' }
 ```
 
-Behavioral signals (block rate, injection hits, approval misses) feed back in via `behavioral-scorer`, so the score tracks how an agent *actually* behaves in production — not just its configured posture.
+Behavioral signals (block rate, injection hits, approval misses) can be
+fed in via `behavioral-scorer.computeBehavioralAdjustments()` so the score
+reflects how an agent *has* behaved, not just its configured posture. This
+is an opt-in call — the SDK does not automatically ingest live audit
+events; you query your audit stream and pass results to the adjuster.
+
+**Weight rationale + inflation risk**: the default weights
+(identity/permissions 1.5; guardrails 1.3; observability 1.2;
+auditability/compliance 1.0; lifecycle 0.8) are opinionated, not
+research-validated. Override with a custom weight map if your risk profile
+differs. Also: the scorer trusts self-reported `hasAuth`/`hasGuardrails`/
+`hasObservability`/`hasAuditLog` booleans at face value — to defend against
+score inflation, cross-check callers' claims against
+`scanRepoContents(fileContents)` from `governance-sdk/repo-patterns` and
+flag mismatches. See `src/scorer-dimensions.ts` header comment and
+`src/scorer-inflation.test.ts` for the full pattern.
 
 ### Injection Detection
 
@@ -261,7 +285,10 @@ const { valid, brokenAt, breakDetail } = await verifyAuditIntegrity(snapshot, pr
 
 ### Kill Switch
 
-Emergency halt for any agent, enforced at priority 999 (overrides all other policies).
+Emergency halt for any agent, enforced via a reserved-priority policy rule
+(999). User-supplied rules are clamped to a max priority of 998 by the
+engine, so the kill switch remains unconditionally top priority — no
+"attacker rule at 1000 beats the kill switch" hole.
 
 ```typescript
 import { createKillSwitch } from 'governance-sdk/kill-switch';
@@ -269,6 +296,14 @@ import { createKillSwitch } from 'governance-sdk/kill-switch';
 const killSwitch = createKillSwitch(gov);
 await killSwitch.kill('rogue-agent', 'Unauthorized data access');
 ```
+
+**Scope: per-process, not distributed.** The authoritative kill state lives
+in-memory on the instance where `kill()` was called. Storage is best-effort
+updated so other instances can discover the kill, but they do NOT re-query
+storage on every `enforce()` — that would hurt the thin-client design. For
+fleet-wide guaranteed halt, route through the governance-cloud remote
+`enforce` API or publish kill events over pub/sub and call `kill()` on
+every instance.
 
 ### Standards self-assessments (EU AI Act, OWASP Agentic, NIST AI RMF, ISO 42001)
 
@@ -656,8 +691,8 @@ governance-sdk/eval-red-team               adversarial test suites
 
 # Runtime + storage
 governance-sdk/events                      typed event emitter
-governance-sdk/metrics                     Prometheus-style metrics
-governance-sdk/otel-hooks                  OpenTelemetry integration
+governance-sdk/metrics                     in-memory counter / timing snapshots (serialize to your monitoring system)
+governance-sdk/otel-hooks                  OTel-compatible span data (zero OTel deps; wire to your own tracer)
 governance-sdk/storage-postgres            PostgreSQL storage adapter
 governance-sdk/storage-postgres-schema     schema DDL + migrations
 governance-sdk/federation                  multi-org policy federation

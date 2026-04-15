@@ -164,7 +164,7 @@ export function getBuiltinConditions(
     // ─── Input safety (preprocess) ─────────────────────────────
     {
       name: "injection_guard",
-      description: "Detect prompt injection attacks",
+      description: "Detect prompt injection attacks (regex detector, synchronous)",
       evaluator: (ctx, p) => {
         if (!ctx.input) return false;
         const skip = (p.skipCategories ?? []) as InjectionCategory[];
@@ -173,6 +173,24 @@ export function getBuiltinConditions(
           if (detectInjection(str, opts).detected) return true;
         }
         return false;
+      },
+    },
+    {
+      name: "ml_injection_guard",
+      description:
+        "Consume an ML-classifier score pre-computed by the host. " +
+        "Async ML classifiers cannot run inside the sync policy engine — the " +
+        "host runs hybridDetect() (or its own integration) and populates " +
+        "ctx.mlInjectionScore / ctx.mlInjectionCategories before enforce().",
+      evaluator: (ctx, p) => {
+        if (typeof ctx.mlInjectionScore !== "number") return false;
+        const threshold = (p.threshold as number | undefined) ?? 0.5;
+        if (ctx.mlInjectionScore < threshold) return false;
+        const requireCategory = p.requireCategory as string | undefined;
+        if (requireCategory && !(ctx.mlInjectionCategories ?? []).includes(requireCategory)) {
+          return false;
+        }
+        return true;
       },
     },
     {

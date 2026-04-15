@@ -41,15 +41,17 @@ describe("conflicting policy rules", () => {
   });
 
   test("kill switch priority (999) overrides everything", () => {
+    // Priorities >= 999 are reserved for internal rules (id prefixed `__`).
+    // User rules at 999+ get clamped to 998, so the kill switch wins.
     const engine = createPolicyEngine({
       rules: [
         { id: "allow-all", name: "Allow All", condition: { type: "custom", params: { evaluate: () => true } }, outcome: "allow", reason: "All allowed", priority: 998, enabled: true },
-        { id: "kill", name: "Kill Switch", condition: { type: "custom", params: { evaluate: () => true } }, outcome: "block", reason: "KILLED", priority: 999, enabled: true },
+        { id: "__kill_switch__test", name: "Kill Switch", condition: { type: "custom", params: { evaluate: () => true } }, outcome: "block", reason: "KILLED", priority: 999, enabled: true },
       ],
     });
     const decision = engine.evaluate({ agentId: "x", action: "tool_call" });
     assert.equal(decision.blocked, true);
-    assert.equal(decision.ruleId, "kill");
+    assert.equal(decision.ruleId, "__kill_switch__test");
   });
 });
 

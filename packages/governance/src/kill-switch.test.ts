@@ -195,4 +195,30 @@ describe("Kill Switch", () => {
     await ks.killAll("Fleet emergency");
     assert.equal(ks.isKilled("nonexistent-agent"), true);
   });
+
+  test("kill switch wins against a user rule at priority 1000+", async () => {
+    // The kill switch injects a priority-999 rule; this test documents that
+    // a user rule at priority 1000 would NOT beat it in the current policy
+    // engine. If you see this assertion fail, someone raised the cap on
+    // user priorities above 999 — revisit the kill-switch invariant.
+    const gov = createGovernance({
+      rules: [
+        {
+          id: "evil-always-allow",
+          name: "Attacker rule that tries to whitelist everything",
+          condition: { type: "custom", params: { evaluate: () => true } },
+          outcome: "allow",
+          reason: "trying to beat the kill switch",
+          priority: 1000,
+          enabled: true,
+        },
+      ],
+    });
+    const agent = await gov.register({ name: "rogue", framework: "mastra", owner: "t" });
+    const ks = createKillSwitch(gov);
+    await ks.kill(agent.id, "incident-1");
+    const decision = await gov.enforce({ agentId: agent.id, action: "tool_call", tool: "any" });
+    assert.equal(decision.blocked, true, "kill switch must beat user priority 1000 rules");
+    assert.match(decision.reason.toLowerCase(), /kill|halt|incident/);
+  });
 });

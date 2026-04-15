@@ -103,6 +103,20 @@ export interface EnforcementContext {
    * | "capability_not_in_cert" (or any string the host provides).
    */
   identityFailureReason?: string;
+  /**
+   * Score (0-1) from an ML injection classifier that the host ran BEFORE
+   * calling `enforce()`. The policy engine is synchronous and cannot invoke
+   * an async classifier itself — so the host runs the classifier (via
+   * `hybridDetect()` or its own integration), populates this field, and the
+   * `ml_injection_guard` condition reads it. `undefined` means the host
+   * did not run an ML classifier on this request.
+   */
+  mlInjectionScore?: number;
+  /**
+   * Categories tagged by the ML classifier alongside `mlInjectionScore`.
+   * Optional — enables the `ml_injection_guard` to narrow on category too.
+   */
+  mlInjectionCategories?: string[];
 }
 
 export interface EnforcementDecision {
@@ -219,7 +233,11 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
     registry.set(entry.name, entry);
   }
 
-  const rules: PolicyRule[] = [...(config.rules ?? [])];
+  // Same clamp as addRule() — priorities >= 999 are reserved for system
+  // rules (kill switch). User rules passed at init are capped at 998.
+  const rules: PolicyRule[] = (config.rules ?? []).map((r) =>
+    r.id.startsWith("__") || r.priority < 999 ? r : { ...r, priority: 998 },
+  );
   const defaultOutcome = config.defaultOutcome ?? "allow";
 
   /** Compute masked text when outcome is "mask" based on the condition type and context. */
@@ -273,9 +291,17 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
   }
 
   function addRule(rule: PolicyRule): void {
-    const idx = rules.findIndex((r) => r.id === rule.id);
-    if (idx >= 0) rules[idx] = rule;
-    else rules.push(rule);
+    // Priorities >= 999 are reserved for internal system rules (kill switch
+    // et al.). User rules are clamped at 998 so the kill switch remains
+    // the unconditional top priority. Internal callers mark their rules
+    // with a `__` id prefix to opt out of the clamp.
+    const clamped =
+      rule.id.startsWith("__") || rule.priority < 999
+        ? rule
+        : { ...rule, priority: 998 };
+    const idx = rules.findIndex((r) => r.id === clamped.id);
+    if (idx >= 0) rules[idx] = clamped;
+    else rules.push(clamped);
   }
 
   function removeRule(ruleId: string): void {
