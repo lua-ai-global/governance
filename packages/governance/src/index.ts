@@ -147,8 +147,12 @@ export interface GovernanceInstance {
    * Safe to call even when `integrityAudit` isn't configured — the event
    * is written to plain storage. When integrity IS on, it's HMAC-chained
    * alongside everything else.
+   *
+   * Marked optional on the type for backwards compatibility with 0.10.x
+   * consumers who implemented `GovernanceInstance` by hand (e.g. in test
+   * mocks). Always populated by `createGovernance()` at runtime.
    */
-  recordOutcome: (outcome: ActionOutcome) => Promise<AuditEvent>;
+  recordOutcome?: (outcome: ActionOutcome) => Promise<AuditEvent>;
   /**
    * Integrity-audit helpers. Only populated when `integrityAudit` is
    * configured on createGovernance(). Exports the signed chain for

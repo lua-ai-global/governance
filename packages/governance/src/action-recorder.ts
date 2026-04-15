@@ -70,7 +70,7 @@ export async function runWithOutcome<T>(
     // "block" the call will still throw inside recordOutcome — callers
     // concerned about that can await recordOutcome directly instead of
     // using this helper.
-    governance.recordOutcome(outcome).catch(() => { /* swallowed */ });
+    governance.recordOutcome?.(outcome).catch(() => { /* swallowed */ });
     return result;
   } catch (err) {
     const durationMs = Date.now() - startedAt;
@@ -86,7 +86,7 @@ export async function runWithOutcome<T>(
       tokensUsed: options.tokensUsed,
       detail: options.detail,
     };
-    governance.recordOutcome(outcome).catch(() => { /* swallowed */ });
+    governance.recordOutcome?.(outcome).catch(() => { /* swallowed */ });
     throw err;
   }
 }
