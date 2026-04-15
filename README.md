@@ -34,7 +34,7 @@ Everything downstream (scoring, audit, compliance) follows from those three.
 | Behavioral scoring / trust levels | **✅** | ❌ | ❌ | ❌ |
 | Tamper-evident audit (HMAC chain) | **✅** | ❌ | ❌ | ❌ |
 | Standards mapping (EU AI Act / OWASP / NIST / ISO 42001) | **✅** | ❌ | Partial | ❌ |
-| Supply-chain / SBOM / Ed25519 identity | **✅** | ❌ | ❌ | ❌ |
+| Ed25519 agent identity | **✅** | ❌ | ❌ | ❌ |
 | Zero-dep embedded use in any TS runtime | **✅** | ❌ | ❌ | ❌ |
 
 `governance-sdk` is the only option that's zero-dep TypeScript, framework-agnostic, and maps to all four major AI-governance standards out of the box.
@@ -56,7 +56,6 @@ detection — nothing more. To pre-empt scope questions:
   ≈ 0.48 on the 6,931-sample LIB corpus. Layer in an ML classifier via the
   `InjectionClassifier` interface for production coverage.
 - **Compliance mapping is self-assessment**, not legal advice or certification.
-- **SBOM is npm-only** — not SLSA, not Sigstore provenance.
 - **Eval is in-memory**, not a durable eval store.
 - **Simulator does not replay side effects** — it evaluates policy outcomes
   against synthetic scenarios, it does not execute tools.
@@ -454,38 +453,6 @@ with, so without pinning you're verifying "someone signed this" rather than
 "the expected agent signed this." Use `pinnedPublicKeyHex` whenever you
 already know which key the agent should be using.
 
-### Supply Chain + SBOM
-
-Two complementary outputs:
-
-1. **CycloneDX 1.5 SBOM** of the npm dependency tree — parses `package.json` +
-   `package-lock.json` (lockfile v2/v3) and emits a spec-compliant
-   [CycloneDX 1.5](https://cyclonedx.org/docs/1.5/json/) JSON document with
-   `components[]`, `purl` per [purl-spec](https://github.com/package-url/purl-spec),
-   SRI → SHA-256/384/512 `hashes`, licenses, and a direct+transitive
-   `dependencies` graph. Validates against the official CycloneDX 1.5 JSON schema.
-
-2. **Agent capability manifest** (`LuaAgentSBOM` — **not** CycloneDX) — a
-   governance-focused manifest describing an agent's declared tools, MCP
-   servers, API endpoints, and governance posture. Paired with
-   `validateSupplyChain()` for declarative allowlist enforcement (tools, MCP
-   servers, API endpoints). Not a SLSA attestation — SLSA/Sigstore provenance
-   is on the roadmap, not shipped.
-
-```typescript
-import { generateCycloneDxSbom } from 'governance-sdk/supply-chain-cyclonedx';
-import { readFileSync } from 'node:fs';
-
-const sbom = generateCycloneDxSbom({
-  packageJson: JSON.parse(readFileSync('./package.json', 'utf8')),
-  lockfile:    JSON.parse(readFileSync('./package-lock.json', 'utf8')),
-});
-// => { bomFormat: "CycloneDX", specVersion: "1.5", components: [...], dependencies: [...] }
-
-import { generateAgentSBOM } from 'governance-sdk/supply-chain-sbom';
-import { validateSupplyChain }  from 'governance-sdk/supply-chain';
-```
-
 ### Dry-Run Simulation
 
 Test policies against scenarios without affecting production.
@@ -701,11 +668,6 @@ governance-sdk/compliance                  EU AI Act (6 articles + deadlines)
 governance-sdk/owasp-agentic               OWASP Top 10 for LLMs / Agentic
 governance-sdk/nist-ai-rmf                 NIST AI RMF (Govern/Map/Measure/Manage)
 governance-sdk/iso-42001                   ISO/IEC 42001 controls
-
-# Supply chain
-governance-sdk/supply-chain                declarative allowlist enforcement
-governance-sdk/supply-chain-sbom           agent capability manifest (LuaAgentSBOM)
-governance-sdk/supply-chain-cyclonedx      CycloneDX 1.5 SBOM of npm dep tree
 
 # Eval
 governance-sdk/eval-types                  shared eval types
