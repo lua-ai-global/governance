@@ -39,6 +39,35 @@ Everything downstream (scoring, audit, compliance) follows from those three.
 
 `governance-sdk` is the only option that's zero-dep TypeScript, framework-agnostic, and maps to all four major AI-governance standards out of the box.
 
+## What this is NOT
+
+The SDK is a **thin client** for local policy evaluation, scoring, and
+detection — nothing more. To pre-empt scope questions:
+
+- **Kill switch is per-process**, not fleet-wide. Distributed halt lives in
+  Lua Governance Cloud or your own pub/sub.
+- **No sandbox.** `node:vm` is not a security boundary (per Node docs). Use
+  containers, gVisor, or Firecracker for untrusted code. `governance-sdk/sandbox`
+  was removed in 0.10.
+- **No federation.** Advisory single-process posture exchange was removed
+  in 0.10. Cross-org policy replication and signed posture exchange are
+  not currently shipped in either the SDK or Lua Governance Cloud.
+- **Injection detection is high-precision / low-recall** — regex baseline F1
+  ≈ 0.48 on the 6,931-sample LIB corpus. Layer in an ML classifier via the
+  `InjectionClassifier` interface for production coverage.
+- **Compliance mapping is self-assessment**, not legal advice or certification.
+- **SBOM is npm-only** — not SLSA, not Sigstore provenance.
+- **Eval is in-memory**, not a durable eval store.
+- **Simulator does not replay side effects** — it evaluates policy outcomes
+  against synthetic scenarios, it does not execute tools.
+- **`enforce()` does not hash-chain by default** — opt in with
+  `integrityAudit: { signingKey }` for tamper-evident audit.
+- **Cloud `register()` is a synthetic confirmation** — the API auto-registers
+  on first `enforce()`.
+- **No built-in red team / jailbreak harness.** Use inspect-ai, PyRIT, or
+  Garak. `gov.eval.runRedTeam()` was removed in 0.10 because it tested
+  policies, not the model.
+
 ## Packages
 
 | Package | Description |
@@ -366,18 +395,22 @@ Scope disclosures:
   informative controls.
 
 ```typescript
-import { assessCompliance }  from 'governance-sdk/compliance';     // EU AI Act (6 articles)
+import { mapToEuAiAct }      from 'governance-sdk/compliance';     // EU AI Act (6 articles) — preferred
 import { mapToOwaspAgentic } from 'governance-sdk/owasp-agentic';   // alias of assessOwaspAgentic
 import { mapToNistAiRmf }    from 'governance-sdk/nist-ai-rmf';     // alias of assessNistAiRmf
 import { mapToIso42001 }     from 'governance-sdk/iso-42001';       // alias of assessIso42001
 
-const report = await assessCompliance({
+const report = await mapToEuAiAct({
   governance: gov, agents: [agent],
   auditIntegrity: true, humanOversight: true,
 });
 // report.disclaimer — embedded "not legal advice" notice
 // report.phasedDeadlines — { prohibitedPractices, gpaiTransparency, highRiskObligations, postMarketAndDownstream }
 ```
+
+> **Note on naming:** the 0.10 release aligned the EU AI Act entry point
+> with the other frameworks: `assessCompliance` → `mapToEuAiAct`. The old
+> name still works for one minor release.
 
 ### Agent Identity (Ed25519)
 
@@ -458,33 +491,25 @@ import { validateSupplyChain }  from 'governance-sdk/supply-chain';
 Test policies against scenarios without affecting production.
 
 ```typescript
-import { fleetDryRun } from 'governance-sdk/dry-run';
+import { simulateFleetPolicy } from 'governance-sdk/dry-run';
 
-const result = await fleetDryRun(gov, scenarios);
+const result = await simulateFleetPolicy(gov, scenarios);
 // => { fleetSummary: { agentsAffected: 11, blockRate: 0.12 }, results: [...] }
 ```
 
-### Eval traces + policy-effectiveness audit
+> **Note on naming:** `dryRun` / `fleetDryRun` were renamed to `simulatePolicy` /
+> `simulateFleetPolicy` in 0.10. The old names still work for one minor release.
 
-Two related primitives:
+### Eval traces
 
-1. **Trace collection** — capture agent operation traces (spans, tool calls,
-   LLM invocations) into an in-memory collector, retrieve them per-agent,
-   and pipe them into your own metric evaluator. The SDK does **not** ship a
-   built-in LLM-as-judge; metric generation is your responsibility (wire in
-   your Claude/OpenAI/local model of choice).
-
-2. **Policy-effectiveness audit** (marketed elsewhere as "red team") — probes
-   `gov.enforce()` with ~62 hand-curated injection, dangerous-tool, and
-   level-gate cases and reports whether the **policy engine** blocks them.
-   It tests your *configured policies*, not your agent's LLM. For
-   adversarial-LLM testing, use an external framework like
-   [Garak](https://github.com/leondz/garak) or layer on an ML injection
-   classifier via the `InjectionClassifier` interface.
+Capture agent operation traces (spans, tool calls, LLM invocations) into an
+in-memory collector, retrieve them per-agent, and pipe them into your own
+metric evaluator. The SDK does **not** ship a built-in LLM-as-judge; metric
+generation is your responsibility (wire in your Claude/OpenAI/local model of
+choice).
 
 ```typescript
 import { createTraceCollector, submitTrace } from 'governance-sdk/eval-trace';
-import { runRedTeam } from 'governance-sdk/eval-red-team';
 
 const traces = createTraceCollector({ maxTraces: 200 });
 submitTrace(traces, {
@@ -493,58 +518,20 @@ submitTrace(traces, {
   output: '3 deals totaling $45k',
   spans: [{ operation: 'tool_call', toolName: 'search', success: true, latencyMs: 120 }],
 });
-
-const report = await runRedTeam(gov, 'luna');
-// report.policyDependence near 1 ⇒ you're only safe because of structural rules
-// (tool blocklists, level gates) — add an injection guard for content-level coverage.
 ```
 
-### Sandbox (action gating + optional VM isolation)
+For adversarial-LLM / jailbreak testing, use a dedicated harness like
+[inspect-ai](https://github.com/UKGovernmentBEIS/inspect_ai),
+[PyRIT](https://github.com/Azure/PyRIT), or
+[Garak](https://github.com/leondz/garak) and submit results via your own
+pipeline. The previous built-in `runRedTeam()` helper was removed in 0.10 —
+it tested configured policies, not the model, and was easily mistaken for
+adversarial-LLM coverage.
 
-The `sandbox` module ships **two separate primitives**, clearly scoped:
-
-1. **`createSandbox()`** — **action-gating policy**, not OS/process isolation.
-   Emits policy rules that block disallowed action categories (`file_write`,
-   `external_request`, `payment`, etc.) and enforces per-session quotas (tool
-   calls, tokens, cost, duration). This is a governance layer — it does NOT
-   run code.
-
-2. **`runInVmSandbox()`** — real execution isolation using Node's built-in
-   `node:vm` module. Runs untrusted JavaScript in a fresh V8 Context with a
-   wall-clock timeout and a caller-controlled `globalThis`. Zero runtime
-   dependencies. **Not a security boundary** against adversarial code that
-   you do not control — for that, use a separate OS process, a container, or
-   [`isolated-vm`](https://github.com/laverdet/isolated-vm). Use this for
-   isolating accidental mistakes in policy expressions or rule DSL snippets
-   from the host runtime.
-
-```typescript
-import { createSandbox, runInVmSandbox } from 'governance-sdk/sandbox';
-
-// Action gating: block file writes and external requests at policy level.
-const sandbox = createSandbox({ level: 1, quotas: { maxToolCalls: 50 } });
-governance.addRule(sandbox.levelRule);
-governance.addRule(sandbox.quotaRule);
-
-// VM isolation: run a user-supplied expression with a timeout.
-const result = runInVmSandbox<number>("score * weight", {
-  globals: { score: 87, weight: 1.2 },
-  timeoutMs: 100,
-});
-// => { ok: true, value: 104.4, durationMs: <1, timedOut: false }
-```
-
-### Federation (posture exchange, single-process)
-
-`createFederation()` is a **single-process posture-exchange interface** for
-agents that need to compare governance state with siblings — it is **not** a
-distributed federation protocol. It has no network transport, no multi-org
-propagation, and no consensus. A true multi-org parent/child federation runs
-in the Governance Cloud API layer, not the SDK.
-
-```typescript
-import { createFederation } from 'governance-sdk/federation';
-```
+> **Removed in 0.10:** `governance-sdk/sandbox` (node:vm is not a security
+> boundary — use OS-level isolation) and `governance-sdk/federation`
+> (advisory posture exchange with no distributed protocol; a real
+> cross-org federation is not currently shipped).
 
 ## Framework Adapters
 
@@ -680,7 +667,7 @@ const middleware = createGovernanceMiddleware(gov, {
 
 ## Export Paths
 
-The SDK ships **44 targeted exports** so you can import only what you need:
+The SDK ships **49 targeted exports** so you can import only what you need:
 
 ```
 # Core
@@ -689,7 +676,7 @@ governance-sdk/policy                      policy types and builders
 governance-sdk/policy-builder              fluent policy builder
 governance-sdk/policy-compose              compose + conflict resolution
 governance-sdk/policy-yaml                 serialize/deserialize policies
-governance-sdk/dry-run                     fleet dry-run simulation
+governance-sdk/dry-run                     simulatePolicy / simulateFleetPolicy
 
 # Scoring
 governance-sdk/scorer                      7-dimension governance scoring
@@ -720,11 +707,10 @@ governance-sdk/supply-chain                declarative allowlist enforcement
 governance-sdk/supply-chain-sbom           agent capability manifest (LuaAgentSBOM)
 governance-sdk/supply-chain-cyclonedx      CycloneDX 1.5 SBOM of npm dep tree
 
-# Eval loop + red team
+# Eval
 governance-sdk/eval-types                  shared eval types
 governance-sdk/eval-scorer                 trace scoring
 governance-sdk/eval-trace                  trace submission
-governance-sdk/eval-red-team               adversarial test suites
 
 # Runtime + storage
 governance-sdk/events                      typed event emitter
@@ -732,8 +718,6 @@ governance-sdk/metrics                     in-memory counter / timing snapshots 
 governance-sdk/otel-hooks                  OTel-compatible span data (zero OTel deps; wire to your own tracer)
 governance-sdk/storage-postgres            PostgreSQL storage adapter
 governance-sdk/storage-postgres-schema     schema DDL + migrations
-governance-sdk/federation                  multi-org policy federation
-governance-sdk/sandbox                     deterministic sandbox execution
 
 # Scanner + type surface
 governance-sdk/scanner-plugins             scanner plugin interface
@@ -760,8 +744,8 @@ governance-sdk/plugins/bedrock
 ## Project Stats
 
 - **0** runtime dependencies
-- **1,291** tests, 0 failures (`npm test`)
-- **44** export paths — tree-shakeable, import only what you use
+- **1,348** tests, 0 failures (`npm test`)
+- **49** export paths — tree-shakeable, import only what you use
 - **TypeScript strict mode**, no `any` types in source
 - **MIT licensed**
 
