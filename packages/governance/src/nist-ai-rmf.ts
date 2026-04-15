@@ -195,3 +195,10 @@ function partial(id: string, evidence: string, remediation?: string): Requiremen
 function fail(id: string, evidence: string, remediation?: string): RequirementAssessment {
   return { requirementId: id, status: "non-compliant", evidence, remediation };
 }
+
+/**
+ * Alias for {@link assessNistAiRmf}. The README uses `mapToNistAiRmf` since the
+ * function maps governance state → NIST AI RMF Govern/Map/Measure/Manage
+ * subcategories. Both names point at the same implementation.
+ */
+export const mapToNistAiRmf = assessNistAiRmf;

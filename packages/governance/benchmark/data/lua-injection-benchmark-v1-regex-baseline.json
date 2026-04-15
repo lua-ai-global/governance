@@ -1,0 +1,93 @@
+{
+  "generatedAt": "2026-04-15T10:25:10.946Z",
+  "detector": "governance-sdk/injection-detect (regex, 54 patterns, 7 categories)",
+  "dataset": "Lua Injection Benchmark (LIB) v1",
+  "totalSamples": 6931,
+  "attacks": 2096,
+  "benign": 4835,
+  "confusion": {
+    "tp": 781,
+    "tn": 4476,
+    "fp": 359,
+    "fn": 1315
+  },
+  "precision": 0.6850877192982456,
+  "recall": 0.3726145038167939,
+  "f1": 0.4826946847960445,
+  "accuracy": 0.7584764103303997,
+  "falsePositiveRate": 0.07425025853154085,
+  "bySource": {
+    "JailbreakBench/JBB-Behaviors": {
+      "tp": 0,
+      "tn": 100,
+      "fp": 0,
+      "fn": 6
+    },
+    "OpenAssistant/oasst2": {
+      "tp": 0,
+      "tn": 460,
+      "fp": 1,
+      "fn": 2
+    },
+    "TrustAIRLab/in-the-wild-jailbreak-prompts": {
+      "tp": 358,
+      "tn": 737,
+      "fp": 343,
+      "fn": 341
+    },
+    "databricks/databricks-dolly-15k": {
+      "tp": 0,
+      "tn": 1490,
+      "fp": 0,
+      "fn": 0
+    },
+    "deepset/prompt-injections": {
+      "tp": 0,
+      "tn": 72,
+      "fp": 0,
+      "fn": 42
+    },
+    "jackhhao/jailbreak-classification": {
+      "tp": 8,
+      "tn": 513,
+      "fp": 1,
+      "fn": 16
+    },
+    "llm-semantic-router/jailbreak-detection-dataset": {
+      "tp": 27,
+      "tn": 325,
+      "fp": 13,
+      "fn": 6
+    },
+    "neuralchemy/Prompt-injection-dataset": {
+      "tp": 102,
+      "tn": 461,
+      "fp": 0,
+      "fn": 427
+    },
+    "reshabhs/SPML": {
+      "tp": 73,
+      "tn": 244,
+      "fp": 0,
+      "fn": 220
+    },
+    "walledai/JailbreakHub": {
+      "tp": 3,
+      "tn": 1,
+      "fp": 0,
+      "fn": 6
+    },
+    "generated-encoding": {
+      "tp": 210,
+      "tn": 0,
+      "fp": 0,
+      "fn": 248
+    },
+    "generated-hard-negatives": {
+      "tp": 0,
+      "tn": 73,
+      "fp": 1,
+      "fn": 1
+    }
+  }
+}

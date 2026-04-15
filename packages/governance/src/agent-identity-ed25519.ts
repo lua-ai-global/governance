@@ -171,13 +171,21 @@ export function createEd25519Identity(config: Ed25519Config = {}) {
   };
 }
 
-// ─── Utilities ──────────────────────────────────────────────
+// ─── Utilities (also re-exported for high-level wrappers) ────
 
-function bufToHex(buf: Uint8Array): string {
+/** @internal */
+export function bufToHex(buf: Uint8Array): string {
   return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function hexToBuf(hex: string): Uint8Array {
+/** @internal */
+export function hexToBuf(hex: string): Uint8Array {
+  if (hex.length === 0 || hex.length % 2 !== 0) {
+    throw new Error("Invalid hex string: length must be a positive multiple of 2");
+  }
+  if (!/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error("Invalid hex string: non-hex characters");
+  }
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
     bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
@@ -185,7 +193,8 @@ function hexToBuf(hex: string): Uint8Array {
   return bytes;
 }
 
-async function importPublicKey(hex: string): Promise<CryptoKey> {
+/** @internal */
+export async function importPublicKey(hex: string): Promise<CryptoKey> {
   const raw = hexToBuf(hex);
   return crypto.subtle.importKey("raw", raw.buffer as ArrayBuffer, "Ed25519", true, ["verify"]);
 }
@@ -197,3 +206,16 @@ async function derivePublicKey(privateKey: CryptoKey): Promise<CryptoKey> {
   jwk.key_ops = ["verify"];
   return crypto.subtle.importKey("jwk", jwk, "Ed25519", true, ["verify"]);
 }
+
+// ─── High-level sign / verify wrappers ──────────────────────
+//
+// Thin, opinionated wrappers that match the README quick-start shape. Defined
+// in a separate module to keep this file under the 300-LOC limit.
+
+export type {
+  AgentIdentityToken,
+  SignAgentIdentityInput,
+  VerifyAgentIdentityOptions,
+  VerifyAgentIdentityResult,
+} from "./agent-identity-ed25519-token.js";
+export { signAgentIdentity, verifyAgentIdentity } from "./agent-identity-ed25519-token.js";

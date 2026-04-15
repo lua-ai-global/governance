@@ -1,13 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createGovernance, blockTools, requireApproval, tokenBudget } from "./index";
-import { assessIso42001, getIsoClauses } from "./iso-42001";
+import { assessIso42001, mapToIso42001, getIsoClauses } from "./iso-42001";
 
 describe("ISO 42001", () => {
   it("exports 6 clauses", () => {
     const clauses = getIsoClauses();
     assert.equal(clauses.length, 6);
     assert.deepEqual(clauses.map((c) => c.id), ["4", "5", "6", "8", "9", "10"]);
+  });
+
+  it("exports mapToIso42001 as an alias of assessIso42001", () => {
+    assert.equal(mapToIso42001, assessIso42001);
   });
 
   it("each clause has requirements with unique IDs", () => {

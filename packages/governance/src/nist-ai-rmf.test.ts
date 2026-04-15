@@ -1,13 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createGovernance, blockTools, requireApproval, tokenBudget, rateLimit } from "./index";
-import { assessNistAiRmf, getNistFunctions } from "./nist-ai-rmf";
+import { assessNistAiRmf, mapToNistAiRmf, getNistFunctions } from "./nist-ai-rmf";
 
 describe("NIST AI RMF", () => {
   it("exports 4 functions", () => {
     const fns = getNistFunctions();
     assert.equal(fns.length, 4);
     assert.deepEqual(fns.map((f) => f.id), ["GOVERN", "MAP", "MEASURE", "MANAGE"]);
+  });
+
+  it("exports mapToNistAiRmf as an alias of assessNistAiRmf", () => {
+    assert.equal(mapToNistAiRmf, assessNistAiRmf);
   });
 
   it("each function has requirements", () => {

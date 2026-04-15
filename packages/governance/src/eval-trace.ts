@@ -153,3 +153,37 @@ export function createTraceCollector(config: TraceCollectorConfig = {}): TraceCo
     },
   };
 }
+
+/**
+ * One-shot trace submission — when you already have the full trace shape
+ * and don't want the `startTrace → addSpan → end` ceremony. Returns the
+ * stored trace with `traceId` and `completedAt` populated. Matches the
+ * README quick-start shape.
+ *
+ * @example
+ * ```ts
+ * import { createTraceCollector, submitTrace } from 'governance-sdk/eval-trace';
+ *
+ * const traces = createTraceCollector();
+ * const stored = submitTrace(traces, {
+ *   agentId: 'luna',
+ *   input: 'What deals closed this week?',
+ *   output: '3 deals totaling $45k',
+ *   spans: [{ operation: 'tool_call', toolName: 'search', success: true, latencyMs: 120 }],
+ * });
+ * ```
+ */
+export function submitTrace(
+  collector: TraceCollector,
+  input: {
+    agentId: string;
+    input?: string;
+    output?: string;
+    metadata?: Record<string, unknown>;
+    spans?: Array<Omit<EvalSpan, "spanId" | "timestamp">>;
+  },
+): EvalTrace {
+  const ctx = collector.startTrace(input.agentId, input.input, input.metadata);
+  for (const span of input.spans ?? []) ctx.addSpan(span);
+  return ctx.end(input.output);
+}

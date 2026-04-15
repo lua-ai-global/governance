@@ -1,24 +1,28 @@
 /**
- * governance-sdk — Policy-Level Execution Sandboxing
+ * governance-sdk — Sandbox module
  *
- * Sandbox levels implemented as composable policy conditions.
- * No OS-level isolation — governance-enforced boundaries.
+ * TWO separate primitives, clearly scoped:
  *
- * @example
- * ```ts
- * import { createSandbox, SANDBOX_LEVELS } from 'governance-sdk/sandbox';
+ * 1. `createSandbox()` — **action-gating policy**, not OS/process isolation.
+ *    Emits policy rules that block disallowed action categories (e.g. `file_write`,
+ *    `external_request`, `payment`) and enforces per-session quotas (tool calls,
+ *    tokens, cost, duration). This is a governance layer — it does NOT run code.
  *
- * const sandbox = createSandbox({ level: 2, quotas: { maxToolCalls: 50, maxTokens: 100_000 } });
- * governance.addRule(sandbox.levelRule);
- * governance.addRule(sandbox.quotaRule);
+ * 2. `runInVmSandbox()` — real execution isolation using Node's built-in
+ *    `node:vm` module. Runs untrusted JavaScript in a new V8 Context with a
+ *    caller-controlled `globalThis`, wall-clock timeout, and no access to the
+ *    host `require`/`process`/filesystem/network unless the caller explicitly
+ *    injects them. Zero runtime dependencies — uses only `node:vm` (stdlib).
  *
- * // Check quota during enforcement
- * sandbox.recordToolCall();
- * sandbox.recordTokens(500);
- * if (sandbox.quotaExceeded()) { ... }
- * ```
+ * `node:vm` is **not a security boundary** against a determined attacker who
+ * controls the script (CVE-2023-32002-class escapes via `Object.getPrototypeOf`,
+ * async loops, SharedArrayBuffer, etc. have all been demonstrated). Use it for
+ * **isolation from accidental mistakes**, not for running genuinely adversarial
+ * code. For that you need a separate OS process, a container, or `isolated-vm`.
+ * Those belong in the host layer, not in a zero-dep TypeScript SDK.
  */
 
+import { runInNewContext } from "node:vm";
 import type { PolicyRule } from "./policy.js";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -52,13 +56,35 @@ export interface SandboxState {
   startedAt: number;
 }
 
-// ─── Sandbox Levels ─────────────────────────────────────────
+export interface VmSandboxOptions {
+  /** Wall-clock timeout in ms. Default 1000. The VM throws on timeout. */
+  timeoutMs?: number;
+  /** Globals injected into the sandbox's `globalThis`. No host globals leak in. */
+  globals?: Record<string, unknown>;
+  /** Human-readable filename for stack traces. Default `"sandbox.vm"`. */
+  filename?: string;
+}
+
+export interface VmSandboxResult<T> {
+  /** Result of the expression. Only set when `ok === true`. */
+  value?: T;
+  /** True if the script completed within the timeout without throwing. */
+  ok: boolean;
+  /** Error message if ok === false. */
+  error?: string;
+  /** Wall-clock duration the script ran for (ms). */
+  durationMs: number;
+  /** True if execution was cut off by the timeout. */
+  timedOut: boolean;
+}
+
+// ─── Action-gating sandbox levels ────────────────────────────
 
 export const SANDBOX_LEVELS: SandboxLevel[] = [
   {
     level: 0,
     label: "Unrestricted",
-    description: "Full access — no sandbox restrictions. Use only for trusted, high-governance agents.",
+    description: "Full access — no action gating. Use only for trusted, high-governance agents.",
     allowedActions: ["tool_call", "message_send", "data_access", "external_request", "file_write", "database_mutation", "payment", "custom"],
   },
   {
@@ -75,13 +101,13 @@ export const SANDBOX_LEVELS: SandboxLevel[] = [
   },
   {
     level: 3,
-    label: "Full Sandboxed",
+    label: "Full Action-Gated",
     description: "All local operations — external requests and payments require escalation.",
     allowedActions: ["tool_call", "message_send", "data_access", "file_write", "database_mutation", "custom"],
   },
 ];
 
-// ─── Implementation ─────────────────────────────────────────
+// ─── createSandbox (action-gating policy) ────────────────────
 
 export function createSandbox(config: SandboxConfig) {
   const { level, quotas = {}, priority = 200 } = config;
@@ -96,7 +122,6 @@ export function createSandbox(config: SandboxConfig) {
     startedAt: Date.now(),
   };
 
-  /** Policy rule that enforces sandbox level action restrictions */
   const levelRule: PolicyRule = {
     id: `sandbox-level-${level}`,
     name: `Sandbox: ${sandboxLevel.label} (Level ${level})`,
@@ -114,7 +139,6 @@ export function createSandbox(config: SandboxConfig) {
     enabled: level !== 0,
   };
 
-  /** Policy rule that enforces session quotas */
   const quotaRule: PolicyRule = {
     id: `sandbox-quota-${level}`,
     name: `Sandbox: Quota enforcement (Level ${level})`,
@@ -141,21 +165,53 @@ export function createSandbox(config: SandboxConfig) {
   return {
     levelRule,
     quotaRule,
-    /** Get current sandbox state */
     getState: (): Readonly<SandboxState> => ({ ...state }),
-    /** Record a tool call (increments counter) */
     recordToolCall: () => { state.toolCalls++; },
-    /** Record token usage */
     recordTokens: (count: number) => { state.tokensUsed += count; },
-    /** Record cost */
     recordCost: (usd: number) => { state.costUsd += usd; },
-    /** Check if any quota is exceeded */
     quotaExceeded,
-    /** Reset session state */
     reset: () => { state.toolCalls = 0; state.tokensUsed = 0; state.costUsd = 0; state.startedAt = Date.now(); },
-    /** Get the sandbox level definition */
     getLevel: (): SandboxLevel => sandboxLevel,
-    /** Get all sandbox level definitions */
     getAllLevels: (): SandboxLevel[] => [...SANDBOX_LEVELS],
   };
+}
+
+// ─── runInVmSandbox (execution isolation via node:vm) ────────
+
+/**
+ * Run an untrusted JavaScript expression in a fresh V8 Context with a wall-clock
+ * timeout and no host globals unless injected.
+ *
+ * Use for **isolating policy expressions or rule DSL snippets** from the host
+ * runtime. Not a security boundary against adversarial code — see module
+ * docstring for caveats.
+ *
+ * @example
+ * ```ts
+ * const result = runInVmSandbox<number>("1 + x", { globals: { x: 41 } });
+ * // { ok: true, value: 42, durationMs: <1, timedOut: false }
+ * ```
+ */
+export function runInVmSandbox<T = unknown>(
+  code: string,
+  options: VmSandboxOptions = {},
+): VmSandboxResult<T> {
+  const { timeoutMs = 1000, globals = {}, filename = "sandbox.vm" } = options;
+  const startedAt = Date.now();
+  // Fresh object — no prototype leakage from caller, no host globals.
+  const context: Record<string, unknown> = Object.create(null);
+  for (const [k, v] of Object.entries(globals)) context[k] = v;
+
+  try {
+    const value = runInNewContext(code, context, {
+      timeout: timeoutMs,
+      filename,
+      displayErrors: true,
+    }) as T;
+    return { ok: true, value, durationMs: Date.now() - startedAt, timedOut: false };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const timedOut = /Script execution timed out/i.test(message);
+    return { ok: false, error: message, durationMs: Date.now() - startedAt, timedOut };
+  }
 }

@@ -238,3 +238,10 @@ function partial(id: string, evidence: string, remediation?: string): Requiremen
 function fail(id: string, evidence: string, remediation?: string): RequirementAssessment {
   return { requirementId: id, status: "non-compliant", evidence, remediation };
 }
+
+/**
+ * Alias for {@link assessOwaspAgentic}. The README uses `mapToOwaspAgentic`
+ * because the function maps governance state → OWASP threat categories.
+ * Both names point at the same implementation.
+ */
+export const mapToOwaspAgentic = assessOwaspAgentic;

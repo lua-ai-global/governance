@@ -59,12 +59,54 @@ export interface InjectionDetectorConfig {
 
 // ─── Detection Engine ───────────────────────────────────────────
 
-/** Strip zero-width characters and normalize Unicode for consistent matching */
+/**
+ * Strip zero-width characters and normalize Unicode to NFKC (compatibility +
+ * canonical) so fullwidth, circled, superscript, and similar evasions collapse
+ * to their ASCII form before pattern matching.
+ */
 function normalizeInput(input: string): string {
-  // Remove zero-width characters (U+200B, U+200C, U+200D, U+FEFF, U+00AD)
+  // Remove zero-width characters (U+200B, U+200C, U+200D, U+FEFF, U+00AD, U+2060, U+180E)
   const stripped = input.replace(/[\u200B-\u200D\uFEFF\u00AD\u2060\u180E]/g, "");
-  // Normalize Unicode to NFC form
-  return stripped.normalize("NFC");
+  // NFKC folds compatibility variants (fullwidth `Ｉ` → `I`, superscripts → digits, etc.)
+  return stripped.normalize("NFKC");
+}
+
+/**
+ * Map common leetspeak substitutions back to letters so attacks like
+ * `1gn0r3 pr3v10us 1nstruct10ns` match the same patterns as `ignore
+ * previous instructions`. We apply this as a **second pass** alongside
+ * (not replacing) the normalised input, so a rule only needs to match
+ * either form to fire. Conservative mapping — we keep common false-positive
+ * digits (0=0, 1=1 in numeric context) intact if the surrounding token has
+ * no alpha characters.
+ */
+const LEET_MAP: Record<string, string> = {
+  "0": "o",
+  "1": "i",
+  "3": "e",
+  "4": "a",
+  "5": "s",
+  "7": "t",
+  "@": "a",
+  "$": "s",
+  "!": "i",
+  "|": "i",
+};
+
+export function deleetInput(input: string): string {
+  // Walk token-by-token. A token is a run of non-whitespace. We only apply
+  // leet mapping to tokens that already contain at least one alpha — that
+  // way "payment of $99" stays as "$99" (not "say99") while "1gn0r3" gets
+  // normalised to "ignore".
+  return input
+    .split(/(\s+)/)
+    .map((tok) => {
+      if (!/[a-zA-Z]/.test(tok)) return tok;
+      let out = "";
+      for (const ch of tok) out += LEET_MAP[ch] ?? ch;
+      return out;
+    })
+    .join("");
 }
 
 /** Base64 regex: 16+ base64 chars with optional padding, not a common word */
@@ -115,16 +157,25 @@ export function detectInjection(
   ].filter((p) => !skipCategories.has(p.category));
 
   const normalized = normalizeInput(input);
+  const deleeted = deleetInput(normalized);
   const matchedPatterns: string[] = [];
   const matchedCategories = new Set<InjectionCategory>();
   let maxWeight = 0;
 
-  // Scan the original input
+  // Scan the normalised input first; fall back to the leet-folded form so
+  // attacks like "1gn0r3 pr3v10us 1nstruct10ns" also fire.
   for (const pattern of allPatterns) {
-    if (pattern.pattern.test(normalized)) {
-      matchedPatterns.push(pattern.id);
+    const matchedOriginal = pattern.pattern.test(normalized);
+    const matchedLeet = !matchedOriginal && deleeted !== normalized && pattern.pattern.test(deleeted);
+    if (matchedOriginal || matchedLeet) {
+      const id = matchedLeet ? pattern.id + ":leet" : pattern.id;
+      matchedPatterns.push(id);
       matchedCategories.add(pattern.category);
-      if (pattern.weight > maxWeight) maxWeight = pattern.weight;
+      // Leet matches get the same +0.1 nudge encoded attacks get — they are
+      // deliberate obfuscation, so we rank them slightly higher than a plain
+      // keyword hit.
+      const weight = matchedLeet ? Math.min(1, pattern.weight + 0.1) : pattern.weight;
+      if (weight > maxWeight) maxWeight = weight;
     }
   }
 

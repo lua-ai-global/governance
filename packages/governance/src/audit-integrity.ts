@@ -1,14 +1,9 @@
 /**
- * governance-sdk — Tamper-Evident Audit Logging
- *
+ * governance-sdk — Tamper-Evident Audit Logging.
  * HMAC-SHA256 hash chaining for audit events. Each event's hash includes
- * the previous hash, making tampering immediately detectable.
- * EU AI Act Article 12 compliant.
+ * the previous hash, making edit/delete/reorder detectable.
  */
-
 import type { AuditEvent, AuditQueryFilters, GovernanceInstance } from "./index.js";
-
-// ─── Types ──────────────────────────────────────────────────
 
 /** Integrity metadata attached to each audit event */
 export interface AuditIntegrity {
@@ -87,6 +82,19 @@ export async function hmacSha256(key: string, data: string): Promise<string> {
   const signature = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
   const hashArray = Array.from(new Uint8Array(signature));
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Constant-time string compare for two hex-encoded values of the same length.
+ * Does NOT early-exit on mismatch — the full buffer is walked for every call.
+ * Prevents a timing oracle that could leak hash bytes one at a time.
+ */
+export function constantTimeEqualHex(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 /** Deep-sort all object keys for deterministic serialization */
@@ -209,8 +217,8 @@ export function createIntegrityAudit(
         };
       }
 
-      // Verify chain continuity
-      if (integrity.previousHash !== currentPreviousHash) {
+      // Verify chain continuity (constant-time compare — no timing oracle)
+      if (!constantTimeEqualHex(integrity.previousHash, currentPreviousHash)) {
         return {
           valid: false,
           eventsVerified: i,
@@ -226,7 +234,7 @@ export function createIntegrityAudit(
       const canonical = canonicalize(event, currentPreviousHash, seq);
       const expectedHash = await hmacSha256(config.signingKey, canonical);
 
-      if (expectedHash !== integrity.hash) {
+      if (!constantTimeEqualHex(expectedHash, integrity.hash)) {
         return {
           valid: false,
           eventsVerified: i,
@@ -283,3 +291,6 @@ export function createIntegrityAudit(
 
   return { log, verify, export: exportChain, stats };
 }
+
+// Standalone verifier lives in ./audit-integrity-verify.ts (re-exported there)
+export { verifyAuditIntegrity } from "./audit-integrity-verify.js";

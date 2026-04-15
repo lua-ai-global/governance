@@ -1,10 +1,23 @@
 /**
- * governance-sdk — EU AI Act Compliance Assessment
+ * governance-sdk — EU AI Act self-assessment (NOT legal advice)
  *
- * Assesses governance configuration against EU AI Act article requirements.
- * Article definitions are in compliance-articles.ts.
+ * Assesses governance configuration against a **subset** of EU AI Act
+ * (Regulation (EU) 2024/1689) article requirements. Covers Arts. 9, 11,
+ * 12, 14, 15, 50 — not the prohibited-use (Art 5-7), data-governance
+ * (Art 10), or GPAI obligations (Arts 51-56).
  *
- * Enforcement deadline: August 2, 2026
+ * Phased enforcement dates this module tracks:
+ *   - 2025-02-02: Prohibited-practice ban (Art 5) — NOT modelled here.
+ *   - 2025-08-02: GPAI transparency, incl. Art 50.
+ *   - 2026-08-02: High-risk system obligations (Arts 9, 11, 12, 14, 15).
+ *   - 2027-08-02: Post-market + downstream obligations — NOT modelled here.
+ *
+ * ⚠️  THIS IS NOT LEGAL ADVICE. ⚠️
+ * The article texts here are paraphrased summaries, not the authoritative
+ * regulation text. This module is a self-assessment helper for engineering
+ * teams tracking SDK-level posture against a subset of AI Act obligations.
+ * Do not substitute its output for qualified legal counsel. Consult your
+ * compliance team before relying on it for regulatory filings or audits.
  */
 
 import type { StoredAgent, GovernanceInstance } from "./index.js";
@@ -91,9 +104,21 @@ export async function assessCompliance(
     .flatMap((a) => a.requirements.filter((r) => r.remediation).map((r) => r.remediation!))
     .filter((v, i, arr) => arr.indexOf(v) === i);
 
-  const deadline = new Date("2026-08-02");
-  const now = new Date();
-  const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  // Compute the soonest upcoming deadline across the modelled articles.
+  // Each article carries its own deadline per the phased enforcement schedule
+  // (2025-08-02 for Art 50 transparency, 2026-08-02 for high-risk Arts 9-15).
+  const now = Date.now();
+  const upcoming = articleAssessments
+    .map((a) => new Date(a.deadline).getTime())
+    .filter((t) => !Number.isNaN(t))
+    .filter((t) => t > now);
+  const allDeadlines = articleAssessments
+    .map((a) => new Date(a.deadline).getTime())
+    .filter((t) => !Number.isNaN(t));
+  const referenceDeadline = upcoming.length > 0
+    ? Math.min(...upcoming)
+    : Math.max(...allDeadlines);
+  const daysUntilDeadline = Math.ceil((referenceDeadline - now) / (1000 * 60 * 60 * 24));
 
   return {
     overallScore,
@@ -104,6 +129,21 @@ export async function assessCompliance(
     recommendations,
     generatedAt: new Date().toISOString(),
     daysUntilDeadline,
+    // Surface the disclaimer in the report itself so anyone viewing the JSON
+    // output sees it — not just readers of the source comment.
+    disclaimer:
+      "Not legal advice. This assessment covers a subset of EU AI Act obligations " +
+      "(Arts 9, 11, 12, 14, 15, 50) and uses paraphrased article summaries. It does " +
+      "NOT model prohibited practices (Art 5-7), data governance (Art 10), or GPAI " +
+      "obligations (Arts 51-56). Consult qualified legal counsel before relying on " +
+      "this output for regulatory filings.",
+    // Break out per-phase deadlines so users can see what ACTUALLY applies when.
+    phasedDeadlines: {
+      prohibitedPractices: "2025-02-02",
+      gpaiTransparency: "2025-08-02",
+      highRiskObligations: "2026-08-02",
+      postMarketAndDownstream: "2027-08-02",
+    },
   };
 }
 

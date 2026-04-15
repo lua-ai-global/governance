@@ -1,14 +1,20 @@
 /**
- * governance-sdk — Agent Software Bill of Materials (SBOM)
+ * governance-sdk — Agent capability manifest
  *
- * Generates a JSON manifest of agent capabilities, dependencies,
- * and governance posture. Compatible with CycloneDX concepts.
+ * Generates a JSON manifest describing an agent's declared tools,
+ * MCP servers, API endpoints, sibling agents, and governance posture
+ * (score, level, active policies, compliance frameworks).
+ *
+ * This is **NOT a CycloneDX SBOM** — it is an agent-posture manifest in
+ * the `LuaAgentSBOM` format. For a spec-compliant CycloneDX 1.5 SBOM of
+ * the npm dependency tree, use `generateCycloneDxSbom` from
+ * `governance-sdk/supply-chain-cyclonedx` instead.
  *
  * @example
  * ```ts
  * import { generateAgentSBOM } from 'governance-sdk/supply-chain-sbom';
  *
- * const sbom = generateAgentSBOM({
+ * const manifest = generateAgentSBOM({
  *   agent: storedAgent,
  *   dependencies: { tools: ['search'], mcpServers: ['mcp://files'] },
  *   governanceScore: 87,

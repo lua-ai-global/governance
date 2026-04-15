@@ -16,7 +16,34 @@ describe("EU AI Act Compliance (Articles 9, 11, 12, 14, 15)", () => {
     assert.ok(report.criticalGaps.length > 0);
     assert.ok(report.recommendations.length > 0);
     assert.equal(report.articles.length, 6);
-    assert.ok(report.daysUntilDeadline > 0);
+    // `daysUntilDeadline` is computed from the soonest upcoming per-article
+    // deadline. If *all* deadlines are past, the number is negative — that's
+    // honest and informative, so don't assert > 0.
+    assert.equal(typeof report.daysUntilDeadline, "number");
+  });
+
+  it("surfaces a legal disclaimer and the phased enforcement schedule", async () => {
+    const gov = createGovernance({});
+    const report = await assessCompliance({ governance: gov, agents: [] });
+
+    assert.ok(report.disclaimer, "disclaimer missing");
+    assert.match(report.disclaimer!, /not legal advice/i);
+    assert.match(report.disclaimer!, /Art 5-7|prohibited/i);
+    assert.ok(report.phasedDeadlines);
+    assert.equal(report.phasedDeadlines!.prohibitedPractices, "2025-02-02");
+    assert.equal(report.phasedDeadlines!.gpaiTransparency, "2025-08-02");
+    assert.equal(report.phasedDeadlines!.highRiskObligations, "2026-08-02");
+    assert.equal(report.phasedDeadlines!.postMarketAndDownstream, "2027-08-02");
+  });
+
+  it("each article keeps its own deadline (not a single hardcoded date)", async () => {
+    const gov = createGovernance({});
+    const report = await assessCompliance({ governance: gov, agents: [] });
+    const art50 = report.articles.find((a) => a.article === "50");
+    const art9 = report.articles.find((a) => a.article === "9");
+    assert.ok(art50 && art9);
+    assert.equal(art50!.deadline, "2025-08-02");
+    assert.equal(art9!.deadline, "2026-08-02");
   });
 
   it("scores higher with policies and registered agents", async () => {

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createGovernance, blockTools, requireApproval, tokenBudget, rateLimit } from "./index";
-import { assessOwaspAgentic, getOwaspRisks } from "./owasp-agentic";
+import { assessOwaspAgentic, mapToOwaspAgentic, getOwaspRisks } from "./owasp-agentic";
 
 describe("OWASP Agentic Top 10", () => {
   it("exports 10 risks", () => {
@@ -9,6 +9,10 @@ describe("OWASP Agentic Top 10", () => {
     assert.equal(risks.length, 10);
     assert.equal(risks[0].id, "OWASP-AA-01");
     assert.equal(risks[9].id, "OWASP-AA-10");
+  });
+
+  it("exports mapToOwaspAgentic as an alias of assessOwaspAgentic", () => {
+    assert.equal(mapToOwaspAgentic, assessOwaspAgentic);
   });
 
   it("each risk has at least one requirement", () => {

@@ -1,8 +1,11 @@
 /**
- * MCP Tool Call Chain Auditing
+ * MCP Tool Call Chain Auditing — **caller-driven**, not automatic propagation.
  *
- * Tracks sequences of tool calls across MCP server boundaries.
- * Detects suspicious patterns and maintains a cross-server audit trail.
+ * Collects a sequence of tool calls across MCP server boundaries **when
+ * the caller explicitly invokes `recordCall()` at each hop**. Does not
+ * automatically instrument nested MCP invocations — you wire `recordCall()`
+ * into your client wrapper. Detects suspicious cross-server patterns
+ * (read→upload, read→delete, etc.) once a chain is assembled.
  *
  * @example
  * ```ts

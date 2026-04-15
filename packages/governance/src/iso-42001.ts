@@ -183,3 +183,10 @@ function partial(id: string, evidence: string, remediation?: string): Requiremen
 function fail(id: string, evidence: string, remediation?: string): RequirementAssessment {
   return { requirementId: id, status: "non-compliant", evidence, remediation };
 }
+
+/**
+ * Alias for {@link assessIso42001}. The README uses `mapToIso42001` since the
+ * function maps governance state → ISO/IEC 42001:2023 clauses 4–10. Both
+ * names point at the same implementation.
+ */
+export const mapToIso42001 = assessIso42001;

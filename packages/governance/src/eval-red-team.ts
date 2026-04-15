@@ -1,12 +1,18 @@
 /**
- * governance-sdk — Red Team: Policy Effectiveness Tester
+ * governance-sdk — Policy Effectiveness Audit ("red team")
  *
  * Measures how well GOVERNANCE POLICIES protect an agent:
  * - Injection resistance — do policies detect and block injection probes?
  * - Tool abuse resistance — do policies block dangerous tool calls?
  * - Level gate enforcement — do policies enforce governance level boundaries?
  *
- * IMPORTANT: This tests the POLICY ENGINE, not the agent itself.
+ * IMPORTANT: This is a **policy-configuration audit**, not an adversarial
+ * agent evaluation. It probes your `gov.enforce()` path with ~62 hand-curated
+ * injection / dangerous-tool / level-gate cases and measures whether the
+ * policy engine blocks them. It does NOT run prompts through your agent's
+ * LLM, and it does NOT test in-the-wild jailbreak resistance of the model
+ * itself. For that, use external frameworks like Garak/HarmBench, or layer
+ * on an ML classifier via the `InjectionClassifier` interface.
  * A high score means policies are well-configured. A low score means
  * the agent is exposed to attacks that policies should catch.
  *

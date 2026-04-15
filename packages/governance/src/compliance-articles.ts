@@ -69,7 +69,17 @@ export interface ComplianceReport {
   criticalGaps: string[];
   recommendations: string[];
   generatedAt: string;
+  /** Days until the soonest upcoming per-article deadline. Phased — see `phasedDeadlines`. */
   daysUntilDeadline: number;
+  /** Not-legal-advice notice surfaced in the report output. */
+  disclaimer?: string;
+  /** The four EU AI Act phased enforcement milestones. */
+  phasedDeadlines?: {
+    prohibitedPractices: string;
+    gpaiTransparency: string;
+    highRiskObligations: string;
+    postMarketAndDownstream: string;
+  };
 }
 
 // ─── Article Definitions ────────────────────────────────────
@@ -236,7 +246,9 @@ export const EU_AI_ACT_ARTICLES: EuAiActArticle[] = [
     article: "50",
     title: "Transparency Obligations",
     description: "AI systems interacting with natural persons must disclose they are AI. AI-generated content must be machine-readable marked.",
-    deadline: "2026-08-02",
+    // Art 50 (transparency) is part of the GPAI-transparency phase that
+    // entered force 2025-08-02 — NOT the 2026-08-02 high-risk phase.
+    deadline: "2025-08-02",
     maxFine: "Up to 15M EUR or 3% of global annual turnover",
     requirements: [
       {

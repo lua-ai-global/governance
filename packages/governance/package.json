@@ -153,6 +153,14 @@
       "types": "./dist/supply-chain-sbom.d.ts",
       "import": "./dist/supply-chain-sbom.js"
     },
+    "./supply-chain-cyclonedx": {
+      "types": "./dist/supply-chain-cyclonedx.d.ts",
+      "import": "./dist/supply-chain-cyclonedx.js"
+    },
+    "./audit-integrity-verify": {
+      "types": "./dist/audit-integrity-verify.d.ts",
+      "import": "./dist/audit-integrity-verify.js"
+    },
     "./plugins/mcp-trust": {
       "types": "./dist/plugins/mcp-trust.d.ts",
       "import": "./dist/plugins/mcp-trust.js"

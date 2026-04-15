@@ -1,8 +1,13 @@
 /**
- * MCP Server Trust Registry
+ * MCP Server Trust Registry — **declarative allowlist**, not cryptographic trust.
  *
- * Manages a registry of trusted MCP servers with trust levels.
- * Validates MCP connections against the registry before allowing tool calls.
+ * Manages a caller-curated registry of MCP server URIs with trust labels
+ * and capability tags. Validates an MCP connection's URI against the
+ * registry before allowing tool calls. Does NOT perform TLS pinning,
+ * public-key pinning, signature verification, or checksum validation —
+ * those would require the registry to hold cryptographic material, which
+ * it does not. If you need cryptographic pin-trust, build it in your
+ * transport layer and pass validated URIs to this registry.
  *
  * @example
  * ```ts

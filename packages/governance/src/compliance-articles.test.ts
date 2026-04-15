@@ -28,9 +28,24 @@ describe("EU_AI_ACT_ARTICLES structure", () => {
     }
   });
 
-  test("all deadlines are 2026-08-02", () => {
+  test("deadlines follow the EU AI Act phased enforcement schedule", () => {
+    // Real phased enforcement: Art 50 (transparency) is part of the
+    // 2025-08-02 GPAI milestone; the high-risk obligations in Arts 9-15
+    // take effect 2026-08-02. See compliance.ts header comment.
+    const expected: Record<string, string> = {
+      "9": "2026-08-02",
+      "11": "2026-08-02",
+      "12": "2026-08-02",
+      "14": "2026-08-02",
+      "15": "2026-08-02",
+      "50": "2025-08-02",
+    };
     for (const art of EU_AI_ACT_ARTICLES) {
-      assert.equal(art.deadline, "2026-08-02", `Art. ${art.article} has unexpected deadline`);
+      assert.equal(
+        art.deadline,
+        expected[art.article],
+        `Art. ${art.article}: expected deadline ${expected[art.article]}, got ${art.deadline}`,
+      );
     }
   });
 
