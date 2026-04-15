@@ -1,6 +1,6 @@
 {
   "name": "governance-sdk",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "AI Agent Governance for TypeScript — policy enforcement, scoring, compliance, and audit for AI agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -137,10 +137,6 @@
       "types": "./dist/agent-identity.d.ts",
       "import": "./dist/agent-identity.js"
     },
-    "./plugins/mcp-annotations": {
-      "types": "./dist/plugins/mcp-annotations.d.ts",
-      "import": "./dist/plugins/mcp-annotations.js"
-    },
     "./agent-identity-ed25519": {
       "types": "./dist/agent-identity-ed25519.d.ts",
       "import": "./dist/agent-identity-ed25519.js"
@@ -148,10 +144,6 @@
     "./supply-chain": {
       "types": "./dist/supply-chain.d.ts",
       "import": "./dist/supply-chain.js"
-    },
-    "./supply-chain-sbom": {
-      "types": "./dist/supply-chain-sbom.d.ts",
-      "import": "./dist/supply-chain-sbom.js"
     },
     "./supply-chain-cyclonedx": {
       "types": "./dist/supply-chain-cyclonedx.d.ts",
@@ -196,18 +188,6 @@
     "./token-types": {
       "types": "./dist/token-types.d.ts",
       "import": "./dist/token-types.js"
-    },
-    "./eval-types": {
-      "types": "./dist/eval-types.d.ts",
-      "import": "./dist/eval-types.js"
-    },
-    "./eval-scorer": {
-      "types": "./dist/eval-scorer.d.ts",
-      "import": "./dist/eval-scorer.js"
-    },
-    "./eval-trace": {
-      "types": "./dist/eval-trace.d.ts",
-      "import": "./dist/eval-trace.js"
     }
   },
   "files": [

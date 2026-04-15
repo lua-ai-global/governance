@@ -12,7 +12,6 @@ import { createGovernance, blockTools, requireApproval, tokenBudget, rateLimit }
 import { assessOwaspAgentic } from "./owasp-agentic";
 import { assessNistAiRmf } from "./nist-ai-rmf";
 import { assessCompliance } from "./compliance";
-import { createOtelHooks } from "./otel-hooks";
 import { createAgentIdentity } from "./agent-identity";
 
 // Sprint 2 features
@@ -20,11 +19,9 @@ import { createEd25519Identity } from "./agent-identity-ed25519";
 import { when } from "./policy-builder";
 import { toYAML, fromYAML } from "./policy-yaml";
 import { declareAgentDependencies, validateSupplyChain, createSupplyChainPolicy } from "./supply-chain";
-import { generateAgentSBOM } from "./supply-chain-sbom";
 import { setInjectionClassifier, clearInjectionClassifier, hybridDetect } from "./injection-classifier";
 import { createMCPTrustRegistry } from "./plugins/mcp-trust";
 import { createChainAuditor } from "./plugins/mcp-chain-audit";
-import { generateAnnotationRules } from "./plugins/mcp-annotations";
 
 describe("SMOKE TEST: Full Governance Lifecycle", () => {
   it("complete agent lifecycle from identity to compliance", async () => {
@@ -149,19 +146,8 @@ describe("SMOKE TEST: Full Governance Lifecycle", () => {
     assert.equal(scInvalid.valid, false);
     assert.equal(scInvalid.violations.length, 2);
 
-    // ─── 8. Agent SBOM ─────────────────────────────────────────
+    // ─── 8. (removed) Agent SBOM ───────────────────────────────
     const stored = await gov.storage.getAgent(agent.id);
-    const sbom = generateAgentSBOM({
-      agent: { id: agent.id, name: "sales-bot", framework: "mastra", owner: "platform-team", version: "2.1.0" },
-      dependencies: deps,
-      governanceScore: agent.score,
-      governanceLevel: agent.level,
-      complianceFrameworks: ["eu-ai-act", "owasp-agentic", "nist-ai-rmf"],
-      policies: gov.policies.getRules().map((r) => ({ id: r.id, name: r.name, outcome: r.outcome })),
-    });
-    assert.equal(sbom.bomFormat, "LuaAgentSBOM");
-    assert.equal(sbom.governance.policyCount, 6);
-    assert.equal(sbom.governance.complianceFrameworks.length, 3);
 
     // ─── 9. MCP trust + chain auditing ─────────────────────────
     const trust = createMCPTrustRegistry({
@@ -185,13 +171,7 @@ describe("SMOKE TEST: Full Governance Lifecycle", () => {
     const transitions = auditor.getCrossServerTransitions(agent.id);
     assert.equal(transitions.length, 1);
 
-    // ─── 10. MCP tool annotation rules ─────────────────────────
-    const annotationRules = generateAnnotationRules([
-      { name: "delete_file", inputSchema: { type: "object" }, annotations: { destructiveHint: true } },
-      { name: "web_fetch", inputSchema: { type: "object" }, annotations: { openWorldHint: true, readOnlyHint: true } },
-      { name: "list_files", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } },
-    ]);
-    assert.ok(annotationRules.length >= 2);
+    // ─── 10. (removed) MCP tool annotation rules ───────────────
 
     // ─── 11. Hybrid injection detection ────────────────────────
     setInjectionClassifier({
@@ -213,16 +193,7 @@ describe("SMOKE TEST: Full Governance Lifecycle", () => {
 
     clearInjectionClassifier();
 
-    // ─── 12. OTel hooks ────────────────────────────────────────
-    const hooks = createOtelHooks({ serviceName: "sales-bot-service" });
-    const span = hooks.enforcementSpan({
-      blocked: true, outcome: "block", ruleId: "block-shell",
-      agentId: agent.id, tool: "shell_exec", rulesEvaluated: 6,
-    });
-    assert.equal(span.operationName, "governance.enforcement");
-    assert.equal(span.status, "error");
-    assert.equal(span.attributes["service.name"], "sales-bot-service");
-    assert.equal(span.attributes["governance.rules_evaluated"], 6);
+    // ─── 12. (removed) OTel hooks — covered by otel-hooks.test.ts ─
 
     // ─── 13. Three-framework compliance ────────────────────────
     const agents = stored ? [stored] : [];
