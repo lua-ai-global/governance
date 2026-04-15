@@ -47,11 +47,9 @@ detection — nothing more. To pre-empt scope questions:
 - **Kill switch is per-process**, not fleet-wide. Distributed halt lives in
   Lua Governance Cloud or your own pub/sub.
 - **No sandbox.** `node:vm` is not a security boundary (per Node docs). Use
-  containers, gVisor, or Firecracker for untrusted code. `governance-sdk/sandbox`
-  was removed in 0.10.
-- **No federation.** Advisory single-process posture exchange was removed
-  in 0.10. Cross-org policy replication and signed posture exchange are
-  not currently shipped in either the SDK or Lua Governance Cloud.
+  containers, gVisor, or Firecracker for untrusted code.
+- **No federation.** Cross-org policy replication and signed posture exchange
+  are not currently shipped in either the SDK or Lua Governance Cloud.
 - **Injection detection is high-precision / low-recall** — regex baseline F1
   ≈ 0.48 on the 6,931-sample LIB corpus. Layer in an ML classifier via the
   `InjectionClassifier` interface for production coverage.
@@ -64,8 +62,7 @@ detection — nothing more. To pre-empt scope questions:
 - **Cloud `register()` is a synthetic confirmation** — the API auto-registers
   on first `enforce()`.
 - **No built-in red team / jailbreak harness.** Use inspect-ai, PyRIT, or
-  Garak. `gov.eval.runRedTeam()` was removed in 0.10 because it tested
-  policies, not the model.
+  Garak — a policy-only harness would be easily mistaken for model coverage.
 
 ## Packages
 
@@ -407,10 +404,6 @@ const report = await mapToEuAiAct({
 // report.phasedDeadlines — { prohibitedPractices, gpaiTransparency, highRiskObligations, postMarketAndDownstream }
 ```
 
-> **Note on naming:** the 0.10 release aligned the EU AI Act entry point
-> with the other frameworks: `assessCompliance` → `mapToEuAiAct`. The old
-> name still works for one minor release.
-
 ### Agent Identity (Ed25519)
 
 Cryptographically-signed agent identity tokens using Ed25519 (RFC 8032) via
@@ -464,9 +457,6 @@ const result = await simulateFleetPolicy(gov, scenarios);
 // => { fleetSummary: { agentsAffected: 11, blockRate: 0.12 }, results: [...] }
 ```
 
-> **Note on naming:** `dryRun` / `fleetDryRun` were renamed to `simulatePolicy` /
-> `simulateFleetPolicy` in 0.10. The old names still work for one minor release.
-
 ### Eval traces
 
 Capture agent operation traces (spans, tool calls, LLM invocations) into an
@@ -491,14 +481,7 @@ For adversarial-LLM / jailbreak testing, use a dedicated harness like
 [inspect-ai](https://github.com/UKGovernmentBEIS/inspect_ai),
 [PyRIT](https://github.com/Azure/PyRIT), or
 [Garak](https://github.com/leondz/garak) and submit results via your own
-pipeline. The previous built-in `runRedTeam()` helper was removed in 0.10 —
-it tested configured policies, not the model, and was easily mistaken for
-adversarial-LLM coverage.
-
-> **Removed in 0.10:** `governance-sdk/sandbox` (node:vm is not a security
-> boundary — use OS-level isolation) and `governance-sdk/federation`
-> (advisory posture exchange with no distributed protocol; a real
-> cross-org federation is not currently shipped).
+pipeline.
 
 ## Framework Adapters
 
