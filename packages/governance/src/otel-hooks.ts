@@ -4,14 +4,13 @@
  * Produces structured span-compatible data from governance events.
  * Zero dependencies — outputs plain objects that users wire to their OTel tracer.
  *
- * Since 0.12, `createOtelHooks({ conventions })` can emit attributes using:
+ * Since 0.13, `createOtelHooks({ conventions })` defaults to "gen_ai" so
+ * governance spans correlate out of the box with Anthropic / OpenAI /
+ * Vercel-AI SDK spans in Honeycomb / Datadog / New Relic. Options:
  *   - "governance" — legacy `governance.*` namespace (pre-0.12 default)
- *   - "gen_ai"     — OpenTelemetry GenAI semantic conventions (recommended
- *                    going forward — correlates with spans emitted by the
- *                    Anthropic / OpenAI / Vercel-AI SDKs when they adopt
- *                    the same conventions)
- *   - "both"       — emit both; current default for 0.12, flips to
- *                    "gen_ai" in 0.13
+ *   - "gen_ai"     — OpenTelemetry GenAI semantic conventions (0.13 default)
+ *   - "both"       — emit both; pin this if you have dashboards that query
+ *                    the legacy `governance.*` operation names
  *
  * GenAI spec: https://opentelemetry.io/docs/specs/semconv/gen-ai/
  *
@@ -56,8 +55,9 @@ export interface OtelHooksConfig {
   /** Service name for span attributes (default: "governance-sdk") */
   serviceName?: string;
   /**
-   * Which attribute namespace to emit. Default: "both" in 0.12 for smooth
-   * migration. Flips to "gen_ai" in 0.13. Set explicitly to pin behaviour.
+   * Which attribute namespace to emit. Default "gen_ai" from 0.13 onward.
+   * Pass "both" to additionally emit the legacy `governance.*` namespace
+   * or "governance" to fully disable gen_ai.* output.
    */
   conventions?: OtelConventions;
   /** Custom attribute mapper — runs after built-in mapping. */
@@ -153,7 +153,10 @@ function addGovernanceAttributes(
 
 export function createOtelHooks(config: OtelHooksConfig = {}) {
   const serviceName = config.serviceName ?? "governance-sdk";
-  const conventions = config.conventions ?? "both";
+  // Default flipped from "both" → "gen_ai" in 0.13 per the 0.12 roadmap.
+  // Back-compat: set `conventions: "both"` to keep emitting legacy
+  // governance.* operation names alongside the new gen_ai.* ones.
+  const conventions = config.conventions ?? "gen_ai";
 
   return {
     /**

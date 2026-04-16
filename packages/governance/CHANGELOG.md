@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.13.0] - 2026-04-16 — Conventions flip + deprecation notices
+
+Follow-up to 0.12. Two small, deliberate changes that the 0.12 roadmap
+promised — committed now so users have runtime notice before 1.0.
+
+### Changed — OTel `conventions` default flips from `"both"` to `"gen_ai"`
+
+`createOtelHooks()` now defaults to emitting only the GenAI semantic
+conventions. Governance spans correlate out of the box with Anthropic,
+OpenAI, and Vercel-AI SDK spans in Honeycomb / Datadog / New Relic when
+you ingest them through the same tracer.
+
+**Migration.** If your dashboards query the legacy `governance.*`
+operation names (`governance.enforcement`, `governance.audit`, etc.),
+set `conventions: "both"` explicitly:
+
+```ts
+createOtelHooks({ conventions: "both" });
+```
+
+This keeps the old op names alongside the new `gen_ai.*` attributes,
+same as the 0.12 default. `conventions: "governance"` disables GenAI
+emission entirely for customers who cannot adopt the spec yet.
+
+### Changed — `createMCPTrustRegistry` and `createChainAuditor` now warn
+
+Both of these names misrepresented what the functions do. The honest
+names (`createMCPAllowlist` and `createMCPCallRecorder`) shipped in
+0.12 as path re-exports, and 0.13 adds a one-shot `console.warn` when
+the old names are called so you see the nudge at runtime, once per
+process.
+
+- `createMCPTrustRegistry` → rename to `createMCPAllowlist`
+  (path: `governance-sdk/plugins/mcp-allowlist`)
+- `createChainAuditor` → rename to `createMCPCallRecorder`
+  (path: `governance-sdk/plugins/mcp-call-recorder`)
+
+Removal is scheduled for 1.0. Behaviour is identical across both
+names — the internals were refactored into a shared `buildAllowlist` /
+`buildCallRecorder` so the honest names call the core directly and
+don't trigger the deprecation path.
+
+### Tests
+
+1,340 tests, 0 failures (up from 1,337 — three new tests pinning the
+0.13 OTel default).
+
+### Roadmap (0.14+)
+
+Unchanged from the 0.12 CHANGELOG:
+- Multi-modal input scanning (image / PDF / audio) on Anthropic /
+  Vercel AI / Bedrock / Genkit / LlamaIndex.
+- Signed compliance evidence export (EU AI Act + NIST AI RMF).
+
 ## [0.12.0] - 2026-04-16 — Trust hardening
 
 Closes the three most load-bearing honesty gaps surfaced by the post-0.11

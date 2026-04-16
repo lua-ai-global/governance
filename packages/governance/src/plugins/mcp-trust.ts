@@ -54,7 +54,34 @@ export interface MCPTrustValidation {
 
 // ─── Implementation ─────────────────────────────────────────
 
+let trustRegistryDeprecationWarned = false;
+
+/**
+ * Deprecated since 0.12, removed in 1.0. Prefer `createMCPAllowlist`
+ * (same behaviour, honest name).
+ */
 export function createMCPTrustRegistry(config: MCPTrustConfig = {}) {
+  if (!trustRegistryDeprecationWarned) {
+    trustRegistryDeprecationWarned = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[governance-sdk] createMCPTrustRegistry is deprecated since 0.12 — it is a URI allowlist, not a cryptographic trust registry. " +
+        "Rename to createMCPAllowlist (import path: governance-sdk/plugins/mcp-allowlist). " +
+        "The old name will be removed in 1.0.",
+    );
+  }
+  return buildAllowlist(config);
+}
+
+/**
+ * The honest name. Identical behaviour to `createMCPTrustRegistry` without
+ * the deprecation warning. Use this in all new code.
+ */
+export function createMCPAllowlist(config: MCPTrustConfig = {}) {
+  return buildAllowlist(config);
+}
+
+function buildAllowlist(config: MCPTrustConfig = {}) {
   const { defaultTrust = "untrusted", blockUntrusted = false } = config;
   const registry = new Map<string, MCPServerEntry>();
 
@@ -144,13 +171,14 @@ function normalizeUri(uri: string): string {
   return uri.toLowerCase().replace(/\/+$/, "");
 }
 
-// ─── Honest-naming aliases (0.12) ───────────────────────────
+// ─── Honest-naming type aliases (0.12) ───────────────────────
 //
 // `createMCPTrustRegistry` is an allowlist — not a cryptographic trust
-// registry. The honest name is exported alongside so new code can adopt
-// it; the original export stays for backwards compatibility. The path
-// /plugins/mcp-allowlist in package.json exports re-exports these.
-export const createMCPAllowlist = createMCPTrustRegistry;
+// registry. The honest name `createMCPAllowlist` is defined above; these
+// are the matching type aliases so TypeScript users can write
+// `const gate: MCPAllowlistValidation = ...` without reaching back into
+// the legacy `MCPTrust*` names. The path /plugins/mcp-allowlist in
+// package.json exports re-exports these.
 export type MCPAllowlistLevel = MCPTrustLevel;
 export type MCPAllowlistConfig = MCPTrustConfig;
 export type MCPAllowlistEntry = MCPServerEntry;

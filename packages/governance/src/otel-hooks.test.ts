@@ -10,7 +10,9 @@ describe("OTel Hooks", () => {
   });
 
   it("converts governance event to span", () => {
-    const hooks = createOtelHooks();
+    // Pin conventions: "both" because this test predates the 0.13 default
+    // flip and asserts the legacy `governance.*` operation name + attrs.
+    const hooks = createOtelHooks({ conventions: "both" });
     const span = hooks.toSpan({
       type: "enforcement",
       timestamp: new Date().toISOString(),
@@ -55,7 +57,7 @@ describe("OTel Hooks", () => {
   });
 
   it("creates enforcement span via convenience method", () => {
-    const hooks = createOtelHooks();
+    const hooks = createOtelHooks({ conventions: "both" });
     const span = hooks.enforcementSpan({
       blocked: false,
       outcome: "allow",
@@ -69,7 +71,7 @@ describe("OTel Hooks", () => {
   });
 
   it("handles missing optional fields gracefully", () => {
-    const hooks = createOtelHooks();
+    const hooks = createOtelHooks({ conventions: "both" });
     const span = hooks.toSpan({ type: "audit", timestamp: new Date().toISOString(), detail: {} });
     assert.equal(span.operationName, "governance.audit");
     assert.ok(!("governance.agent.id" in span.attributes));
@@ -81,6 +83,38 @@ describe("OTel Hooks", () => {
     const span2 = hooks.toSpan({ type: "enforcement", timestamp: new Date().toISOString(), detail: {} });
     assert.notEqual(span1.traceId, span2.traceId);
     assert.notEqual(span1.spanId, span2.spanId);
+  });
+});
+
+describe("OTel defaults (0.13)", () => {
+  it("defaults to gen_ai conventions for events with a GenAI analogue", () => {
+    const hooks = createOtelHooks();
+    const span = hooks.toSpan({
+      type: "enforcement",
+      timestamp: new Date().toISOString(),
+      detail: { blocked: false, outcome: "allow" },
+    });
+    assert.equal(span.operationName, "gen_ai.policy.evaluate");
+  });
+
+  it("defaults to gen_ai: audit events use gen_ai.audit.log, not governance.audit", () => {
+    const hooks = createOtelHooks();
+    const span = hooks.toSpan({
+      type: "audit",
+      timestamp: new Date().toISOString(),
+      detail: {},
+    });
+    assert.equal(span.operationName, "gen_ai.audit.log");
+  });
+
+  it("defaults to gen_ai: events with no GenAI analogue still use governance.*", () => {
+    const hooks = createOtelHooks();
+    const span = hooks.toSpan({
+      type: "kill",
+      timestamp: new Date().toISOString(),
+      detail: { reason: "emergency" },
+    });
+    assert.equal(span.operationName, "governance.kill");
   });
 });
 

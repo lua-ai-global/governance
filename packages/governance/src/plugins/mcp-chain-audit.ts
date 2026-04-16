@@ -55,7 +55,35 @@ export interface PatternMatch {
 
 // ─── Implementation ─────────────────────────────────────────
 
+let chainAuditorDeprecationWarned = false;
+
+/**
+ * Deprecated since 0.12, removed in 1.0. Prefer `createMCPCallRecorder`
+ * (same behaviour, honest name — records caller-reported MCP calls, does
+ * not auto-propagate across MCP server boundaries).
+ */
 export function createChainAuditor(config: ChainAuditConfig = {}) {
+  if (!chainAuditorDeprecationWarned) {
+    chainAuditorDeprecationWarned = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[governance-sdk] createChainAuditor is deprecated since 0.12 — it is a caller-instrumented call recorder, not an automatic sub-call propagator. " +
+        "Rename to createMCPCallRecorder (import path: governance-sdk/plugins/mcp-call-recorder). " +
+        "The old name will be removed in 1.0.",
+    );
+  }
+  return buildCallRecorder(config);
+}
+
+/**
+ * The honest name. Identical behaviour to `createChainAuditor` without the
+ * deprecation warning. Use this in all new code.
+ */
+export function createMCPCallRecorder(config: ChainAuditConfig = {}) {
+  return buildCallRecorder(config);
+}
+
+function buildCallRecorder(config: ChainAuditConfig = {}) {
   const { maxChainLength = 50 } = config;
   const chains = new Map<string, ChainEntry[]>();
   const patterns = config.suspiciousPatterns ?? getDefaultPatterns();

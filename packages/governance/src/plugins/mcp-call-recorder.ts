@@ -16,7 +16,7 @@
  * ```
  */
 export {
-  createChainAuditor as createMCPCallRecorder,
+  createMCPCallRecorder,
   createChainAuditor,
   type ChainEntry,
   type ChainEntry as MCPCallRecord,
