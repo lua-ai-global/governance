@@ -1,6 +1,6 @@
 {
   "name": "governance-sdk",
-  "version": "0.11.2",
+  "version": "0.12.0",
   "description": "AI Agent Governance for TypeScript — policy enforcement, scoring, compliance, and audit for AI agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -161,9 +161,17 @@
       "types": "./dist/plugins/mcp-trust.d.ts",
       "import": "./dist/plugins/mcp-trust.js"
     },
+    "./plugins/mcp-allowlist": {
+      "types": "./dist/plugins/mcp-allowlist.d.ts",
+      "import": "./dist/plugins/mcp-allowlist.js"
+    },
     "./plugins/mcp-chain-audit": {
       "types": "./dist/plugins/mcp-chain-audit.d.ts",
       "import": "./dist/plugins/mcp-chain-audit.js"
+    },
+    "./plugins/mcp-call-recorder": {
+      "types": "./dist/plugins/mcp-call-recorder.d.ts",
+      "import": "./dist/plugins/mcp-call-recorder.js"
     },
     "./injection-classifier": {
       "types": "./dist/injection-classifier.d.ts",

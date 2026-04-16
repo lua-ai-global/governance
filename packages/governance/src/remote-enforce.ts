@@ -164,8 +164,13 @@ export function createRemoteEnforcer(config: RemoteConfig) {
       }
       return result as EnforcementDecision;
     } catch (err) {
-      // Non-retryable errors (4xx) should throw immediately
-      if (err instanceof RemoteEnforcementError && !err.retryable) throw err;
+      // The API answered us (even with a 4xx error), so the connection
+      // itself is live. Reflect that in status() so callers aren't misled
+      // into thinking the API is offline.
+      if (err instanceof RemoteEnforcementError && !err.retryable) {
+        lastConnected = true;
+        throw err;
+      }
       // Network/timeout errors after retries — use fallback
       lastConnected = false;
       return fallbackDecision(fallbackMode, err);

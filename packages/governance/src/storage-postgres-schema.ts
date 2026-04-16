@@ -42,7 +42,11 @@ export function getSchemaSQL(prefix: string): string {
       detail JSONB,
       policy_rule_id TEXT,
       organization_id TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      integrity_hash TEXT,
+      integrity_previous_hash TEXT,
+      integrity_sequence BIGINT,
+      integrity_signed_at TIMESTAMPTZ
     );
 
     CREATE INDEX IF NOT EXISTS idx_${prefix}_audit_agent_id
@@ -65,6 +69,9 @@ export function getSchemaSQL(prefix: string): string {
 
     CREATE INDEX IF NOT EXISTS idx_${prefix}_agents_org
       ON ${prefix}_agents (organization_id) WHERE organization_id IS NOT NULL;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_${prefix}_audit_integrity_seq
+      ON ${prefix}_audit_events (integrity_sequence) WHERE integrity_sequence IS NOT NULL;
   `;
 }
 
@@ -157,7 +164,7 @@ export function getIntegrityMigrationSQL(prefix: string): string {
   return `
     ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS integrity_hash TEXT;
     ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS integrity_previous_hash TEXT;
-    ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS integrity_sequence INTEGER;
+    ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS integrity_sequence BIGINT;
     ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS integrity_signed_at TIMESTAMPTZ;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_${prefix}_audit_integrity_seq
       ON ${prefix}_audit_events (integrity_sequence) WHERE integrity_sequence IS NOT NULL;

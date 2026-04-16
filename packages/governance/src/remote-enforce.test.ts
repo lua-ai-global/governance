@@ -355,3 +355,62 @@ describe("createGovernance remote integration", () => {
     assert.ok(gov.scoreFleet);
   });
 });
+
+// ─── Status tracking after non-retryable (4xx) errors (0.12 fix) ──
+
+describe("remote status after 4xx errors", () => {
+  test("non-retryable 4xx leaves connected=true because API answered us", async () => {
+    // Succeed first so lastConnected becomes true.
+    setupFetchMock(200, {
+      decision: {
+        blocked: false, outcome: "allow", reason: "ok", ruleId: null,
+        evaluatedAt: new Date().toISOString(), rulesEvaluated: 0,
+      },
+    });
+    const enforcer = createRemoteEnforcer({
+      serverUrl: "https://api.example.com",
+      apiKey: "key-123",
+    });
+    await enforcer.enforce({ agentId: "a", agentName: "a", agentLevel: 1, action: "tool_call" });
+    assert.equal(enforcer.status().connected, true);
+
+    // Now a 4xx. Must throw (non-retryable) but must NOT flip connected to
+    // false — the API answered us; only network-level failure counts as
+    // disconnection.
+    setupFetchMock(401, "Unauthorized");
+    await assert.rejects(
+      () => enforcer.enforce({ agentId: "a", agentName: "a", agentLevel: 1, action: "tool_call" }),
+      RemoteEnforcementError,
+    );
+    assert.equal(
+      enforcer.status().connected,
+      true,
+      "4xx is an API-layer error; the connection is still healthy",
+    );
+  });
+
+  test("network failure correctly flips connected to false then back to true on recovery", async () => {
+    const enforcer = createRemoteEnforcer({
+      serverUrl: "https://api.example.com",
+      apiKey: "key-123",
+      maxRetries: 0,
+    });
+
+    // Offline.
+    (globalThis as Record<string, unknown>).fetch = mock.fn(() =>
+      Promise.reject(new Error("ECONNREFUSED")),
+    );
+    await enforcer.enforce({ agentId: "a", agentName: "a", agentLevel: 1, action: "tool_call" });
+    assert.equal(enforcer.status().connected, false);
+
+    // Recovery.
+    setupFetchMock(200, {
+      decision: {
+        blocked: false, outcome: "allow", reason: "ok", ruleId: null,
+        evaluatedAt: new Date().toISOString(), rulesEvaluated: 0,
+      },
+    });
+    await enforcer.enforce({ agentId: "a", agentName: "a", agentLevel: 1, action: "tool_call" });
+    assert.equal(enforcer.status().connected, true);
+  });
+});

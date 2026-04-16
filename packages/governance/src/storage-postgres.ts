@@ -5,8 +5,8 @@
  * Schema and row mappers are in storage-postgres-schema.ts.
  */
 
-import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
-import { getSchemaSQL, rowToAgent, rowToEvent } from "./storage-postgres-schema.js";
+import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters, StoredAuditIntegrity } from "./storage.js";
+import { getSchemaSQL, getIntegrityMigrationSQL, rowToAgent, rowToEvent, rowToIntegrityFields } from "./storage-postgres-schema.js";
 import type { AgentRow, AuditRow } from "./storage-postgres-schema.js";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -73,9 +73,16 @@ export async function createPostgresStorage(
     }
     let p = prefixMap.get(prefix);
     if (!p) {
-      p = pool.query(getSchemaSQL(prefix)).then(() => {
-        prefixMap!.delete(prefix);
-      });
+      // Run base schema, then the integrity migration. Both are idempotent
+      // (CREATE/ALTER IF NOT EXISTS). The migration is a no-op on fresh
+      // tables created by the new base schema, but keeps 0.11.x deployments
+      // upgrading in place without manual DDL.
+      p = pool
+        .query(getSchemaSQL(prefix))
+        .then(() => pool.query(getIntegrityMigrationSQL(prefix)))
+        .then(() => {
+          prefixMap!.delete(prefix);
+        });
       prefixMap.set(prefix, p);
     }
     await p;
@@ -180,6 +187,64 @@ export async function createPostgresStorage(
     return result.rows.map(rowToEvent);
   }
 
+  async function createAuditEventWithIntegrity(
+    event: AuditEvent,
+    integrity: StoredAuditIntegrity,
+  ): Promise<AuditEvent> {
+    await ensureMigrated();
+    // Single INSERT: event + integrity metadata atomically. A failure here
+    // persists neither, so the chain never has a half-written row. The
+    // UNIQUE index on integrity_sequence enforces no-duplicates even under
+    // concurrent writers (though the chainLock in index.ts already serialises).
+    await pool.query(
+      `INSERT INTO ${prefix}_audit_events (id,agent_id,event_type,outcome,severity,detail,policy_rule_id,created_at,integrity_hash,integrity_previous_hash,integrity_sequence,integrity_signed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        event.id,
+        event.agentId,
+        event.eventType,
+        event.outcome,
+        event.severity,
+        event.detail ? JSON.stringify(event.detail) : null,
+        event.policyRuleId ?? null,
+        event.createdAt,
+        integrity.hash,
+        integrity.previousHash,
+        integrity.sequence,
+        integrity.signedAt,
+      ],
+    );
+    return event;
+  }
+
+  async function getChainHead(): Promise<{ sequence: number; hash: string } | null> {
+    await ensureMigrated();
+    const result = await pool.query<{ integrity_sequence: string | number | null; integrity_hash: string | null }>(
+      `SELECT integrity_sequence, integrity_hash FROM ${prefix}_audit_events WHERE integrity_sequence IS NOT NULL ORDER BY integrity_sequence DESC LIMIT 1`,
+    );
+    const row = result.rows[0];
+    if (!row || row.integrity_sequence == null || row.integrity_hash == null) return null;
+    // pg returns BIGINT as string by default to preserve precision; coerce.
+    const sequence = typeof row.integrity_sequence === "string"
+      ? parseInt(row.integrity_sequence, 10)
+      : row.integrity_sequence;
+    return { sequence, hash: row.integrity_hash };
+  }
+
+  async function getAuditIntegrity(eventId: string): Promise<StoredAuditIntegrity | null> {
+    await ensureMigrated();
+    const result = await pool.query<AuditRow>(
+      `SELECT integrity_hash, integrity_previous_hash, integrity_sequence, integrity_signed_at FROM ${prefix}_audit_events WHERE id = $1`,
+      [eventId],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    // pg returns BIGINT as string; normalise before handing to the mapper.
+    if (typeof row.integrity_sequence === "string") {
+      row.integrity_sequence = parseInt(row.integrity_sequence, 10);
+    }
+    return rowToIntegrityFields(row);
+  }
+
   async function countAuditEvents(filters?: AuditQueryFilters): Promise<number> {
     await ensureMigrated();
     if (!filters) {
@@ -194,7 +259,22 @@ export async function createPostgresStorage(
 
   if (autoMigrate) await migrate();
 
-  return { createAgent, getAgent, getAgentByName, listAgents, updateAgent, deleteAgent, createAuditEvent, queryAuditEvents, countAuditEvents, migrate, close: () => pool.end() };
+  return {
+    createAgent,
+    getAgent,
+    getAgentByName,
+    listAgents,
+    updateAgent,
+    deleteAgent,
+    createAuditEvent,
+    queryAuditEvents,
+    countAuditEvents,
+    createAuditEventWithIntegrity,
+    getChainHead,
+    getAuditIntegrity,
+    migrate,
+    close: () => pool.end(),
+  };
 }
 
 function buildAuditWhere(filters: AuditQueryFilters): { clauses: string[]; values: unknown[]; paramIdx: number } {

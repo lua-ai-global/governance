@@ -225,14 +225,45 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   // ── Integrity audit chain (opt-in) ───────────────────────────
   //
   // When `integrityAudit` is configured, every write routed through
-  // `writeAudit()` gets HMAC-SHA256 hash-chained. Chain state (lastHash,
-  // sequence) lives in the closure, serialised via `chainLock` so
-  // concurrent writes don't fork the chain.
+  // `writeAudit()` gets HMAC-SHA256 hash-chained. The chain state
+  // (sequence, last hash, per-event integrity) is persisted to durable
+  // storage through GovernanceStorage.createAuditEventWithIntegrity() so
+  // the chain survives process restarts. Chain resume on boot is handled
+  // by loadChainHead() below.
+  //
+  // Serialisation via `chainLock` prevents concurrent writes from forking
+  // the chain within a single process. Cross-process safety is provided
+  // by the UNIQUE index on integrity_sequence at the storage layer.
   const integrity = config.integrityAudit;
   let chainLastHash = GENESIS_HASH;
   let chainSequence = 0;
   let chainLock: Promise<unknown> = Promise.resolve();
+  // Fallback in-memory index for adapters that don't implement
+  // createAuditEventWithIntegrity (e.g. third-party 0.11.x adapters).
+  // When the storage adapter IS integrity-aware, we don't populate this
+  // map — reads go back to storage.getAuditIntegrity().
   const integrityIndex = new Map<string, AuditIntegrity>();
+  const storageHasIntegrity =
+    typeof storage.createAuditEventWithIntegrity === "function" &&
+    typeof storage.getAuditIntegrity === "function";
+  let chainHeadLoaded = false;
+  let chainHeadLoadPromise: Promise<void> | null = null;
+
+  async function loadChainHead(): Promise<void> {
+    if (chainHeadLoaded || !integrity) return;
+    if (chainHeadLoadPromise) return chainHeadLoadPromise;
+    chainHeadLoadPromise = (async () => {
+      if (typeof storage.getChainHead === "function") {
+        const head = await storage.getChainHead();
+        if (head) {
+          chainLastHash = head.hash;
+          chainSequence = head.sequence;
+        }
+      }
+      chainHeadLoaded = true;
+    })();
+    return chainHeadLoadPromise;
+  }
 
   async function writeAudit(
     event: Omit<AuditEvent, "id" | "createdAt">,
@@ -252,6 +283,9 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     // On failure we preserve the chainLastHash/chainSequence (don't bump)
     // so the next write attempts the same slot — avoids silent gaps.
     const result = chainLock.then(async () => {
+      // First call after boot: resume chain from durable state, if any.
+      if (!chainHeadLoaded) await loadChainHead();
+
       const previousHash = chainLastHash;
       const nextSequence = chainSequence + 1;
       const canonical = canonicalizeAuditEvent(full, previousHash, nextSequence);
@@ -262,16 +296,27 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
         sequence: nextSequence,
         signedAt: new Date().toISOString(),
       };
-      // Persist the event WITHOUT mutating its canonical fields — the
-      // integrity metadata is kept in the in-memory `integrityIndex`
-      // keyed by event id. `integrityChain.export()` joins them back.
-      // If you need the integrity metadata written to durable storage
-      // (e.g. for backup + offline verification on a separate machine),
-      // call `integrityChain.export()` and persist the result yourself.
-      const stored = await storage.createAuditEvent(full);
+
+      let stored: AuditEvent;
+      if (storageHasIntegrity) {
+        // Durable path: integrity columns written in the same INSERT as
+        // the event. Restart-safe — getChainHead() will find this row.
+        stored = await storage.createAuditEventWithIntegrity!(full, integrityMeta);
+      } else {
+        // Legacy path: adapter predates 0.12. Event persists, integrity
+        // lives only in this process's integrityIndex. A process restart
+        // will leave earlier events unverifiable. This is a downgrade,
+        // not the default; surfaced via onAuditError below.
+        stored = await storage.createAuditEvent(full);
+        integrityIndex.set(full.id, integrityMeta);
+        onAuditError?.(
+          new Error(
+            "integrity chain: storage adapter does not implement createAuditEventWithIntegrity; chain is session-local only and will not survive process restart",
+          ),
+        );
+      }
       chainLastHash = hash;
       chainSequence = nextSequence;
-      integrityIndex.set(full.id, integrityMeta);
       return stored;
     });
 
@@ -546,18 +591,26 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   const integrityChain = integrity
     ? {
         async export(filters?: AuditQueryFilters): Promise<IntegrityAuditEvent[]> {
+          // Ensure boot-time resume has run so stats()/export() reflect
+          // durable state even if no writes have happened yet.
+          if (!chainHeadLoaded) await loadChainHead();
           const events = await storage.queryAuditEvents({
             ...filters,
             limit: undefined,
             offset: undefined,
           });
           const sorted = [...events].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-          return sorted
-            .filter((e) => integrityIndex.has(e.id))
-            .map((e) => ({
-              ...e,
-              integrity: integrityIndex.get(e.id)!,
-            }));
+          const result: IntegrityAuditEvent[] = [];
+          for (const e of sorted) {
+            // Prefer durable integrity record; fall back to in-memory
+            // index for adapters that don't yet persist it.
+            const durable = storageHasIntegrity
+              ? await storage.getAuditIntegrity!(e.id)
+              : null;
+            const meta = durable ?? integrityIndex.get(e.id);
+            if (meta) result.push({ ...e, integrity: meta });
+          }
+          return result;
         },
         stats() {
           return {

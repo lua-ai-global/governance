@@ -7,6 +7,18 @@
 
 // ─── Storage Interface ──────────────────────────────────────────
 
+/**
+ * Durable integrity metadata written alongside an audit event.
+ * Mirrors AuditIntegrity from audit-integrity.ts — redeclared here so
+ * storage.ts has no import cycle with audit-integrity.ts.
+ */
+export interface StoredAuditIntegrity {
+  hash: string;
+  previousHash: string;
+  sequence: number;
+  signedAt: string;
+}
+
 /** Storage adapter interface — implement this for custom backends. */
 export interface GovernanceStorage {
   createAgent(data: StoredAgent): Promise<StoredAgent>;
@@ -19,6 +31,34 @@ export interface GovernanceStorage {
   createAuditEvent(event: AuditEvent): Promise<AuditEvent>;
   queryAuditEvents(filters: AuditQueryFilters): Promise<AuditEvent[]>;
   countAuditEvents(filters?: AuditQueryFilters): Promise<number>;
+  /**
+   * Persist an audit event together with its integrity metadata in a single
+   * atomic write. Implementations MUST write both or neither — gaps in the
+   * chain must not be introduced by a partial failure.
+   *
+   * Optional: adapters that predate 0.12 may omit this. When absent,
+   * createGovernance() falls back to the legacy in-memory integrityIndex
+   * path and emits a one-time warning via onAuditError.
+   */
+  createAuditEventWithIntegrity?(
+    event: AuditEvent,
+    integrity: StoredAuditIntegrity,
+  ): Promise<AuditEvent>;
+  /**
+   * Return the latest (highest-sequence) integrity record in storage, or null
+   * if no chained events exist. Called once at createGovernance() startup to
+   * resume the chain across process restarts.
+   */
+  getChainHead?(): Promise<{
+    sequence: number;
+    hash: string;
+  } | null>;
+  /**
+   * Fetch the stored integrity record for a specific event id. Used by
+   * integrityChain.export() and verifyAuditIntegrity() to rebuild the chain
+   * from durable state instead of in-memory.
+   */
+  getAuditIntegrity?(eventId: string): Promise<StoredAuditIntegrity | null>;
 }
 
 /** Persisted agent record */
@@ -87,6 +127,8 @@ const MAX_AUDIT_EVENTS = 10_000;
 export function createMemoryStorage(): GovernanceStorage {
   const agents: Map<string, StoredAgent> = new Map();
   const events: AuditEvent[] = [];
+  const integrity: Map<string, StoredAuditIntegrity> = new Map();
+  let chainHead: { sequence: number; hash: string } | null = null;
 
   return {
     async createAgent(data) {
@@ -144,6 +186,28 @@ export function createMemoryStorage(): GovernanceStorage {
       if (!filters) return events.length;
       const result = await this.queryAuditEvents({ ...filters, limit: undefined, offset: undefined });
       return result.length;
+    },
+    async createAuditEventWithIntegrity(event, integrityMeta) {
+      // Atomic: push both records in the same microtask. The memory adapter
+      // is single-threaded per event loop tick, so this is trivially atomic;
+      // the contract matters for Postgres where it becomes a single INSERT.
+      events.push(event);
+      if (events.length > MAX_AUDIT_EVENTS) {
+        const dropped = events.splice(0, events.length - MAX_AUDIT_EVENTS);
+        for (const d of dropped) integrity.delete(d.id);
+      }
+      integrity.set(event.id, integrityMeta);
+      if (!chainHead || integrityMeta.sequence > chainHead.sequence) {
+        chainHead = { sequence: integrityMeta.sequence, hash: integrityMeta.hash };
+      }
+      return event;
+    },
+    async getChainHead() {
+      return chainHead ? { ...chainHead } : null;
+    },
+    async getAuditIntegrity(eventId) {
+      const meta = integrity.get(eventId);
+      return meta ? { ...meta } : null;
     },
   };
 }

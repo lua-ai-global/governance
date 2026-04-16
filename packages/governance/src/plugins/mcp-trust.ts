@@ -143,3 +143,15 @@ export function createMCPTrustRegistry(config: MCPTrustConfig = {}) {
 function normalizeUri(uri: string): string {
   return uri.toLowerCase().replace(/\/+$/, "");
 }
+
+// ─── Honest-naming aliases (0.12) ───────────────────────────
+//
+// `createMCPTrustRegistry` is an allowlist — not a cryptographic trust
+// registry. The honest name is exported alongside so new code can adopt
+// it; the original export stays for backwards compatibility. The path
+// /plugins/mcp-allowlist in package.json exports re-exports these.
+export const createMCPAllowlist = createMCPTrustRegistry;
+export type MCPAllowlistLevel = MCPTrustLevel;
+export type MCPAllowlistConfig = MCPTrustConfig;
+export type MCPAllowlistEntry = MCPServerEntry;
+export type MCPAllowlistValidation = MCPTrustValidation;

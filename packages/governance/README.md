@@ -65,11 +65,25 @@ detection — nothing more. To pre-empt scope questions:
 - **Simulator does not replay side effects** — it evaluates policy outcomes
   against synthetic scenarios, it does not execute tools.
 - **`enforce()` does not hash-chain by default** — opt in with
-  `integrityAudit: { signingKey }` for tamper-evident audit.
+  `integrityAudit: { signingKey }` for tamper-evident audit. Since 0.12
+  the chain is persisted durably (survives process restart) when the
+  storage adapter supports `createAuditEventWithIntegrity` (memory and
+  Postgres adapters both do). HMAC chains are still only tamper-evident
+  to holders of the signing secret — rotate and pair with an external
+  anchor if you need adversary-grade non-repudiation.
 - **Cloud `register()` is a synthetic confirmation** — the API auto-registers
   on first `enforce()`.
 - **No built-in red team / jailbreak harness.** Use inspect-ai, PyRIT, or
   Garak — a policy-only harness would be easily mistaken for model coverage.
+- **Bedrock is entry-gate only.** The Bedrock adapter scans the prompt
+  going into `invokeAgent` and (with a helper) the final response text.
+  Tool executions **inside** AWS action groups are opaque — the adapter
+  cannot see them, let alone block them. Use `guardToolUse()` to enforce
+  at the tool level manually, or push tool calls onto the host side.
+- **Multi-modal content is not scanned.** Image, PDF, and audio blocks
+  on Anthropic/Vercel AI/Genkit/LlamaIndex/Bedrock are passed through
+  without injection detection. A vision-enabled agent bypasses every
+  input scan in this release. Multi-modal coverage lands in 0.13.
 
 ## Packages
 

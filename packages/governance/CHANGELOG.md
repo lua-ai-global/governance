@@ -1,5 +1,91 @@
 # Changelog
 
+## [0.12.0] - 2026-04-16 — Trust hardening
+
+Closes the three most load-bearing honesty gaps surfaced by the post-0.11
+audit. Theme: the things the SDK already claims must actually hold up under
+restart, real observability, and real naming.
+
+### Changed — integrity audit chain is now durable (BREAKING-ISH)
+
+Before 0.12, `integrityAudit: { signingKey }` maintained chain state
+(latest hash, sequence, per-event integrity) in a `createGovernance()`
+closure. Process restart reset the chain to genesis and every event in
+Postgres lost its integrity metadata because the write path never touched
+the `integrity_*` columns the schema already defined.
+
+**What changed:**
+- `GovernanceStorage` gained three optional methods —
+  `createAuditEventWithIntegrity(event, integrity)`, `getChainHead()`,
+  `getAuditIntegrity(eventId)`. Memory and Postgres adapters implement
+  all three.
+- `createGovernance()` now writes the event and its integrity metadata
+  in a single `INSERT` when the storage adapter is integrity-aware, and
+  resumes the chain from `getChainHead()` on boot. Kill the process
+  mid-stream, boot a fresh instance, and `integrityChain.stats()`
+  returns the pre-crash sequence; `verifyAuditIntegrity()` passes across
+  the restart boundary.
+- Third-party storage adapters written against the 0.11 interface still
+  work. They fall back to the old in-process integrity map and emit an
+  `onAuditError` notice explaining the chain is session-local on that
+  adapter.
+
+**Schema:** the base `getSchemaSQL()` now creates the integrity columns
+on fresh tables; the existing `getIntegrityMigrationSQL()` remains for
+0.11.x tables. Both paths are idempotent (`CREATE TABLE IF NOT EXISTS`,
+`ADD COLUMN IF NOT EXISTS`). `integrity_sequence` widened from `INTEGER`
+to `BIGINT`. A `UNIQUE` index on `integrity_sequence` enforces no
+duplicate sequences even under concurrent writers.
+
+**Honesty update:** the "What this is NOT" section in the README was
+rewritten to state what HMAC chains prove and don't prove. No more
+"tamper-evident" without the caveat.
+
+### Changed — OTel GenAI semantic conventions
+
+`createOtelHooks()` gained a `conventions: "governance" | "gen_ai" | "both"`
+option. `"both"` (the 0.12 default) is additive: existing `governance.*`
+attributes and operation names still emit, and `gen_ai.system`,
+`gen_ai.request.model`, `gen_ai.usage.input_tokens` /
+`gen_ai.usage.output_tokens`, `gen_ai.response.finish_reasons`,
+`gen_ai.tool.name`, `gen_ai.tool.call.id` appear alongside when present
+in the event detail. `"gen_ai"` switches operation names to the GenAI
+form (`gen_ai.policy.evaluate`, `gen_ai.tool.execute`,
+`gen_ai.agent.register`, `gen_ai.audit.log`) so governance spans can
+correlate with Anthropic / OpenAI / Vercel-AI SDK spans in Honeycomb /
+Datadog / New Relic. The default flips to `"gen_ai"` in 0.13.
+
+### Changed — honest naming for MCP plugins
+
+`createMCPTrustRegistry` is a URI allowlist, not a cryptographic trust
+registry; `createChainAuditor` records caller-reported MCP calls, not
+auto-propagated sub-calls. Both are now also exported under honest
+names:
+
+- `createMCPAllowlist` (new export path:
+  `governance-sdk/plugins/mcp-allowlist`)
+- `createMCPCallRecorder` (new export path:
+  `governance-sdk/plugins/mcp-call-recorder`)
+
+The original exports stay at their original paths and behave
+identically. Rename on your next touch of the file; no rush.
+
+### Fixed — remote status staleness after 4xx errors
+
+`createRemoteEnforcer().status()` flipped `connected: false` whenever
+the last `enforce()` call threw a `RemoteEnforcementError`, even on a
+non-retryable 4xx. A 4xx means the API answered us — the connection is
+fine. Status now stays `connected: true` through API-layer errors and
+only reports `connected: false` on a network/timeout failure.
+
+### Roadmap (0.13+)
+
+Not in this release; on the roadmap:
+- Shipped ML injection classifier as an opt-in peer-dep package.
+- Multi-modal input scanning (image / PDF / audio) on Anthropic / Vercel
+  AI / Genkit / LlamaIndex / Bedrock.
+- Compliance evidence export (signed, dated dossiers).
+
 ## [0.11.2] - 2026-04-16 — Automate README sync
 
 Adds infrastructure to prevent the npm README from drifting out of sync
