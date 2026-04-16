@@ -15,7 +15,8 @@
   "scripts": {
     "build": "npm run build -w packages/governance && npm run build -w packages/governance-platform",
     "test": "npm test -w packages/governance && npm test -w packages/governance-platform",
-    "lint": "npm run lint -w packages/governance && npm run lint -w packages/governance-platform"
+    "lint": "npm run lint -w packages/governance && npm run lint -w packages/governance-platform",
+    "sync-readme": "node scripts/sync-readme.mjs"
   },
   "engines": {
     "node": ">=20"

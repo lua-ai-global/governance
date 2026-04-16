@@ -21,3 +21,11 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm test
+      - name: Verify packages/governance/README.md is in sync with root README
+        run: |
+          node scripts/sync-readme.mjs
+          git diff --exit-code packages/governance/README.md || (
+            echo "::error::packages/governance/README.md is out of sync with root README.md.";
+            echo "::error::Run 'npm run sync-readme' locally and commit the result.";
+            exit 1
+          )

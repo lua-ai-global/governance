@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.2] - 2026-04-16 — Automate README sync
+
+Adds infrastructure to prevent the npm README from drifting out of sync
+with the repo-root README again:
+
+- New `scripts/sync-readme.mjs` — generates `packages/governance/README.md`
+  from the root `README.md`, normalizing repo-relative links to absolute
+  GitHub URLs so they resolve on npmjs.com. Idempotent.
+- Wired into `prepublishOnly` so every npm release ships an in-sync README
+  automatically.
+- New `npm run sync-readme` at the monorepo root for manual runs.
+- CI guard added to `.github/workflows/ci.yml` — fails the build if anyone
+  commits a manual edit to the package README without running the sync.
+
+No code changes. SDK behavior identical to 0.11.1.
+
 ## [0.11.1] - 2026-04-16 — Sync npm README with repo
 
 The `packages/governance/README.md` (the file npm publishes) had drifted ~3
