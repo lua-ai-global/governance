@@ -45,6 +45,45 @@ interface StreamState {
   slidingBuffer?: string;
   /** Chunk count in the rolling window (sliding mode). */
   slidingChunks?: number;
+  /**
+   * Stable id for this stream. Every per-chunk enforce call carries it
+   * in metadata so the cloud dashboard can collapse N audit rows into
+   * one logical operation. Lazily generated — first chunk seen.
+   */
+  streamId?: string;
+  /** Monotonically increasing slice number for per-chunk audit tags. */
+  streamSlice?: number;
+}
+
+/** Zero-dep UUID generator, same helper shape as supply-chain-cyclonedx. */
+function generateStreamId(): string {
+  if (typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID) {
+    return `str_${globalThis.crypto.randomUUID()}`;
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto !== "undefined" && globalThis.crypto.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `str_${hex}`;
+}
+
+/**
+ * Read (and lazily init) the streamId + slice index for this Mastra
+ * stream. Stored on args.state so subsequent chunks share the same id
+ * across the whole stream lifecycle. Caller mutates state.streamSlice++
+ * after consuming.
+ */
+function getOrCreateStreamMeta(
+  state: StreamState,
+): { streamId: string; slice: number } {
+  if (!state.streamId) state.streamId = generateStreamId();
+  if (state.streamSlice == null) state.streamSlice = 0;
+  const slice = state.streamSlice;
+  state.streamSlice = slice + 1;
+  return { streamId: state.streamId, slice };
 }
 
 // ─── Entry point ──────────────────────────────────────────────
@@ -100,9 +139,13 @@ async function handlePerChunk(
   agentLevel: number,
   callbacks: OutcomeCallbacks,
 ): Promise<MastraStreamChunk | null | undefined> {
+  const state = (args.state ?? {}) as StreamState;
+  const streamMeta = getOrCreateStreamMeta(state);
+  if (args.state && args.state !== state) Object.assign(args.state, state);
+
   const decision = await runScan(
     governance, chunkText, config, agentId, agentLevel, callbacks,
-    "mastra.stream:per-chunk",
+    "mastra.stream:per-chunk", streamMeta,
   );
   return applyDecisionToChunk(args, decision, chunkText, config);
 }
@@ -124,6 +167,7 @@ async function handleSliding(
   callbacks: OutcomeCallbacks,
 ): Promise<MastraStreamChunk | null | undefined> {
   const state = (args.state ?? {}) as StreamState;
+  const streamMeta = getOrCreateStreamMeta(state);
   const lookback = config.streamLookbackChunks ?? 2;
   const lookbackChars = config.streamLookbackChars;
 
@@ -132,7 +176,7 @@ async function handleSliding(
 
   const decision = await runScan(
     governance, nextBuffer, config, agentId, agentLevel, callbacks,
-    "mastra.stream:sliding",
+    "mastra.stream:sliding", streamMeta,
   );
 
   // Trim the buffer once it grows past the lookback budget so it doesn't
@@ -170,6 +214,7 @@ async function runScan(
   agentLevel: number,
   callbacks: OutcomeCallbacks,
   toolName: string,
+  streamMeta?: { streamId: string; slice: number },
 ): Promise<EnforcementDecision> {
   // enforcePostprocess throws on block / require_approval (via handleOutcome).
   // In Mastra's per-chunk API we can't throw — we must call args.abort().
@@ -180,7 +225,12 @@ async function runScan(
       agentId,
       agentName: config.agentName,
       agentLevel,
-      metadata: config.metadata,
+      metadata: {
+        ...(config.metadata ?? {}),
+        ...(streamMeta
+          ? { streamId: streamMeta.streamId, streamSlice: streamMeta.slice }
+          : {}),
+      },
       callbacks,
       toolName,
     });

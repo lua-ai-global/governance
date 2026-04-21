@@ -47,6 +47,46 @@ import type { OutcomeCallbacks } from "./outcome-handler.js";
 import { enforcePostprocess } from "./pre-post-enforce.js";
 import type { PrePostEnforceOptions } from "./pre-post-enforce.js";
 
+/**
+ * Generate a stable stream id. Every enforce() call for a single LLM
+ * stream carries the same id in metadata so the dashboard can collapse
+ * N per-chunk rows into one logical "operation" for reviewers. Zero-dep
+ * UUIDv4 fallback mirrors the one in supply-chain-cyclonedx.ts so the
+ * SDK's "no runtime deps" rule stays intact.
+ */
+function generateStreamId(): string {
+  if (typeof globalThis.crypto !== "undefined" && globalThis.crypto.randomUUID) {
+    return `str_${globalThis.crypto.randomUUID()}`;
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto !== "undefined" && globalThis.crypto.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `str_${hex}`;
+}
+
+/**
+ * Merge a streamId + slice index into the options.metadata for each
+ * per-chunk enforce call. Preserves any caller-supplied metadata.
+ */
+function withStreamMeta<O extends PrePostEnforceOptions>(
+  options: O,
+  streamId: string,
+  sliceIndex: number,
+): O {
+  return {
+    ...options,
+    metadata: {
+      ...(options.metadata ?? {}),
+      streamId,
+      streamSlice: sliceIndex,
+    },
+  };
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 export type StreamMode = "buffered" | "sliding" | "per-chunk";
@@ -88,16 +128,21 @@ export async function* enforcePostprocessStream<ChunkT>(
   options: StreamEnforceOptions<ChunkT>,
 ): AsyncIterable<ChunkT> {
   const mode: StreamMode = options.streamMode ?? "buffered";
+  // One id per stream — every enforce call this helper triggers carries
+  // it in metadata so the cloud dashboard can collapse repeated rows
+  // into a single logical operation. Buffered mode also tags its single
+  // call so buffered-vs-per-chunk audit shape is consistent.
+  const streamId = generateStreamId();
 
   if (mode === "buffered") {
-    yield* runBuffered(governance, source, options);
+    yield* runBuffered(governance, source, options, streamId);
     return;
   }
   if (mode === "per-chunk") {
-    yield* runPerChunk(governance, source, options);
+    yield* runPerChunk(governance, source, options, streamId);
     return;
   }
-  yield* runSliding(governance, source, options);
+  yield* runSliding(governance, source, options, streamId);
 }
 
 // ─── Buffered mode ────────────────────────────────────────────
@@ -106,6 +151,7 @@ async function* runBuffered<ChunkT>(
   governance: GovernanceInstance,
   source: AsyncIterable<ChunkT>,
   options: StreamEnforceOptions<ChunkT>,
+  streamId: string,
 ): AsyncIterable<ChunkT> {
   const chunks: ChunkT[] = [];
   const texts: string[] = [];
@@ -121,7 +167,7 @@ async function* runBuffered<ChunkT>(
   }
 
   const result = await enforcePostprocess(governance, combined, {
-    ...options,
+    ...withStreamMeta(options, streamId, 0),
     toolName: options.toolName ?? "stream:buffered",
   });
 
@@ -147,7 +193,9 @@ async function* runPerChunk<ChunkT>(
   governance: GovernanceInstance,
   source: AsyncIterable<ChunkT>,
   options: StreamEnforceOptions<ChunkT>,
+  streamId: string,
 ): AsyncIterable<ChunkT> {
+  let sliceIndex = 0;
   for await (const chunk of source) {
     const text = options.extractText(chunk);
     if (!text) {
@@ -156,7 +204,7 @@ async function* runPerChunk<ChunkT>(
     }
 
     const result = await enforcePostprocess(governance, text, {
-      ...options,
+      ...withStreamMeta(options, streamId, sliceIndex++),
       toolName: options.toolName ?? "stream:per-chunk",
     });
 
@@ -176,18 +224,20 @@ async function* runSliding<ChunkT>(
   governance: GovernanceInstance,
   source: AsyncIterable<ChunkT>,
   options: StreamEnforceOptions<ChunkT>,
+  streamId: string,
 ): AsyncIterable<ChunkT> {
   const window: ChunkT[] = [];
   const windowTexts: string[] = [];
   const lookbackChunks = options.streamLookbackChunks ?? 2;
   const lookbackChars = options.streamLookbackChars;
+  const sliceCounter = { value: 0 };
 
   for await (const chunk of source) {
     window.push(chunk);
     windowTexts.push(options.extractText(chunk));
 
     while (shouldFlush(window.length, windowTexts, lookbackChunks, lookbackChars)) {
-      yield* flushOldest(governance, window, windowTexts, options);
+      yield* flushOldest(governance, window, windowTexts, options, streamId, sliceCounter);
     }
   }
 
@@ -200,7 +250,7 @@ async function* runSliding<ChunkT>(
     return;
   }
   const result = await enforcePostprocess(governance, tailText, {
-    ...options,
+    ...withStreamMeta(options, streamId, sliceCounter.value++),
     toolName: options.toolName ?? "stream:sliding-tail",
   });
   if (result.text === tailText) {
@@ -234,6 +284,8 @@ async function* flushOldest<ChunkT>(
   window: ChunkT[],
   windowTexts: string[],
   options: StreamEnforceOptions<ChunkT>,
+  streamId: string,
+  sliceCounter: { value: number },
 ): AsyncIterable<ChunkT> {
   // Scan the full lookback window (oldest + lookback tail) before flushing
   // the oldest chunk. This gives the scanner context straddling boundaries.
@@ -246,7 +298,7 @@ async function* flushOldest<ChunkT>(
   }
 
   const result = await enforcePostprocess(governance, scanText, {
-    ...options,
+    ...withStreamMeta(options, streamId, sliceCounter.value++),
     toolName: options.toolName ?? "stream:sliding",
   });
 
