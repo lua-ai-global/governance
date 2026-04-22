@@ -178,15 +178,88 @@ export function createRemoteEnforcer(config: RemoteConfig) {
   }
 
   /**
-   * In cloud mode, this returns a SYNTHETIC confirmation. There is no
-   * dedicated remote register endpoint — the API auto-registers agents
-   * on the first `enforce()` call. The returned `score` / `level` are
-   * placeholder zeros; authoritative values arrive after first enforce.
+   * Register (or look up) an agent against the cloud API.
    *
-   * If you need a registration receipt before any enforcement happens,
-   * use local mode (no `serverUrl`) or call the cloud REST API directly.
+   * POSTs to `/api/v1/agents` with the registration payload. The API
+   * auto-dedupes by id/name, so calling this on a pre-existing agent
+   * is idempotent — it returns the existing record's authoritative
+   * score + level. This fixes the previous placeholder behaviour where
+   * remoteRegister returned `level: 0` unconditionally, which caused
+   * agent_level-conditioned rules to fire incorrectly for higher-level
+   * agents on every enforce().
+   *
+   * If the cloud call fails for any reason (network, auth, 5xx), we
+   * still return a synthetic "registered" receipt so the caller isn't
+   * blocked on a non-essential register step. The next enforce() will
+   * carry authoritative data regardless.
    */
   async function remoteRegister(input: AgentRegistration): Promise<RemoteRegisterResult> {
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/agents`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          id: input.id,
+          name: input.name,
+          framework: input.framework,
+          owner: input.owner,
+          description: input.description,
+          tools: input.tools,
+          channels: input.channels,
+          hasAuth: input.hasAuth,
+          hasGuardrails: input.hasGuardrails,
+          hasObservability: input.hasObservability,
+          hasAuditLog: input.hasAuditLog,
+        }),
+        signal: AbortSignal.timeout(timeout),
+      });
+      if (response.ok) {
+        const data = await response.json() as {
+          id?: string;
+          name?: string;
+          compositeScore?: number;
+          governanceLevel?: number;
+          status?: string;
+        };
+        const id = data.id ?? input.name;
+        const score = typeof data.compositeScore === "number" ? data.compositeScore : 0;
+        // Clamp to the valid GovernanceLevel range (0-4). The API is the
+        // source of truth here, but we validate defensively.
+        const rawLevel = typeof data.governanceLevel === "number" ? data.governanceLevel : 0;
+        const level = (rawLevel >= 0 && rawLevel <= 4
+          ? Math.round(rawLevel)
+          : 0) as 0 | 1 | 2 | 3 | 4;
+        const status: "registered" | "assessed" | "approved" | "flagged" | "deprecated" | "quarantined" =
+          data.status === "assessed" || data.status === "approved" ||
+          data.status === "flagged" || data.status === "deprecated" ||
+          data.status === "quarantined"
+            ? data.status
+            : "registered";
+        return {
+          id,
+          score,
+          level,
+          status,
+          assessment: {
+            agentId: id,
+            agentName: data.name ?? input.name,
+            compositeScore: score,
+            level: { level, label: "live", autonomy: "governed", minScore: 0, maxScore: 100 },
+            status,
+            dimensions: [],
+            recommendations: [],
+            assessedAt: new Date().toISOString(),
+          },
+        };
+      }
+      // 409 / 4xx — fall through to the synthetic receipt. The next
+      // enforce() is still authoritative.
+    } catch {
+      // Network/timeout — same fall-through.
+    }
     return {
       id: input.name,
       score: 0,
