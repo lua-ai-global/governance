@@ -1,5 +1,140 @@
 # Changelog
 
+## [0.14.0] - 2026-04-30 — `tool_result` stage + `wrapTool` helper
+
+Closes the framework gap where tool-call return content (file contents,
+clipboard text, scraped pages, MCP returns) reached the LLM unscanned on
+every Mastra agent. The Mastra processor lifecycle has no hook between a
+tool's `execute()` returning and the next LLM call — scanning has to
+happen inside the tool's execute. The new `wrapTool` / `wrapTools`
+methods on `GovernanceProcessor` close that gap at construction time.
+
+### Added — `"tool_result"` PolicyStage
+
+Four stages now: `preprocess` → `process` → `tool_result` → `postprocess`.
+
+```ts
+export type PolicyStage = "preprocess" | "process" | "tool_result" | "postprocess";
+```
+
+`tool_result` is structurally distinct from `postprocess`:
+- **postprocess** — agent's final output to the user. Threat: agent leaks
+  credentials/PII. Default conditions: `output_pattern`, `output_length`,
+  `sensitive_data_filter`.
+- **tool_result** — content a tool returned, before the LLM ingests it on
+  the next turn. Threat: external content carries prompt injection that
+  poisons the LLM context. Default condition: `ml_injection_guard`.
+
+Existing rules continue to fire at their original stage. Only condition
+*defaults* shifted (`ml_injection_guard` → `tool_result`); explicit
+`stage:` on a rule always wins.
+
+### Added — `governance.enforceToolResult(ctx)`
+
+Symmetric with `enforcePreprocess` / `enforcePostprocess`. Evaluates only
+rules at the `tool_result` stage.
+
+### Added — `scanToolResult()` helper (signal-then-enforce)
+
+```ts
+import { scanToolResult } from "governance-sdk";
+
+const { result, blocked, decision } = await scanToolResult({
+  governance: gov,
+  agentId, tool, args, result: toolReturnValue,
+  fields: { targetPath: "/path/from/args" }, // optional, enables scope_boundary
+});
+```
+
+The helper does the orchestration: extracts scannable text from any
+return shape, runs `detectInjection()` to populate
+`ctx.mlInjectionScore`, calls the engine at `stage: "tool_result"`,
+substitutes a redacted `BlockedToolResult` on block.
+
+**Pattern: `detectInjection` is never a decision-maker.** It's a signal
+generator. The policy engine — evaluating every applicable rule with all
+its composites and priority — is always the sole decision-maker, in both
+local mode (engine in-process) and cloud mode (engine via `enforce()`
+HTTP).
+
+### Added — `GovernanceProcessor.wrapTool` / `wrapTools`
+
+The Mastra adapter for the helper above. Wrap individual tools or a tools
+dict before handing to a Mastra `Agent`:
+
+```ts
+const agent = new Agent({
+  tools: processor.wrapTools({ read_file, write_file, take_screenshot }),
+  ...
+});
+```
+
+Wrapped tools' `execute()` runs the original, scans the result, returns
+either the original (allow) or a redacted `{ blocked, reason, ruleId }`
+(block / require_approval). The LLM sees the redacted detail and adapts
+naturally on its next turn.
+
+Config flags on `GovernanceProcessorConfig`:
+- `scanToolResults` — master switch, default `true`
+- `toolResultScans: { [name]: "always" | "never" }` — per-tool override
+- `toolResultInjectionThreshold` — local detection threshold, default 0.5
+- `toolFieldExtraction` — per-tool registry mapping arg names to context
+  fields (e.g. `{ "read_file": { path: "targetPath" } }`). Generic
+  defaults cover `path`/`filePath`/`url`/`href`/`uri`/`endpoint`.
+
+### Added — `toolFieldExtraction` registry (closes Gap B)
+
+Without field extraction, rules like
+`scope_boundary: { allowedPaths: ["/project/**"] }` silently never fire
+— the engine reads `ctx.targetPath`, not raw `args.path`. The new
+registry copies fields off the tool's input args onto the right
+`EnforcementContext` fields before `enforce()` runs. Same registry feeds
+both pre-call (`processOutputStep`) and post-call (`wrapTool`) scans.
+
+### Changed — MCP adapter delegates to the policy engine
+
+The MCP plugin's tool-output scan previously ran `detectInjection()`
+inline and threw on detection — bypassing the policy engine. As of 0.14
+it calls `scanToolResult()`, giving rule authors composite power
+(`sensitive_data_filter`, `output_pattern`, `scope_boundary`,
+`require_approval` outcomes, kill switch) on tool-output content.
+
+**Behaviour change:** the block reason now comes from the matched rule
+rather than a hard-coded "Injection detected (score: X)". Existing
+behaviour is preserved for orgs whose rules look like the old default
+(threshold 0.6, `outcome: block`) — but new rules can layer on PII
+masking, path scope checks, or LLM-judge overrides on the same scan.
+
+### Changed — default stage for `ml_injection_guard`
+
+Previously unmapped (fell through to `process`). Now defaults to
+`tool_result`. Rules with an explicit `stage:` are unaffected; rules
+without one and using `ml_injection_guard` will now run at the new
+stage. To preserve old behaviour, add `stage: "process"` to the rule.
+
+### Tests
+
+1,370 tests, 0 failures (+30 new tests covering `scanToolResult`,
+`wrapTool` / `wrapTools`, field extraction, MCP cleanup behaviour).
+
+### Roadmap (0.15+)
+
+- `trigger_payload` stage for sibling treatment of framework triggers
+  (e.g. Desktop's `selection_changed`, `app_focused`).
+- Approval persistence — `decision: "always_allow" | "allow_once" |
+  "always_block" | "deny_once"` on the approval response, mutating
+  policy YAML or cloud rules so subsequent matching calls don't re-ask.
+- Clone `wrapTool` / field-extraction shape into the Vercel AI SDK,
+  LangChain, and OpenAI Agents adapters.
+
+### Mastra core upstream (parallel)
+
+A `processToolResult?(args)` lifecycle method has been proposed for the
+Mastra `Processor` interface. If accepted, `wrapTool` becomes the
+backwards-compat shim for older Mastra versions; both paths call the
+same `governance.processToolResult(ctx)` core method, so users see no
+disruption when the upstream hook lands.
+
 ## [0.13.0] - 2026-04-16 — Conventions flip + deprecation notices
 
 Follow-up to 0.12. Two small, deliberate changes that the 0.12 roadmap
