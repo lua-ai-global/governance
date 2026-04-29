@@ -39,6 +39,11 @@ import type {
   ProcessorStats,
 } from "./mastra-processor-types.js";
 import { governStreamChunk } from "./mastra-processor-stream.js";
+import {
+  wrapToolWithGovernance,
+  wrapToolsWithGovernance,
+  type MastraTool,
+} from "./mastra-processor-tool-wrap.js";
 
 // Re-export all types
 export type {
@@ -542,6 +547,68 @@ export class GovernanceProcessor implements MastraProcessorInterface {
       agentId: this.agentId!, eventType: "tool_call", outcome,
       severity: outcome === "failure" ? "warning" : "info",
       detail: { tool: toolName, ...detail },
+    });
+  }
+
+  /**
+   * Wrap a Mastra tool with governance scanning on its result.
+   *
+   * Mastra's Processor lifecycle has no hook between a tool's `execute()`
+   * returning and the LLM ingesting the result. Tool-result scanning has
+   * to happen INSIDE the tool's execute. Call this when assembling the
+   * agent's tool dict; the returned tool is a shallow copy with `execute`
+   * replaced by a closure that calls the original then runs the result
+   * through `scanToolResult()` (signal generation + policy engine at
+   * stage `tool_result`).
+   *
+   * On block: the wrapped execute returns `{ blocked, reason, ruleId }`
+   * instead of the original content. The LLM never sees the blocked value.
+   *
+   * @example
+   * ```ts
+   * const tools = {
+   *   read_file: processor.wrapTool(readFileTool),
+   *   write_file: processor.wrapTool(writeFileTool),
+   * };
+   * const agent = new Agent({ tools, ... });
+   * ```
+   */
+  wrapTool<T extends MastraTool>(tool: T): T {
+    if (this.config.scanToolResults === false) return tool;
+    return wrapToolWithGovernance(tool, {
+      governance: this.governance,
+      agentId: this.agentId ?? this.config.agentId ?? "",
+      agentName: this.config.agentName,
+      agentLevel: this.agentLevel,
+      toolFieldExtraction: this.config.toolFieldExtraction,
+      injectionThreshold: this.config.toolResultInjectionThreshold,
+      toolResultScans: this.config.toolResultScans,
+      metadata: this.config.metadata,
+    });
+  }
+
+  /**
+   * Bulk-wrap a tools dict. Convenience over calling `wrapTool` for each.
+   *
+   * @example
+   * ```ts
+   * const agent = new Agent({
+   *   tools: processor.wrapTools({ read_file, write_file, take_screenshot }),
+   *   ...
+   * });
+   * ```
+   */
+  wrapTools<T extends Record<string, MastraTool>>(tools: T): T {
+    if (this.config.scanToolResults === false) return tools;
+    return wrapToolsWithGovernance(tools, {
+      governance: this.governance,
+      agentId: this.agentId ?? this.config.agentId ?? "",
+      agentName: this.config.agentName,
+      agentLevel: this.agentLevel,
+      toolFieldExtraction: this.config.toolFieldExtraction,
+      injectionThreshold: this.config.toolResultInjectionThreshold,
+      toolResultScans: this.config.toolResultScans,
+      metadata: this.config.metadata,
     });
   }
 

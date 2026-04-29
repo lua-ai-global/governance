@@ -27,6 +27,7 @@ import type { GovernanceInstance, AuditEvent } from "../index";
 import type { EnforcementDecision, PolicyAction } from "../policy";
 import type { AgentRegistration } from "../types";
 import { detectInjection } from "../injection-detect.js";
+import { scanToolResult } from "../tool-result-scan.js";
 import type {
   MCPCallToolRequest,
   MCPCallToolResult,
@@ -156,21 +157,32 @@ export async function createGovernedMCP(
     try {
       const output = await toolCallHandler(request);
 
-      // Scan text content in tool output for injection patterns
+      // Scan tool output through the policy engine at stage="tool_result".
+      // Replaces the legacy inline detectInjection() throw with a uniform
+      // signal-then-enforce pattern shared with the Mastra wrapTool helper:
+      // detectInjection populates ctx.mlInjectionScore as a signal; the
+      // engine evaluates every applicable rule (ml_injection_guard,
+      // sensitive_data_filter, output_pattern, scope_boundary, composites,
+      // kill switch); first matching rule's outcome wins.
       if (config.scanToolOutputs !== false) {
-        for (const block of output.content) {
-          if (block.type === "text" && block.text) {
-            const scan = detectInjection(block.text, { threshold: config.outputInjectionThreshold ?? 0.6 });
-            if (scan.detected) {
-              await audit(toolName, "failure", {
-                injectionInOutput: true, score: scan.score, patterns: scan.patterns,
-              });
-              throw new GovernanceBlockedError(
-                { blocked: true, reason: `Injection detected in tool output (score: ${scan.score})`, ruleId: null, outcome: "block", evaluatedAt: new Date().toISOString(), rulesEvaluated: 0 },
-                toolName,
-              );
-            }
-          }
+        const scanned = await scanToolResult({
+          governance,
+          agentId: result.id,
+          agentName: config.agentName,
+          tool: toolName,
+          args: args as Record<string, unknown> | undefined,
+          result: output.content,
+          injectionThreshold: config.outputInjectionThreshold ?? 0.6,
+          metadata: { source: "mcp", contentTypes: output.content.map((c) => c.type) },
+        });
+        if (scanned.blocked) {
+          await audit(toolName, "failure", {
+            injectionInOutput: true,
+            reason: scanned.decision.reason,
+            ruleId: scanned.decision.ruleId,
+            outcome: scanned.decision.outcome,
+          });
+          throw new GovernanceBlockedError(scanned.decision, toolName);
         }
       }
 

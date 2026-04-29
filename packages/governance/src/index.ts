@@ -134,6 +134,19 @@ export interface GovernanceInstance {
   enforce: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
   /** Evaluate only preprocess-stage rules */
   enforcePreprocess: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
+  /**
+   * Evaluate only tool_result-stage rules.
+   *
+   * The `tool_result` stage runs after a tool returns and before the LLM
+   * ingests the result on the next turn. Use this when you've intercepted
+   * a tool's output (e.g. via wrapTool() or the MCP adapter) and want
+   * stage-scoped enforcement on the returned content.
+   *
+   * For most callers, prefer `scanToolResult()` from `tool-result-scan.ts`
+   * — it does the signal generation (detectInjection → mlInjectionScore)
+   * and field extraction in addition to calling this method.
+   */
+  enforceToolResult: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
   /** Evaluate only postprocess-stage rules */
   enforcePostprocess: (ctx: EnforcementContext) => Promise<EnforcementDecision>;
   /**
@@ -568,6 +581,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   }
 
   const enforcePreprocess = (ctx: EnforcementContext) => enforceStage(ctx, "preprocess");
+  const enforceToolResult = (ctx: EnforcementContext) => enforceStage(ctx, "tool_result");
   const enforcePostprocess = (ctx: EnforcementContext) => enforceStage(ctx, "postprocess");
 
   // Expose read-only policy view — mutations go through addRule/removeRule
@@ -642,7 +656,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   }
 
   const instance: GovernanceInstance = {
-    register, enforce, enforcePreprocess, enforcePostprocess, audit,
+    register, enforce, enforcePreprocess, enforceToolResult, enforcePostprocess, audit,
     recordOutcome,
     score: scoreAgentFn, scoreFleet: scoreFleetFn,
     policies: readonlyPolicies, storage, addRule, removeRule,
@@ -694,6 +708,8 @@ export { inputBlocklist, inputLength, inputPattern, networkAllowlist, scopeBound
 export { mlInjectionGuard } from "./policy-presets.js";
 export { runWithOutcome } from "./action-recorder.js";
 export type { RunWithOutcomeOptions } from "./action-recorder.js";
+export { scanToolResult, extractScannableText } from "./tool-result-scan.js";
+export type { ScanToolResultInput, ScanToolResultOutput, BlockedToolResult } from "./tool-result-scan.js";
 export { SENSITIVE_PATTERNS, getSensitivePatterns } from "./conditions/sensitive-patterns.js";
 export type { SensitivePattern } from "./conditions/sensitive-patterns.js";
 export { maskSensitiveData, maskPattern, maskBlocklistTerms } from "./mask.js";

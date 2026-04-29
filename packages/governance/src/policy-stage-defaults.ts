@@ -28,7 +28,19 @@ const STAGE_MAP: Record<string, PolicyStage> = {
   cost_budget: "process",
   concurrent_limit: "process",
 
-  // Postprocess — run after execution
+  // Tool result — run after a tool returns, before the LLM ingests the result
+  // on the next turn. This is where injection scanning of external content
+  // (file contents, clipboard, scraped pages, MCP returns) belongs — the
+  // canonical untrusted-content surface. ml_injection_guard defaults here
+  // because that's where the host populates ctx.mlInjectionScore via
+  // detectInjection (local mode) or DeBERTa preflight (cloud mode).
+  ml_injection_guard: "tool_result",
+
+  // Postprocess — run after execution, on the agent's final output to the user.
+  // sensitive_data_filter stays here for back-compat — users who want it on
+  // tool returns set stage: "tool_result" explicitly on their rule. Different
+  // threat models: postprocess protects the user from agent leaks; tool_result
+  // protects the LLM context from external-content injection.
   output_length: "postprocess",
   output_pattern: "postprocess",
   sensitive_data_filter: "postprocess",

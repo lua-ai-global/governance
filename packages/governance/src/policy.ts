@@ -23,7 +23,22 @@ export type PolicyAction =
 
 export type PolicyOutcome = "allow" | "block" | "warn" | "require_approval" | "mask";
 
-export type PolicyStage = "preprocess" | "process" | "postprocess";
+/**
+ * Pipeline stages, in execution order:
+ *
+ *   preprocess  — user input before LLM (injection scanning, blocklists, length)
+ *   process     — tool calls after LLM, before tool execution (block-tools, approval, budgets)
+ *   tool_result — tool returns AFTER execution, before LLM ingests on next turn
+ *                 (injection scanning of tool returns, scope re-checks, output redaction
+ *                 of external content)
+ *   postprocess — agent's final output before user (PII redaction, output filtering)
+ *
+ * `tool_result` exists separately from `postprocess` because the threat model
+ * is different: tool_result protects the LLM context from external-content
+ * injection; postprocess protects the user from agent leaks. Different default
+ * conditions, different audit semantics.
+ */
+export type PolicyStage = "preprocess" | "process" | "tool_result" | "postprocess";
 
 export interface PolicyRule {
   id: string;

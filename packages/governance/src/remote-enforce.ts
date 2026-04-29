@@ -6,7 +6,7 @@
  * graceful fallback on failure, and connection health checking.
  */
 
-import type { EnforcementContext, EnforcementDecision } from "./policy.js";
+import type { EnforcementContext, EnforcementDecision, PolicyStage } from "./policy.js";
 import type { AgentRegistration, GovernanceAssessment } from "./types.js";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ export function createRemoteEnforcer(config: RemoteConfig) {
 
   async function remoteEnforce(
     ctx: EnforcementContext,
-    stage?: "preprocess" | "process" | "postprocess",
+    stage?: PolicyStage,
   ): Promise<EnforcementDecision> {
     const endpoint = stage
       ? `${baseUrl}/api/v1/enforce/${stage}`

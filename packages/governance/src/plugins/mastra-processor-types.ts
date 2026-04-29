@@ -16,6 +16,7 @@
 
 import type { EnforcementDecision, PolicyAction } from "../policy";
 import type { AgentFramework } from "../types";
+import type { ToolFieldExtractionRegistry } from "./mastra-processor-tool-wrap.js";
 
 // ─── Mastra Processor Types ────────────────────────────────────
 
@@ -337,6 +338,42 @@ export interface GovernanceProcessorConfig {
   streamLookbackChars?: number;
   /** Fired when a stream chunk is blocked by a rule. */
   onStreamBlocked?: (decision: EnforcementDecision, chunkText: string) => void;
+
+  // ─── Tool-result scanning (wrapTool / wrapTools) — 0.14.0 ────
+  /**
+   * Master switch for tool-result governance via `wrapTool` / `wrapTools`.
+   * Default: `true`. Set to `false` to make those methods no-op (return
+   * the tool unchanged) — useful for test environments that mock tool
+   * returns and don't want the scan to run.
+   *
+   * Note: this only affects the wrap helpers. Existing pre-call governance
+   * via `processOutputStep` is unaffected and always runs.
+   */
+  scanToolResults?: boolean;
+  /**
+   * Per-tool override for `scanToolResults`. Keys are tool names
+   * (Mastra `tool.id`). Use `"never"` to skip scanning a specific tool
+   * even when `scanToolResults: true` globally.
+   */
+  toolResultScans?: Record<string, "always" | "never">;
+  /**
+   * Per-tool registry mapping input arg names to EnforcementContext fields.
+   * Without this, rules like `scope_boundary: { allowedPaths }` and
+   * `network_allowlist: { allowedDomains }` silently never fire — the
+   * engine reads `ctx.targetPath` / `ctx.targetUrl`, not raw `args.path`.
+   *
+   * Generic defaults cover the common conventions (`path` → `targetPath`,
+   * `url` → `targetUrl`, etc.) so most tools work without an explicit
+   * entry. Add a per-tool entry when args use non-standard names or to
+   * map multiple args.
+   */
+  toolFieldExtraction?: ToolFieldExtractionRegistry;
+  /**
+   * Detection threshold for the local injection signal (0-1) computed by
+   * `detectInjection()` and passed to the engine via `ctx.mlInjectionScore`.
+   * Default 0.5. Lower = more aggressive flagging; higher = more permissive.
+   */
+  toolResultInjectionThreshold?: number;
 
   // ─── Cross-stage callbacks — 0.8.0 ───────────────────────────
   /**
