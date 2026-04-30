@@ -53,6 +53,69 @@ and additive. Existing tests that mock tool returns may need
 `scanToolResults: false` if they don't expect the helper's path engine
 to run on their fixtures.
 
+### Added — `governance-sdk/scan/multi-modal` (opt-in)
+
+Closes the bypass where image, PDF, and audio content blocks pass through
+`enforce()` unscanned. Ships orchestration only — actual OCR / PDF parsing
+/ ASR are caller-supplied via a registry pattern, preserving the zero-
+runtime-dep promise. Mirrors the `InjectionClassifier` shape: pluggable
+async scanner + global registry + pre-`enforce()` invocation.
+
+```ts
+import {
+  registerModalityScanner,
+  scanMultiModal,
+  isFailClosed,
+} from 'governance-sdk/scan/multi-modal';
+
+registerModalityScanner('image', {
+  extractText: async (block) => await ocrEngine.recognize(block),
+});
+
+const scan = await scanMultiModal(blocks, {
+  enabled: ['text', 'image'],
+  onMissingScanner: 'block',
+  onExtractError: 'block',
+  timeoutMs: 5_000,
+});
+
+if (scan.failClosed) { /* block before enforce() */ }
+// otherwise: feed scan.text into the existing detectInjection / hybridDetect
+```
+
+Conservative defaults — every modality except `text` is OFF until the
+caller opts in. `onMissingScanner` / `onExtractError` default to `'skip'`;
+`timeoutMs` defaults to 30s per block.
+
+`result.failClosed` is pre-evaluated against the policy passed in —
+trust it directly. `isFailClosed(result, override?)` is available for
+callers wanting to apply a different policy after the fact (defaults to
+`result.policy` when no override is given).
+
+Failure modes recorded in `result.blocked[]`:
+- `no_scanner` — enabled modality with no extractor registered.
+- `extract_error` — scanner threw, rejected, or returned a non-string.
+- `extract_timeout` — scanner exceeded `timeoutMs`.
+
+Scanner returning `null` is the documented benign signal "this block has
+no extractable text" (e.g. a purely visual image). Recorded in
+`result.modalitiesEmpty[]`, NOT `blocked[]`, and never triggers fail-
+closed regardless of policy.
+
+### Changed — README honesty pass
+
+- 12 framework integrations (was undercounted as "10")
+- 47 export paths (was "44")
+- 1,340 tests (was "1,328")
+- Plugin export list now lists all 16 paths — previously omitted
+  `mcp-allowlist` and `mcp-call-recorder`
+- Tamper-evident HMAC audit chain promoted from a body-text mention to a
+  hero-section callout (it's a real competitive differentiator)
+- Sandboxing reframed: leads with "Process isolation is the security
+  model" instead of "No sandbox," same disclaimer scoped as a deliberate
+  choice rather than a gap
+- "What this is NOT" → "Limitations & Honest Scope"
+
 ## [0.14.1] - 2026-04-30 — Field extraction on the `process` stage
 
 `scope_boundary` and `network_allowlist` rules at stage `process` (the
