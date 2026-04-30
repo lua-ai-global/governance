@@ -73,6 +73,10 @@
       "types": "./dist/scanner-plugins/types.d.ts",
       "import": "./dist/scanner-plugins/types.js"
     },
+    "./scan/multi-modal": {
+      "types": "./dist/scan/multi-modal.d.ts",
+      "import": "./dist/scan/multi-modal.js"
+    },
     "./policy-compose": {
       "types": "./dist/policy-compose.d.ts",
       "import": "./dist/policy-compose.js"

@@ -91,13 +91,15 @@ is exactly what it does and does not do:
   Tool executions **inside** AWS action groups are opaque — the adapter
   cannot see them, let alone block them. Use `guardToolUse()` to enforce
   at the tool level manually, or push tool calls onto the host side.
-- **Multi-modal content is not scanned by default.** Image, PDF, and audio
-  blocks on Anthropic/Vercel AI/Genkit/LlamaIndex/Bedrock pass through
-  without injection detection in the current release — a vision-enabled
-  agent bypasses every input scan unless you wire your own scanner.
-  Opt-in per-modality scanning (image OCR, PDF text extract, Whisper for
-  audio) is on the near-term roadmap; cost, latency, and data-egress
-  considerations mean it will ship as opt-in, not on-by-default.
+- **Multi-modal scanning is opt-in.** Image, PDF, and audio blocks pass
+  through without injection detection by default. Register a per-modality
+  extractor with `registerModalityScanner()` and call `scanMultiModal()`
+  from `governance-sdk/scan/multi-modal` before `enforce()`; the result's
+  concatenated text feeds the existing cascade. The SDK ships the
+  orchestration only — the actual OCR / PDF parser / ASR is caller-
+  supplied so the zero-dep promise stands. Defaults to text-only;
+  per-block timeouts and fail-closed semantics (`onMissingScanner`,
+  `onExtractError`) are configurable.
 
 ## Packages
 
