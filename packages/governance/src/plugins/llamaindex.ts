@@ -116,6 +116,17 @@ function createResultScanner(
       args, result: output,
       injectionThreshold: config.toolResultInjectionThreshold,
     });
+    // BlockedToolResult.ruleId is `string | null`, but LlamaIndexJSONValue
+    // explicitly excludes `null` per the SDK contract. Coerce on block so
+    // downstream LlamaIndex JSON walkers don't trip on the null property.
+    if (scanned.blocked) {
+      const blocked = scanned.result as { blocked: true; reason: string; ruleId: string | null };
+      return {
+        blocked: true,
+        reason: blocked.reason,
+        ruleId: blocked.ruleId ?? "unknown",
+      };
+    }
     return scanned.result as LlamaIndexJSONValue;
   };
 }

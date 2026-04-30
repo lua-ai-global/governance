@@ -144,7 +144,14 @@ function wrapTool(
         const output = await tool.invoke!(ctx, args, details);
         const finalOutput = await scanResult(tool.name, parsed, output);
         await audit(tool.name, "success");
-        return finalOutput;
+        // The SDK types `invoke` as Promise<string> (the value flows into
+        // the Responses API's function_call_output, which requires a
+        // string). When the original tool returned a string and we passed
+        // through (allow), keep it as-is. When scanToolResult substituted
+        // a BlockedToolResult object on block / require_approval,
+        // serialise it so the LLM sees a parseable JSON string instead
+        // of [object Object] when the SDK builds the API payload.
+        return typeof finalOutput === "string" ? finalOutput : JSON.stringify(finalOutput);
       } catch (error) {
         await audit(tool.name, "failure", { error: error instanceof Error ? error.message : String(error) });
         throw error;
