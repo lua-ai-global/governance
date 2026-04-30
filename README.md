@@ -23,13 +23,19 @@ Three things make governance real, and this SDK does all three:
 
 Everything downstream (scoring, audit, compliance) follows from those three.
 
+**Proof, not promises — tamper-evident audit by default.** Every `enforce()`
+decision and `recordOutcome()` outcome can be HMAC hash-chained (opt in with
+`integrityAudit: { signingKey }`). Any edit, deletion, or sequence-renumber
+breaks chain verification — verifiable offline anywhere with just the
+secret. No competitor in the comparison table below ships this.
+
 ## How it compares
 
 | | governance-sdk | NVIDIA NeMo Guardrails | Guardrails AI | LangChain guardrails |
 |---|:-:|:-:|:-:|:-:|
 | Runtime dependencies | **0** | Python runtime + LLM | Python + validator stack | LangChain |
 | TypeScript-first | **✅** | ❌ (Python) | ❌ (Python) | ✅ |
-| Framework-agnostic | **✅ (10 adapters)** | Rails-only | Model-wrapping | LangChain-only |
+| Framework-agnostic | **✅ (12 framework integrations)** | Rails-only | Model-wrapping | LangChain-only |
 | Policy *enforcement* (block/approval/mask) | **✅** | ✅ | ✅ | Partial |
 | Behavioral scoring / trust levels | **✅** | ❌ | ❌ | ❌ |
 | Tamper-evident audit (HMAC chain) | **✅** | ❌ | ❌ | ❌ |
@@ -39,15 +45,20 @@ Everything downstream (scoring, audit, compliance) follows from those three.
 
 `governance-sdk` is the only option that's zero-dep TypeScript, framework-agnostic, and maps to all four major AI-governance standards out of the box.
 
-## What this is NOT
+## Limitations & Honest Scope
 
 The SDK is a **thin client** for local policy evaluation, scoring, and
-detection — nothing more. To pre-empt scope questions:
+detection — nothing more. To pre-empt procurement and scope questions, here
+is exactly what it does and does not do:
 
 - **Kill switch is per-process**, not fleet-wide. Distributed halt lives in
   Lua Governance Cloud or your own pub/sub.
-- **No sandbox.** `node:vm` is not a security boundary (per Node docs). Use
-  containers, gVisor, or Firecracker for untrusted code.
+- **Process isolation is the security model.** The SDK runs as in-process
+  TypeScript — `node:vm` is intentionally **not** used as a sandbox (per Node
+  docs, it's not a security boundary). For untrusted code execution, isolate
+  at the container/VM layer (containers, gVisor, Firecracker). This is a
+  deliberate scope choice: the SDK governs *known-trusted* application code
+  calling LLMs and tools, not arbitrary attacker-supplied JS.
 - **No federation.** Cross-org policy replication and signed posture exchange
   are not currently shipped in either the SDK or Lua Governance Cloud.
 - **Injection detection is high-precision / low-recall** — regex baseline F1
@@ -80,16 +91,19 @@ detection — nothing more. To pre-empt scope questions:
   Tool executions **inside** AWS action groups are opaque — the adapter
   cannot see them, let alone block them. Use `guardToolUse()` to enforce
   at the tool level manually, or push tool calls onto the host side.
-- **Multi-modal content is not scanned.** Image, PDF, and audio blocks
-  on Anthropic/Vercel AI/Genkit/LlamaIndex/Bedrock are passed through
-  without injection detection. A vision-enabled agent bypasses every
-  input scan in this release. Multi-modal coverage lands in 0.13.
+- **Multi-modal content is not scanned by default.** Image, PDF, and audio
+  blocks on Anthropic/Vercel AI/Genkit/LlamaIndex/Bedrock pass through
+  without injection detection in the current release — a vision-enabled
+  agent bypasses every input scan unless you wire your own scanner.
+  Opt-in per-modality scanning (image OCR, PDF text extract, Whisper for
+  audio) is on the near-term roadmap; cost, latency, and data-egress
+  considerations mean it will ship as opt-in, not on-by-default.
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| [`governance-sdk`](./packages/governance) | Core SDK — policy engine, scoring, injection detection, audit, compliance, standards mapping, 10 framework adapters. **0 runtime deps.** |
+| [`governance-sdk`](./packages/governance) | Core SDK — policy engine, scoring, injection detection, audit, compliance, standards mapping, 12 framework integrations (10 featured + MCP toolkit + Bedrock). **0 runtime deps.** |
 | [`governance-sdk-platform`](./packages/governance-platform) | Optional PostgreSQL storage layer — auto-migrating schema, org settings, policy tiers. |
 
 ## Quick Start
@@ -613,7 +627,7 @@ const middleware = createGovernanceMiddleware(gov, {
 
 ## Export Paths
 
-The SDK ships **44 targeted exports** so you can import only what you need:
+The SDK ships **47 targeted exports** so you can import only what you need:
 
 ```
 # Core
@@ -661,7 +675,7 @@ governance-sdk/otel-hooks                  governance-prefixed span shape (passi
 governance-sdk/scanner-plugins             scanner plugin interface
 governance-sdk/token-types                 token type guards
 
-# Framework adapters (10 featured + 3 specialty)
+# Framework integrations (10 featured + MCP toolkit + Bedrock)
 governance-sdk/plugins/mastra
 governance-sdk/plugins/mastra-processor
 governance-sdk/plugins/vercel-ai
@@ -672,10 +686,12 @@ governance-sdk/plugins/genkit
 governance-sdk/plugins/llamaindex
 governance-sdk/plugins/mistral
 governance-sdk/plugins/ollama
-governance-sdk/plugins/mcp
-governance-sdk/plugins/mcp-trust
-governance-sdk/plugins/mcp-chain-audit
-governance-sdk/plugins/bedrock
+governance-sdk/plugins/mcp                  # build a governed MCP server
+governance-sdk/plugins/mcp-trust            # trusted-server allowlist + capability tags
+governance-sdk/plugins/mcp-allowlist        # tool/resource allowlist enforcement
+governance-sdk/plugins/mcp-chain-audit      # caller-driven chain-of-custody audit
+governance-sdk/plugins/mcp-call-recorder    # nested-invocation call recorder
+governance-sdk/plugins/bedrock              # entry-gate only (action groups opaque)
 ```
 
 `runWithOutcome()` (a thin helper around `gov.recordOutcome`) is exposed at the
@@ -684,8 +700,8 @@ top-level package export — `import { runWithOutcome } from 'governance-sdk'`.
 ## Project Stats
 
 - **0** runtime dependencies
-- **1,328** tests, 0 failures (`npm test`)
-- **44** export paths — tree-shakeable, import only what you use
+- **1,340** tests, 0 failures (`npm test`)
+- **47** export paths — tree-shakeable, import only what you use
 - **TypeScript strict mode**, no `any` types in source
 - **MIT licensed**
 
