@@ -38,6 +38,7 @@ export type {
 
 import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 import type { OutcomeCallbacks } from "./outcome-handler.js";
+import { scanToolResult } from "../tool-result-scan.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 
@@ -99,10 +100,35 @@ function createAuditor(governance: GovernanceInstance, agentId: string) {
     });
 }
 
+/**
+ * Build a result-scan closure bound to this governance instance + agent.
+ * Returned function: takes the tool's raw output, runs it through the
+ * policy engine at stage="tool_result", returns either the original
+ * output (allow) or a redacted detail object (block / require_approval).
+ *
+ * No-op when `config.scanToolResults === false`. Default-on so any
+ * Genkit user upgrading to SDK 0.15+ gets injection scanning of tool
+ * returns automatically — same default as the Mastra processor.
+ */
+function createResultScanner(
+  governance: GovernanceInstance, agentId: string, config: GovernGenkitConfig,
+) {
+  return async (toolName: string, args: Record<string, unknown> | undefined, output: unknown): Promise<unknown> => {
+    if (config.scanToolResults === false) return output;
+    const scanned = await scanToolResult({
+      governance, agentId, agentName: config.agentName, tool: toolName,
+      args, result: output,
+      injectionThreshold: config.toolResultInjectionThreshold,
+    });
+    return scanned.result;
+  };
+}
+
 function wrapTool(
   tool: GenkitTool,
   enforce: ReturnType<typeof createEnforcer>,
   audit: ReturnType<typeof createAuditor>,
+  scanResult: ReturnType<typeof createResultScanner>,
 ): GenkitTool {
   return {
     ...tool,
@@ -111,8 +137,11 @@ function wrapTool(
       const decision = await enforce(tool.name, inputRecord);
       try {
         const output = await tool.call(input, options);
+        // Scan tool result before returning to the agent loop. On block
+        // the LLM gets a redacted detail object in place of the original.
+        const finalOutput = await scanResult(tool.name, inputRecord, output);
         await audit(tool.name, "success");
-        return output;
+        return finalOutput;
       } catch (error) {
         await audit(tool.name, "failure", { error: error instanceof Error ? error.message : String(error) });
         throw error;
@@ -134,9 +163,10 @@ export async function governGenkitTools(
 
   const enforce = createEnforcer(governance, result.id, config);
   const audit = createAuditor(governance, result.id);
+  const scanResult = createResultScanner(governance, result.id, config);
 
   return {
-    tools: tools.map((tool) => wrapTool(tool, enforce, audit)),
+    tools: tools.map((tool) => wrapTool(tool, enforce, audit, scanResult)),
     agentId: result.id,
     score: result.score,
     level: result.level,

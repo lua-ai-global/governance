@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.15.0] - 2026-04-30 — Tool-result scanning across the framework adapters
+
+0.14 wired tool-result scanning into the Mastra processor and MCP adapter
+only. 0.15 rolls the same protection out to the four other adapters that
+already do tool wrapping at construction time:
+
+- **LangChain** — `tool.invoke` wrap (in both `governTool` and `governTools`)
+- **OpenAI Agents** — `tool.invoke` AND `tool.execute` wraps
+- **Genkit** — `tool.call` wrap
+- **LlamaIndex** — `tool.call` wrap
+
+For each, the wrapped invoke/call/execute now runs the tool's return value
+through `scanToolResult()` (the same shared signal-then-enforce helper
+the Mastra processor uses) at stage `tool_result` before returning. On
+block, a `{ blocked, reason, ruleId }` redacted detail object replaces
+the original output, so the LLM never ingests the poisoned content.
+
+### Added — `scanToolResults` config flag on each adapter
+
+```ts
+const { tools } = await governLangChainTools(gov, [searchTool], {
+  agentName: "my-agent",
+  scanToolResults: true,           // default — opt-out via false
+  toolResultInjectionThreshold: 0.5,
+});
+```
+
+Default `true` (matches the Mastra processor default). Existing callers
+who upgrade to 0.15 get tool-result scanning automatically; set
+`scanToolResults: false` to skip — useful for test environments that
+mock tool returns.
+
+### What didn't change
+
+- **Anthropic / Mistral / Ollama** still use a caller-driven
+  `handleToolUse` / `handleToolCall` pattern. Tool-result scanning here
+  has to be integrated at the call site by the user — the SDK can't
+  intercept transparently. Consider using `gov.scanToolResult()` in
+  your handler manually.
+- **Vercel AI** — no native tool-wrapping path on this adapter today.
+  Tracked as a follow-up; for now use `scanOutput` on model output.
+- **Bedrock** — entry-gate only; tool execution happens inside AWS,
+  no post-execute hook is exposed by Bedrock Agents.
+- **Mastra middleware adapter** (`mastra.ts`, not the processor) — uses
+  a different wrap shape; coverage to follow.
+
+### Migration
+
+Drop-in. No public type breakage. The new config fields are optional
+and additive. Existing tests that mock tool returns may need
+`scanToolResults: false` if they don't expect the helper's path engine
+to run on their fixtures.
+
 ## [0.14.1] - 2026-04-30 — Field extraction on the `process` stage
 
 `scope_boundary` and `network_allowlist` rules at stage `process` (the

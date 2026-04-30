@@ -82,6 +82,20 @@ export interface GovernGenkitConfig {
   onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (toolName: string) => PolicyAction;
   sessionTokenTracker?: () => number;
+  /**
+   * Master switch for tool-result scanning (governance-sdk 0.15+).
+   * Default: `true`. Wrapped tools run their return values through the
+   * policy engine at stage `tool_result` before returning. On block,
+   * the redacted detail object replaces the original output so the
+   * agent never ingests poisoned tool content. Set `false` to skip
+   * — useful for test environments that mock tool returns.
+   */
+  scanToolResults?: boolean;
+  /**
+   * Detection threshold for the local injection signal (0-1) that
+   * `scanToolResult` populates on `ctx.mlInjectionScore`. Default 0.5.
+   */
+  toolResultInjectionThreshold?: number;
 }
 
 // ─── Results ────────────────────────────────────────────────

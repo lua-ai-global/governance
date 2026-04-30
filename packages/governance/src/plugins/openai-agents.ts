@@ -43,6 +43,7 @@ export type {
 
 import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 import type { OutcomeCallbacks } from "./outcome-handler.js";
+import { scanToolResult } from "../tool-result-scan.js";
 
 // ─── Blocked Error ──────────────────────────────────────────
 
@@ -103,10 +104,31 @@ function createAuditor(governance: GovernanceInstance, agentId: string) {
     });
 }
 
+/**
+ * Build a result-scan closure bound to this governance + agent. Runs
+ * the tool's raw output through the policy engine at stage `tool_result`
+ * and returns either the original (allow) or a redacted detail object
+ * (block). No-op when `config.scanToolResults === false`.
+ */
+function createResultScanner(
+  governance: GovernanceInstance, agentId: string, config: GovernAgentConfig,
+) {
+  return async (toolName: string, args: Record<string, unknown> | undefined, output: unknown): Promise<unknown> => {
+    if (config.scanToolResults === false) return output;
+    const scanned = await scanToolResult({
+      governance, agentId, agentName: config.agentName, tool: toolName,
+      args, result: output,
+      injectionThreshold: config.toolResultInjectionThreshold,
+    });
+    return scanned.result;
+  };
+}
+
 function wrapTool(
   tool: OpenAIFunctionTool,
   enforce: ReturnType<typeof createEnforcer>,
   audit: ReturnType<typeof createAuditor>,
+  scanResult: ReturnType<typeof createResultScanner>,
 ): OpenAIFunctionTool {
   const hasHandler = tool.invoke ?? tool.execute;
   if (!hasHandler) return tool;
@@ -120,8 +142,16 @@ function wrapTool(
       const decision = await enforce(tool.name, parsed);
       try {
         const output = await tool.invoke!(ctx, args, details);
+        const finalOutput = await scanResult(tool.name, parsed, output);
         await audit(tool.name, "success");
-        return output;
+        // The SDK types `invoke` as Promise<string> (the value flows into
+        // the Responses API's function_call_output, which requires a
+        // string). When the original tool returned a string and we passed
+        // through (allow), keep it as-is. When scanToolResult substituted
+        // a BlockedToolResult object on block / require_approval,
+        // serialise it so the LLM sees a parseable JSON string instead
+        // of [object Object] when the SDK builds the API payload.
+        return typeof finalOutput === "string" ? finalOutput : JSON.stringify(finalOutput);
       } catch (error) {
         await audit(tool.name, "failure", { error: error instanceof Error ? error.message : String(error) });
         throw error;
@@ -135,8 +165,9 @@ function wrapTool(
       const decision = await enforce(tool.name, args);
       try {
         const output = await tool.execute!(args);
+        const finalOutput = await scanResult(tool.name, args, output);
         await audit(tool.name, "success");
-        return output;
+        return finalOutput;
       } catch (error) {
         await audit(tool.name, "failure", { error: error instanceof Error ? error.message : String(error) });
         throw error;
@@ -161,7 +192,8 @@ export async function governAgent<T extends OpenAIAgent>(
 
   const enforce = createEnforcer(governance, result.id, config);
   const audit = createAuditor(governance, result.id);
-  const wrappedTools = (agent.tools ?? []).map((tool) => tool.type === "function" ? wrapTool(tool, enforce, audit) : tool);
+  const scanResult = createResultScanner(governance, result.id, config);
+  const wrappedTools = (agent.tools ?? []).map((tool) => tool.type === "function" ? wrapTool(tool, enforce, audit, scanResult) : tool);
 
   return {
     agent: { ...agent, tools: wrappedTools } as T,
@@ -187,9 +219,10 @@ export async function governTools(
 
   const enforce = createEnforcer(governance, result.id, config);
   const audit = createAuditor(governance, result.id);
+  const scanResult = createResultScanner(governance, result.id, config);
 
   return {
-    tools: tools.map((tool) => wrapTool(tool, enforce, audit)),
+    tools: tools.map((tool) => wrapTool(tool, enforce, audit, scanResult)),
     agentId: result.id,
     score: result.score,
     level: result.level,
