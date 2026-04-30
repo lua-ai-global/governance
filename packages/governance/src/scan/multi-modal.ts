@@ -22,9 +22,11 @@
  *   3. The returned `text` is the concatenation of all scanned blocks. Run
  *      it through `detectInjection()` / `hybridDetect()` and populate
  *      `ctx.mlInjectionScore` as usual.
- *   4. If `result.blocked.length > 0`, treat as fail-closed (set the score
- *      to 1.0 or block out-of-band). The SDK does not auto-block — it
- *      surfaces the failure so policy can decide.
+ *   4. If `result.failClosed` is true, fail closed — set the score to
+ *      1.0 or block out-of-band. The flag is pre-evaluated against the
+ *      `onMissingScanner` / `onExtractError` options you passed to
+ *      `scanMultiModal`. Use `isFailClosed(result, override)` only if
+ *      you want to apply a different policy after the fact.
  *
  * Mirrors the InjectionClassifier pattern in `injection-classifier.ts` —
  * same async hook + global registry + pre-`enforce()` invocation shape.
@@ -43,9 +45,10 @@ export type Modality = "text" | "image" | "pdf" | "audio";
 export interface ModalityScanner {
   /**
    * Extract scannable text from `block`. Return `null` if the block has
-   * no extractable text (e.g. an image that's purely visual). Throw or
-   * reject to signal a failure that the orchestrator should classify as
-   * an unscannable block.
+   * no extractable text (e.g. an image that's purely visual). This is
+   * a successful, valid outcome and never triggers fail-closed. Throw
+   * or reject to signal a failure that the orchestrator should classify
+   * as an unscannable block.
    */
   extractText(block: unknown): Promise<string | null>;
 }
@@ -64,14 +67,30 @@ export interface ContentBlock {
   data?: unknown;
 }
 
+/** Scan failures that may warrant fail-closed treatment depending on policy. */
+export type ScanBlockReason = "no_scanner" | "extract_error" | "extract_timeout";
+
+/** Active policy controlling fail-closed evaluation. */
+export interface FailClosedPolicy {
+  onMissingScanner: "skip" | "block";
+  onExtractError: "skip" | "block";
+}
+
 /**
- * What the orchestrator did and didn't manage to scan. Callers should
- * fail-closed if `blocked.length > 0`.
+ * What the orchestrator did and didn't manage to scan. `failClosed` is
+ * pre-evaluated using the options that were passed to `scanMultiModal` —
+ * trust it directly. `isFailClosed(result, override)` is available if
+ * you need to reapply a different policy after the fact.
  */
 export interface MultiModalScanResult {
   /** Concatenation of all extracted text, separated by `\n\n`. */
   text: string;
-  /** Modalities for which at least one block was scanned successfully. */
+  /**
+   * Modalities for which at least one block was scanned successfully —
+   * including blocks that legitimately produced no text (`null` return
+   * for a purely visual image, etc.). The scan succeeded; text
+   * contribution may be empty.
+   */
   modalitiesScanned: Modality[];
   /**
    * Blocks that were intentionally not scanned because their modality
@@ -79,15 +98,30 @@ export interface MultiModalScanResult {
    */
   modalitiesSkipped: { modality: Modality; reason: "not_enabled" }[];
   /**
-   * Blocks the orchestrator could not scan: enabled-but-no-scanner,
-   * scanner threw, scanner timed out, or scanner returned null. Treat
-   * as fail-closed when `onMissingScanner` or `onExtractError` is `'block'`.
+   * Blocks where the scanner ran successfully but returned `null` /
+   * `undefined`, meaning the block has no extractable text (per the
+   * `ModalityScanner` contract — e.g. a purely visual image). Never a
+   * failure; never triggers fail-closed.
+   */
+  modalitiesEmpty: { modality: Modality }[];
+  /**
+   * Scan failures the orchestrator could not recover from:
+   * `no_scanner` (enabled but no extractor registered), `extract_error`
+   * (scanner threw / rejected / returned a non-string value),
+   * `extract_timeout` (scanner exceeded `timeoutMs`).
    */
   blocked: {
     modality: Modality;
-    reason: "no_scanner" | "extract_error" | "extract_timeout" | "extract_empty";
+    reason: ScanBlockReason;
     detail?: string;
   }[];
+  /**
+   * Pre-evaluated against the policy that was active when this scan ran.
+   * `true` if any block in `blocked[]` was fatal under that policy.
+   */
+  failClosed: boolean;
+  /** The policy applied when computing `failClosed`. */
+  policy: FailClosedPolicy;
   /** Wall-clock time spent in scanners + orchestration. */
   durationMs: number;
 }
@@ -102,17 +136,17 @@ export interface ScanOptions {
   /**
    * What to do when an enabled modality has no registered scanner:
    *   - `'skip'` (default): drop the block, record in `blocked[]` with
-   *     reason `no_scanner`.
-   *   - `'block'`: same plus the caller should treat the result as fail-closed.
-   *
-   * Both modes record the block; the difference is callers' interpretation.
-   * The orchestrator never throws — it surfaces the situation so policy
-   * can decide.
+   *     reason `no_scanner`, do NOT fail-closed.
+   *   - `'block'`: same recording, plus `failClosed` becomes `true`.
    */
   onMissingScanner?: "skip" | "block";
   /**
-   * What to do when a scanner throws or rejects. Same shape as
-   * `onMissingScanner`. Default: `'skip'`.
+   * What to do when a scanner throws, rejects, returns a non-string, or
+   * times out. Same shape as `onMissingScanner`. Default: `'skip'`.
+   *
+   * Does NOT apply to scanners returning `null` — that's the documented
+   * "no extractable text" signal and is recorded in `modalitiesEmpty[]`,
+   * not `blocked[]`.
    */
   onExtractError?: "skip" | "block";
   /**
@@ -204,9 +238,31 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<RaceResult<T>>
 }
 
 /**
+ * Evaluate fail-closed against `blocked[]` rows under the given policy.
+ * `extract_empty` is intentionally absent — null returns are valid per
+ * the ModalityScanner contract and live in `modalitiesEmpty[]`, not here.
+ */
+function evaluateFailClosed(
+  blocked: readonly { reason: ScanBlockReason }[],
+  policy: FailClosedPolicy,
+): boolean {
+  for (const b of blocked) {
+    if (b.reason === "no_scanner" && policy.onMissingScanner === "block") return true;
+    if (
+      (b.reason === "extract_error" || b.reason === "extract_timeout") &&
+      policy.onExtractError === "block"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Walk `blocks` and produce a single concatenated text payload along with
- * structured per-block scan results. Returns even when individual blocks
- * fail — `blocked[]` is the source of truth for fail-closed decisions.
+ * structured per-block scan results. `failClosed` is pre-evaluated against
+ * the `onMissingScanner` / `onExtractError` options passed in — callers
+ * can trust it directly.
  */
 export async function scanMultiModal(
   blocks: readonly ContentBlock[],
@@ -215,10 +271,15 @@ export async function scanMultiModal(
   const startedAt = Date.now();
   const enabled = toEnabledSet(options.enabled);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const policy: FailClosedPolicy = {
+    onMissingScanner: options.onMissingScanner ?? "skip",
+    onExtractError: options.onExtractError ?? "skip",
+  };
 
   const extractedTexts: string[] = [];
   const scannedSet = new Set<Modality>();
   const skipped: MultiModalScanResult["modalitiesSkipped"] = [];
+  const empty: MultiModalScanResult["modalitiesEmpty"] = [];
   const blocked: MultiModalScanResult["blocked"] = [];
 
   for (const block of blocks) {
@@ -281,11 +342,11 @@ export async function scanMultiModal(
 
     const value = raced.value;
     if (value === null || value === undefined) {
-      blocked.push({
-        modality,
-        reason: "extract_empty",
-        detail: "Scanner returned no text",
-      });
+      // Documented benign signal: "this block has no extractable text."
+      // Not a failure — record in modalitiesEmpty, count as scanned, no
+      // fail-closed implications.
+      empty.push({ modality });
+      scannedSet.add(modality);
       continue;
     }
 
@@ -306,26 +367,30 @@ export async function scanMultiModal(
     text: extractedTexts.join("\n\n"),
     modalitiesScanned: Array.from(scannedSet),
     modalitiesSkipped: skipped,
+    modalitiesEmpty: empty,
     blocked,
+    failClosed: evaluateFailClosed(blocked, policy),
+    policy,
     durationMs: Date.now() - startedAt,
   };
 }
 
 /**
- * True if the scan result requires fail-closed treatment given the policy
- * options. Mirrors the orchestrator's classification: `blocked[]` rows are
- * fatal when the corresponding option is `'block'`.
+ * Re-evaluate fail-closed against a different policy than the one used
+ * during `scanMultiModal`. Most callers should just check
+ * `result.failClosed` directly; reach for this only when you need to
+ * apply a stricter or more lenient policy after the fact.
+ *
+ * `extract_empty` is never fail-closed regardless of options — null
+ * returns from a scanner are documented benign signals.
  */
 export function isFailClosed(
   result: MultiModalScanResult,
-  options: Pick<ScanOptions, "onMissingScanner" | "onExtractError"> = {},
+  override?: Partial<FailClosedPolicy>,
 ): boolean {
-  const onMissing = options.onMissingScanner ?? "skip";
-  const onError = options.onExtractError ?? "skip";
-
-  for (const b of result.blocked) {
-    if (b.reason === "no_scanner" && onMissing === "block") return true;
-    if (b.reason !== "no_scanner" && onError === "block") return true;
-  }
-  return false;
+  const policy: FailClosedPolicy = {
+    onMissingScanner: override?.onMissingScanner ?? result.policy.onMissingScanner,
+    onExtractError: override?.onExtractError ?? result.policy.onExtractError,
+  };
+  return evaluateFailClosed(result.blocked, policy);
 }
