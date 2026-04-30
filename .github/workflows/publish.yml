@@ -3,7 +3,10 @@ on:
   push:
     tags: ['v*']
 permissions:
-  contents: read
+  # `contents: write` is needed for the "Create GitHub Release" step at
+  # the end (uses `gh release create`). Read-only is enough for the
+  # actual npm publish — that's authenticated via NODE_AUTH_TOKEN.
+  contents: write
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -39,3 +42,52 @@ jobs:
               npm publish -w "packages/$pkg" --access public
             fi
           done
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"          # e.g. v0.14.1
+          VERSION="${TAG#v}"                # e.g. 0.14.1
+          CHANGELOG="packages/governance/CHANGELOG.md"
+
+          # Skip if a release already exists for this tag (idempotent re-run).
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "✓ Release $TAG already exists, skipping"
+            exit 0
+          fi
+
+          # Pull the matching `## [VERSION] - DATE — TITLE` header so we can
+          # use the human-readable suffix as the release title. Falls back
+          # to the bare tag if the section isn't found.
+          HEADER=$(grep -E "^## \[$VERSION\]" "$CHANGELOG" | head -1 || true)
+          if [ -n "$HEADER" ]; then
+            TITLE_SUFFIX=$(echo "$HEADER" | sed -E "s/^## \[$VERSION\] - [0-9-]+ — //")
+            RELEASE_TITLE="$TAG — $TITLE_SUFFIX"
+          else
+            RELEASE_TITLE="$TAG"
+          fi
+
+          # Extract the CHANGELOG body for this version: everything between
+          # the version header and the next "## [" header (or end of file).
+          # The header line itself is dropped — the title carries that info.
+          NOTES_FILE=$(mktemp)
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { capture=1; next }
+            /^## \[/ && capture { exit }
+            capture { print }
+          ' "$CHANGELOG" > "$NOTES_FILE"
+
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "::warning::No CHANGELOG section found for $VERSION; release notes will be empty"
+          fi
+
+          # Pre-1.0 versions are technically prereleases by SemVer, but we
+          # treat 0.x as stable for this SDK and don't want them hidden in
+          # the Releases sidebar — so no --prerelease flag.
+          gh release create "$TAG" \
+            --title "$RELEASE_TITLE" \
+            --notes-file "$NOTES_FILE"
+
+          echo "✓ Created release $TAG"
