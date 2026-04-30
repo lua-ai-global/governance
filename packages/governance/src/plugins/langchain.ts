@@ -260,7 +260,16 @@ export async function governTool<T extends LangChainTool>(
 
       try {
         const output = await tool.invoke(input, runConfig);
-        const finalOutput = await scanResult(tool.name, input as Record<string, unknown> | undefined, output);
+        // Guard the cast — LangChain DynamicTool inputs are commonly
+        // strings. An unchecked cast would set ctx.input to a string
+        // (typed as Record<string, unknown>), and condition evaluators
+        // reading properties off it would silently get undefined and
+        // never match. Mirror the guard createEnforcer uses on its own
+        // input field.
+        const argRecord = typeof input === "object" && input !== null
+          ? input as Record<string, unknown>
+          : undefined;
+        const finalOutput = await scanResult(tool.name, argRecord, output);
         await audit(tool.name, "success");
         return finalOutput;
       } catch (error) {
@@ -300,7 +309,16 @@ export async function governTools<T extends LangChainTool>(
 
       try {
         const output = await tool.invoke(input, runConfig);
-        const finalOutput = await scanResult(tool.name, input as Record<string, unknown> | undefined, output);
+        // Guard the cast — LangChain DynamicTool inputs are commonly
+        // strings. An unchecked cast would set ctx.input to a string
+        // (typed as Record<string, unknown>), and condition evaluators
+        // reading properties off it would silently get undefined and
+        // never match. Mirror the guard createEnforcer uses on its own
+        // input field.
+        const argRecord = typeof input === "object" && input !== null
+          ? input as Record<string, unknown>
+          : undefined;
+        const finalOutput = await scanResult(tool.name, argRecord, output);
         await audit(tool.name, "success");
         return finalOutput;
       } catch (error) {
