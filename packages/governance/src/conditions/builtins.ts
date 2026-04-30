@@ -3,7 +3,8 @@
  * All 25 condition types from the original switch statement, now pluggable.
  */
 
-import type { ConditionEvaluator, EnforcementContext, PolicyCondition } from "../policy.js";
+import type { ConditionEvaluator, EnforcementContext, PolicyCondition, PolicyRule } from "../policy.js";
+import { getScanText } from "../policy.js";
 import { detectInjection } from "../injection-detect.js";
 import type { InjectionCategory } from "../injection-detect.js";
 import { evaluateBlocklist, evaluateInputLength, evaluateInputPattern } from "./preprocess.js";
@@ -27,9 +28,11 @@ type BuiltinDef = { name: string; description: string; evaluator: ConditionEvalu
 /**
  * Create the full list of built-in condition definitions.
  * Accepts `evalCondition` so combinators (any_of, all_of, not) can recurse.
+ * The optional 3rd `rule` arg is forwarded to combinators so the parent
+ * rule's `scanModalities` propagates into nested conditions.
  */
 export function getBuiltinConditions(
-  evalCondition: (condition: PolicyCondition, ctx: EnforcementContext) => boolean,
+  evalCondition: (condition: PolicyCondition, ctx: EnforcementContext, rule?: PolicyRule) => boolean,
 ): BuiltinDef[] {
   return [
     // ─── Access control ────────────────────────────────────────
@@ -165,11 +168,15 @@ export function getBuiltinConditions(
     {
       name: "injection_guard",
       description: "Detect prompt injection attacks (regex detector, synchronous)",
-      evaluator: (ctx, p) => {
-        if (!ctx.input) return false;
+      evaluator: (ctx, p, rule) => {
         const skip = (p.skipCategories ?? []) as InjectionCategory[];
         const opts = { threshold: p.threshold as number, skipCategories: skip.length > 0 ? skip : undefined };
-        for (const str of extractStrings(ctx.input)) {
+        // When `rule.scanModalities` is set, scan only those modalities'
+        // pre-extracted text from `ctx.textByModality`. Otherwise fall back
+        // to the legacy walk over `ctx.input` so existing rules without
+        // modality config behave identically.
+        const strings = getScanText(ctx, rule) ?? (ctx.input ? extractStrings(ctx.input) : []);
+        for (const str of strings) {
           if (detectInjection(str, opts).detected) return true;
         }
         return false;
@@ -181,7 +188,11 @@ export function getBuiltinConditions(
         "Consume an ML-classifier score pre-computed by the host. " +
         "Async ML classifiers cannot run inside the sync policy engine — the " +
         "host runs hybridDetect() (or its own integration) and populates " +
-        "ctx.mlInjectionScore / ctx.mlInjectionCategories before enforce().",
+        "ctx.mlInjectionScore / ctx.mlInjectionCategories before enforce(). " +
+        "When the rule has scanModalities set, the host should run the ML " +
+        "classifier over the union of those modalities' text and put the " +
+        "resulting score into mlInjectionScore — modality dispatch happens " +
+        "at the host's hybridDetect call, not here.",
       evaluator: (ctx, p) => {
         if (typeof ctx.mlInjectionScore !== "number") return false;
         const threshold = (p.threshold as number | undefined) ?? 0.5;
@@ -196,7 +207,24 @@ export function getBuiltinConditions(
     {
       name: "blocklist",
       description: "Block input containing specific terms",
-      evaluator: (ctx, p) => evaluateBlocklist(ctx, p.terms as string[], p.caseSensitive as boolean | undefined),
+      evaluator: (ctx, p, rule) => {
+        const terms = p.terms as string[];
+        const caseSensitive = p.caseSensitive as boolean | undefined;
+        const scan = getScanText(ctx, rule);
+        if (scan) {
+          // Per-modality scan path. Search each contributing modality's
+          // text for any of the terms.
+          for (const text of scan) {
+            const haystack = caseSensitive ? text : text.toLowerCase();
+            for (const t of terms) {
+              const needle = caseSensitive ? t : t.toLowerCase();
+              if (haystack.includes(needle)) return true;
+            }
+          }
+          return false;
+        }
+        return evaluateBlocklist(ctx, terms, caseSensitive);
+      },
     },
     {
       name: "input_length",
@@ -206,7 +234,16 @@ export function getBuiltinConditions(
     {
       name: "input_pattern",
       description: "Block input matching a regex",
-      evaluator: (ctx, p) => evaluateInputPattern(ctx, p.pattern as string, p.flags as string | undefined),
+      evaluator: (ctx, p, rule) => {
+        const pattern = p.pattern as string;
+        const flags = p.flags as string | undefined;
+        const scan = getScanText(ctx, rule);
+        if (scan) {
+          const regex = new RegExp(pattern, flags);
+          return scan.some((text) => regex.test(text));
+        }
+        return evaluateInputPattern(ctx, pattern, flags);
+      },
     },
     // ─── Output safety (postprocess) ───────────────────────────
     {
@@ -217,12 +254,35 @@ export function getBuiltinConditions(
     {
       name: "output_pattern",
       description: "Detect patterns in output",
-      evaluator: (ctx, p) => evaluateOutputPattern(ctx, p.pattern as string, p.flags as string | undefined),
+      evaluator: (ctx, p, rule) => {
+        const pattern = p.pattern as string;
+        const flags = p.flags as string | undefined;
+        const scan = getScanText(ctx, rule);
+        if (scan) {
+          const regex = new RegExp(pattern, flags);
+          return scan.some((text) => regex.test(text));
+        }
+        return evaluateOutputPattern(ctx, pattern, flags);
+      },
     },
     {
       name: "sensitive_data_filter",
       description: "Detect leaked credentials and secrets",
-      evaluator: (ctx, p) => evaluateSensitiveDataFilter(ctx, p.patterns as string[] | undefined),
+      evaluator: (ctx, p, rule) => {
+        const patternIds = p.patterns as string[] | undefined;
+        const scan = getScanText(ctx, rule);
+        if (scan) {
+          // Reuse the postprocess helper by temporarily overriding
+          // outputText with each modality's text — keeps a single source
+          // of truth for the sensitive-pattern set.
+          for (const text of scan) {
+            const proxy = { ...ctx, outputText: text } as EnforcementContext;
+            if (evaluateSensitiveDataFilter(proxy, patternIds)) return true;
+          }
+          return false;
+        }
+        return evaluateSensitiveDataFilter(ctx, patternIds);
+      },
     },
     // ─── Identity ─────────────────────────────────────────────
     {
@@ -235,28 +295,43 @@ export function getBuiltinConditions(
       },
     },
     // ─── Combinators ───────────────────────────────────────────
+    // Combinators synthesise a per-child rule view: the parent's
+    // `scanModalities` is preserved, but `condition` is rebound to the
+    // nested type. This lets `getScanText()` check the CHILD's eligibility
+    // (e.g. `input_pattern` supports modalities) while still using the
+    // PARENT's modality config — so an `any_of` over `injection_guard` +
+    // `blocklist` with `scanModalities: ["image"]` correctly scopes both
+    // sub-checks to image-extracted text.
     {
       name: "any_of",
       description: "Match if any sub-condition matches",
-      evaluator: (ctx, p) => {
+      evaluator: (ctx, p, rule) => {
         const conditions = p.conditions as PolicyCondition[];
-        return conditions.some((c) => evalCondition(c, ctx));
+        return conditions.some((c) =>
+          evalCondition(c, ctx, rule ? { ...rule, condition: c } : undefined),
+        );
       },
     },
     {
       name: "all_of",
       description: "Match if all sub-conditions match",
-      evaluator: (ctx, p) => {
+      evaluator: (ctx, p, rule) => {
         const conditions = p.conditions as PolicyCondition[];
-        return conditions.every((c) => evalCondition(c, ctx));
+        return conditions.every((c) =>
+          evalCondition(c, ctx, rule ? { ...rule, condition: c } : undefined),
+        );
       },
     },
     {
       name: "not",
       description: "Invert a condition",
-      evaluator: (ctx, p) => {
+      evaluator: (ctx, p, rule) => {
         const condition = p.condition as PolicyCondition;
-        return !evalCondition(condition, ctx);
+        return !evalCondition(
+          condition,
+          ctx,
+          rule ? { ...rule, condition } : undefined,
+        );
       },
     },
   ];

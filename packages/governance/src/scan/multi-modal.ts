@@ -156,6 +156,37 @@ export interface ScanOptions {
   timeoutMs?: number;
 }
 
+// ─── Condition / Policy Integration ─────────────────────────────
+
+/**
+ * Condition types that semantically operate on the *text content* of the
+ * agent's input or output. Only rules whose `condition.type` is in this set
+ * accept a `scanModalities` config — every other rule type (rate limit,
+ * token budget, kill switch, network allowlist, etc.) operates on metadata
+ * and ignores the field entirely.
+ *
+ * The cloud's policy editor consults this set to decide whether to render
+ * the modality selector for a given rule. Validators reject `scanModalities`
+ * on rule types not in this set so customers can't silently misconfigure.
+ *
+ * Keep this list narrow on purpose. Add a condition type only when its
+ * evaluator actually scans extracted text (i.e. it consumes
+ * `ctx.textByModality` via `getScanText()`).
+ */
+export const CONDITIONS_SUPPORTING_MODALITIES: ReadonlySet<string> = new Set([
+  "injection_guard",
+  "ml_injection_guard",
+  "blocklist",
+  "input_pattern",
+  "output_pattern",
+  "sensitive_data_filter",
+]);
+
+/** True when `scanModalities` is meaningful for the given condition type. */
+export function conditionSupportsModalities(conditionType: string): boolean {
+  return CONDITIONS_SUPPORTING_MODALITIES.has(conditionType);
+}
+
 // ─── Registry ────────────────────────────────────────────────────
 
 const scanners = new Map<Modality, ModalityScanner>();
