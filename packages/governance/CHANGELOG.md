@@ -1,5 +1,126 @@
 # Changelog
 
+## [0.16.0] - 2026-04-30 — Per-policy multi-modal scan dispatch
+
+0.15 introduced `governance-sdk/scan/multi-modal` as a host-callable
+orchestrator with a global "scan everything you opt into" shape. That
+worked for the SDK plumbing but coupled rules that have nothing to do
+with each other (a token-budget rule has no business knowing about
+images). 0.16 moves modality config onto the **policy rule itself**.
+
+### Added — `scanModalities` on `PolicyRule`
+
+```ts
+const rule: PolicyRule = {
+  id: "image-aware-injection-guard",
+  name: "Block prompt injection in vision payloads",
+  condition: { type: "injection_guard", params: { threshold: 0.5 } },
+  outcome: "block",
+  reason: "Injection detected in image OCR text",
+  priority: 100,
+  enabled: true,
+  scanModalities: ["text", "image"], // ← new
+};
+```
+
+Rules opt into modalities individually. Different policies can have
+different coverage — a `prompt_injection` rule scoped to text + image,
+a `sensitive_data_filter` rule scoped to text + pdf, etc. The host
+runs `scanMultiModal()` once for the union and stuffs the per-modality
+text into `ctx.textByModality`. Each rule's evaluator pulls the slice
+it needs.
+
+### Added — `textByModality` on `EnforcementContext`
+
+```ts
+ctx.textByModality = {
+  text: "user prompt",
+  image: "OCR'd image text",
+  pdf: "extracted PDF body",
+};
+```
+
+Host populates this before calling `enforce()`. Content-scanning
+evaluators consult it via `getScanText(ctx, rule)`; metadata-only rules
+ignore it entirely.
+
+### Added — `CONDITIONS_SUPPORTING_MODALITIES` registry
+
+Exported from `governance-sdk/scan/multi-modal`. Six condition types
+semantically operate on text content and accept `scanModalities`:
+
+| Condition | Operates on |
+|---|---|
+| `injection_guard` | regex injection detection over input text |
+| `ml_injection_guard` | pre-computed ML score (host runs the classifier on the modality union) |
+| `blocklist` | term match in input text |
+| `input_pattern` | regex over input text |
+| `output_pattern` | regex over output text |
+| `sensitive_data_filter` | curated patterns over output text |
+
+Everything else — `cost_budget`, `concurrent_limit`, `time_window`,
+`tool_blocked`, `agent_level`, `network_allowlist`, `scope_boundary`,
+`require_signed_identity`, length checks, combinators themselves —
+operates on metadata and ignores `scanModalities` entirely. Cloud UIs
+use `conditionSupportsModalities(type)` to decide whether to render a
+modality selector for a given rule type.
+
+### Added — `getScanText(ctx, rule)` helper
+
+```ts
+import { getScanText } from "governance-sdk";
+```
+
+Returns per-modality text slices when the rule opts in (an array of
+strings: each modality's text plus a joined cross-modality version
+matching `extractStrings`'s shape). Returns `null` to signal "use the
+legacy input-walk fallback" — the backward-compat seam for rules that
+don't opt in.
+
+### Changed — `ConditionEvaluator` signature
+
+```ts
+type ConditionEvaluator = (
+  ctx: EnforcementContext,
+  params: Record<string, unknown>,
+  rule?: PolicyRule, // ← new third arg
+) => boolean;
+```
+
+Structurally backward compatible — existing `(ctx, params) => boolean`
+implementations satisfy the wider signature unchanged. The engine
+threads the rule through `evaluate`, `evaluateStage`, and
+`evaluateCondition` so evaluators that care about
+`rule.scanModalities` can read it.
+
+### Changed — combinators preserve parent's modality scope
+
+`any_of`, `all_of`, and `not` synthesise a per-child rule view that
+preserves the parent's `scanModalities` while rebinding `condition`
+to the nested type. So an `any_of` over `injection_guard` + `blocklist`
+with `scanModalities: ["image"]` correctly scopes both sub-checks to
+image-extracted text.
+
+### Migration
+
+Drop-in. Rules without `scanModalities` see exactly the same content
+as before — `getScanText` returns null, evaluators fall back to
+`extractStrings(ctx.input)` / `ctx.outputText`. The existing 1,399
+tests pass unchanged. New behaviour is purely additive.
+
+Hosts wishing to enable multi-modal coverage:
+1. Configure the relevant policy rules with `scanModalities`.
+2. In your enforce wrapper, call `scanMultiModal(blocks, { enabled })`
+   for the union of modalities across active rules.
+3. Populate `ctx.textByModality` from the scan result.
+4. Call `enforce()` as usual — the engine handles per-rule dispatch.
+
+### Tests
+
+1,413 / 0 (was 1,399 / 0). Fourteen new tests cover the registry, the
+helper, per-rule dispatch, multi-rule independence, ignored-on-
+metadata-rules safety, and combinator propagation.
+
 ## [0.15.0] - 2026-04-30 — Tool-result scanning across the framework adapters
 
 0.14 wired tool-result scanning into the Mastra processor and MCP adapter
