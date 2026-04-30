@@ -122,6 +122,15 @@ export interface GovernAgentConfig {
   onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (toolName: string) => PolicyAction;
   sessionTokenTracker?: () => number;
+  /**
+   * Master switch for tool-result scanning (governance-sdk 0.15+).
+   * Default: `true`. Wrapped tools run their return values through the
+   * policy engine at stage `tool_result` before returning to the agent
+   * loop. On block, the redacted detail object replaces the original.
+   */
+  scanToolResults?: boolean;
+  /** Detection threshold for the local injection signal (0-1). Default 0.5. */
+  toolResultInjectionThreshold?: number;
 }
 
 // ─── Results ────────────────────────────────────────────────

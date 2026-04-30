@@ -40,6 +40,7 @@ export type {
 
 import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 import type { OutcomeCallbacks } from "./outcome-handler.js";
+import { scanToolResult } from "../tool-result-scan.js";
 
 // ─── Pre/post LLM wrapper ───────────────────────────────────
 // See ./llamaindex-llm.ts for docs + examples.
@@ -99,10 +100,31 @@ function createAuditor(governance: GovernanceInstance, agentId: string) {
     });
 }
 
+/**
+ * Build a result-scan closure bound to this governance + agent. Runs the
+ * tool's raw output through the policy engine at stage `tool_result` and
+ * returns either the original (allow) or a redacted detail object (block).
+ * No-op when `config.scanToolResults === false`. Default-on.
+ */
+function createResultScanner(
+  governance: GovernanceInstance, agentId: string, config: GovernLlamaIndexConfig,
+) {
+  return async (toolName: string, args: Record<string, unknown> | undefined, output: LlamaIndexJSONValue): Promise<LlamaIndexJSONValue> => {
+    if (config.scanToolResults === false) return output;
+    const scanned = await scanToolResult({
+      governance, agentId, agentName: config.agentName, tool: toolName,
+      args, result: output,
+      injectionThreshold: config.toolResultInjectionThreshold,
+    });
+    return scanned.result as LlamaIndexJSONValue;
+  };
+}
+
 function wrapTool(
   tool: LlamaIndexTool,
   enforce: ReturnType<typeof createEnforcer>,
   audit: ReturnType<typeof createAuditor>,
+  scanResult: ReturnType<typeof createResultScanner>,
 ): LlamaIndexTool {
   if (!tool.call) return tool;
   const toolName = tool.metadata.name;
@@ -112,8 +134,9 @@ function wrapTool(
       const decision = await enforce(toolName, input);
       try {
         const output = await tool.call!(input);
+        const finalOutput = await scanResult(toolName, input, output);
         await audit(toolName, "success");
-        return output;
+        return finalOutput;
       } catch (error) {
         await audit(toolName, "failure", { error: error instanceof Error ? error.message : String(error) });
         throw error;
@@ -135,9 +158,10 @@ export async function governLlamaIndexTools(
 
   const enforce = createEnforcer(governance, result.id, config);
   const audit = createAuditor(governance, result.id);
+  const scanResult = createResultScanner(governance, result.id, config);
 
   return {
-    tools: tools.map((tool) => wrapTool(tool, enforce, audit)),
+    tools: tools.map((tool) => wrapTool(tool, enforce, audit, scanResult)),
     agentId: result.id,
     score: result.score,
     level: result.level,
@@ -160,9 +184,10 @@ export async function governLlamaIndexAgent(
 
   const enforce = createEnforcer(governance, result.id, config);
   const audit = createAuditor(governance, result.id);
+  const scanResult = createResultScanner(governance, result.id, config);
 
   return {
-    agent: { ...agent, tools: agent.tools.map((tool) => wrapTool(tool, enforce, audit)) },
+    agent: { ...agent, tools: agent.tools.map((tool) => wrapTool(tool, enforce, audit, scanResult)) },
     agentId: result.id,
     score: result.score,
     level: result.level,

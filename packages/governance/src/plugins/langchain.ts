@@ -46,6 +46,7 @@ import type {
 import type { AgentRegistration, AgentFramework } from "../types";
 import { handleOutcome, GovernanceBlockedError, GovernanceApprovalRequiredError } from "./outcome-handler.js";
 import type { OutcomeCallbacks } from "./outcome-handler.js";
+import { scanToolResult } from "../tool-result-scan.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -115,6 +116,15 @@ export interface GovernToolConfig {
   onApprovalRequired?: (decision: EnforcementDecision, toolName: string) => void;
   actionMapper?: (toolName: string) => PolicyAction;
   sessionTokenTracker?: () => number;
+  /**
+   * Master switch for tool-result scanning (governance-sdk 0.15+).
+   * Default: `true`. Wrapped tools run their return values through the
+   * policy engine at stage `tool_result` before returning to the agent
+   * loop. On block, the redacted detail object replaces the original.
+   */
+  scanToolResults?: boolean;
+  /** Detection threshold for the local injection signal (0-1). Default 0.5. */
+  toolResultInjectionThreshold?: number;
 }
 
 export interface GovernedResult {
@@ -196,6 +206,32 @@ function createAuditor(governance: GovernanceInstance, agentId: string) {
   };
 }
 
+/**
+ * Build a result-scan closure bound to this governance + agent. Runs
+ * the tool's raw output through the policy engine at stage `tool_result`
+ * and returns either the original (allow) or a redacted detail object
+ * (block / require_approval). No-op when `config.scanToolResults === false`.
+ */
+function createResultScanner(
+  governance: GovernanceInstance,
+  agentId: string,
+  config: GovernToolConfig,
+) {
+  return async (
+    toolName: string,
+    args: Record<string, unknown> | undefined,
+    output: unknown,
+  ): Promise<unknown> => {
+    if (config.scanToolResults === false) return output;
+    const scanned = await scanToolResult({
+      governance, agentId, agentName: config.agentName, tool: toolName,
+      args, result: output,
+      injectionThreshold: config.toolResultInjectionThreshold,
+    });
+    return scanned.result;
+  };
+}
+
 // ─── Govern a Single Tool ───────────────────────────────────────
 
 /**
@@ -211,6 +247,7 @@ export async function governTool<T extends LangChainTool>(
   const result = await registerAgent(governance, config, [tool.name]);
   const enforce = createEnforcer(governance, result.id, result.level, config);
   const audit = createAuditor(governance, result.id);
+  const scanResult = createResultScanner(governance, result.id, config);
 
   const governed = {
     ...tool,
@@ -218,13 +255,14 @@ export async function governTool<T extends LangChainTool>(
     score: result.score,
     level: result.level,
     governance,
-    invoke: async (input: unknown, config?: LangChainRunnableConfig): Promise<unknown> => {
+    invoke: async (input: unknown, runConfig?: LangChainRunnableConfig): Promise<unknown> => {
       await enforce(tool.name, input);
 
       try {
-        const output = await tool.invoke(input, config);
+        const output = await tool.invoke(input, runConfig);
+        const finalOutput = await scanResult(tool.name, input as Record<string, unknown> | undefined, output);
         await audit(tool.name, "success");
-        return output;
+        return finalOutput;
       } catch (error) {
         await audit(tool.name, "failure", {
           error: error instanceof Error ? error.message : String(error),
@@ -253,16 +291,18 @@ export async function governTools<T extends LangChainTool>(
   const result = await registerAgent(governance, config, toolNames);
   const enforce = createEnforcer(governance, result.id, result.level, config);
   const audit = createAuditor(governance, result.id);
+  const scanResult = createResultScanner(governance, result.id, config);
 
   const governed = tools.map((tool) => ({
     ...tool,
-    invoke: async (input: unknown, config?: LangChainRunnableConfig): Promise<unknown> => {
+    invoke: async (input: unknown, runConfig?: LangChainRunnableConfig): Promise<unknown> => {
       await enforce(tool.name, input);
 
       try {
-        const output = await tool.invoke(input, config);
+        const output = await tool.invoke(input, runConfig);
+        const finalOutput = await scanResult(tool.name, input as Record<string, unknown> | undefined, output);
         await audit(tool.name, "success");
-        return output;
+        return finalOutput;
       } catch (error) {
         await audit(tool.name, "failure", {
           error: error instanceof Error ? error.message : String(error),
