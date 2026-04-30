@@ -8,6 +8,7 @@
 import { getBuiltinConditions } from "./conditions/builtins.js";
 import { getDefaultStage } from "./policy-stage-defaults.js";
 import { maskSensitiveData, maskPattern, maskBlocklistTerms } from "./mask.js";
+import { conditionSupportsModalities, type Modality } from "./scan/multi-modal.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -50,6 +51,20 @@ export interface PolicyRule {
   enabled: boolean;
   /** Pipeline stage — defaults to "process" when omitted */
   stage?: PolicyStage;
+  /**
+   * Which content modalities this rule scans. Only meaningful for
+   * content-scanning conditions (`injection_guard`, `sensitive_data_filter`,
+   * `blocklist`, `input_pattern`, `output_pattern`, `ml_injection_guard`).
+   * Ignored for everything else. Use `conditionSupportsModalities()` from
+   * `governance-sdk/scan/multi-modal` to validate before persisting.
+   *
+   * The host pre-extracts text per modality into `ctx.textByModality`
+   * (typically by calling `scanMultiModal()` once for the union of
+   * modalities across active rules). When `scanModalities` is unset or
+   * empty, the evaluator falls back to its existing input-walk behaviour
+   * — strict-improvement-only, no break risk for legacy rules.
+   */
+  scanModalities?: Modality[];
 }
 
 /**
@@ -132,6 +147,19 @@ export interface EnforcementContext {
    * Optional — enables the `ml_injection_guard` to narrow on category too.
    */
   mlInjectionCategories?: string[];
+  /**
+   * Pre-extracted text per modality, populated by the host before calling
+   * `enforce()`. Typically the host calls `scanMultiModal()` once per
+   * request for the union of modalities across active rules and stuffs
+   * the result here. Content-scanning condition evaluators consult this
+   * via `getScanText(ctx, rule)` when the rule has `scanModalities` set.
+   *
+   * `textByModality.text` is the user's prompt; `textByModality.image` is
+   * the OCR'd / vision-LLM extraction of image blocks; etc. Empty or
+   * undefined entries are equivalent to "no contribution from that
+   * modality." The SDK never populates this itself — host responsibility.
+   */
+  textByModality?: Partial<Record<Modality, string>>;
 }
 
 export interface EnforcementDecision {
@@ -156,8 +184,57 @@ export interface EnforcementDecision {
 
 // ─── Condition Registry ─────────────────────────────────────────
 
-/** Evaluator function for a registered condition type */
-export type ConditionEvaluator = (ctx: EnforcementContext, params: Record<string, unknown>) => boolean;
+/**
+ * Evaluator function for a registered condition type.
+ *
+ * The optional `rule` argument is the parent PolicyRule that the engine is
+ * currently evaluating. Most evaluators ignore it; content-scanning
+ * evaluators (`injection_guard`, `sensitive_data_filter`, `blocklist`,
+ * `input_pattern`, `output_pattern`, `ml_injection_guard`) read
+ * `rule.scanModalities` via `getScanText()` to know which slices of
+ * `ctx.textByModality` to scan.
+ *
+ * Adding `rule?` is structurally backward compatible — existing
+ * `(ctx, params) => boolean` implementations satisfy the wider signature
+ * unchanged.
+ */
+export type ConditionEvaluator = (
+  ctx: EnforcementContext,
+  params: Record<string, unknown>,
+  rule?: PolicyRule,
+) => boolean;
+
+/**
+ * Pull scannable text from `ctx.textByModality` for a content-scanning rule.
+ *
+ * Returns an array of strings (typically the per-modality texts plus a
+ * joined-all version, mirroring `extractStrings`'s shape) when:
+ *   - a rule was passed,
+ *   - the rule's condition type supports modalities, and
+ *   - the rule has `scanModalities` set.
+ *
+ * Returns `null` to signal "use the existing extractStrings(ctx.input)
+ * fallback" — for legacy rules that don't opt in. This is the
+ * backward-compat seam: rules without `scanModalities` see exactly the
+ * same content they did before this feature shipped.
+ */
+export function getScanText(
+  ctx: EnforcementContext,
+  rule?: PolicyRule,
+): string[] | null {
+  if (!rule) return null;
+  if (!conditionSupportsModalities(rule.condition.type)) return null;
+  const modalities = rule.scanModalities;
+  if (!modalities || modalities.length === 0) return null;
+
+  const out: string[] = [];
+  for (const m of modalities) {
+    const t = ctx.textByModality?.[m];
+    if (typeof t === "string" && t.length > 0) out.push(t);
+  }
+  if (out.length > 1) out.push(out.join(" "));
+  return out;
+}
 
 /** Metadata for a registered condition type */
 export interface RegisteredConditionType {
@@ -220,7 +297,11 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
   // Instance-scoped condition registry — fully isolated per engine
   const registry = new Map<string, RegisteredConditionType>();
 
-  function evaluateCondition(condition: PolicyCondition, ctx: EnforcementContext): boolean {
+  function evaluateCondition(
+    condition: PolicyCondition,
+    ctx: EnforcementContext,
+    rule?: PolicyRule,
+  ): boolean {
     // Inline custom evaluators (params.evaluate is a function)
     const evalFn = condition.params?.evaluate;
     if (typeof evalFn === "function") {
@@ -235,7 +316,7 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
     if (!entry) {
       throw new Error(`Unknown condition type "${condition.type}" — register it via engine.registerCondition()`);
     }
-    return entry.evaluator(ctx, condition.params);
+    return entry.evaluator(ctx, condition.params, rule);
   }
 
   // Register built-in conditions
@@ -290,7 +371,7 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
     const active = rules.filter((r) => r.enabled).sort((a, b) => b.priority - a.priority);
 
     for (const rule of active) {
-      if (evaluateCondition(rule.condition, ctx)) {
+      if (evaluateCondition(rule.condition, ctx, rule)) {
         return buildDecision(rule, ctx, active.length);
       }
     }
@@ -330,7 +411,7 @@ export function createPolicyEngine(config: PolicyEngineConfig = {}): PolicyEngin
       .sort((a, b) => b.priority - a.priority);
 
     for (const rule of active) {
-      if (evaluateCondition(rule.condition, ctx)) {
+      if (evaluateCondition(rule.condition, ctx, rule)) {
         return buildDecision(rule, ctx, active.length);
       }
     }
