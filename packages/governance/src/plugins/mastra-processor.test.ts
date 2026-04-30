@@ -1053,6 +1053,61 @@ describe("GovernanceProcessor", () => {
       assert.equal(await wrapped.b.execute({} as never), "fine");
     });
 
+    it("processOutputStep populates targetPath so scope_boundary fires at process stage", async () => {
+      // scope_boundary reads ctx.targetPath. Without field extraction in
+      // evaluateToolCall, this rule silently never fires on tool calls
+      // whose path is in `args.path` rather than already on ctx.targetPath.
+      const gov = createGovernance({
+        rules: [
+          {
+            id: "block-etc",
+            name: "Block /etc reads",
+            condition: { type: "scope_boundary", params: { blockedPaths: ["/etc/**"] } },
+            outcome: "block",
+            reason: "Path outside allowed scope",
+            priority: 100,
+            enabled: true,
+            stage: "process",
+          },
+        ],
+      });
+      let aborted = false;
+      const processor = new GovernanceProcessor(gov, {
+        agentId: "scope-test", agentName: "scope-test", owner: "team",
+      });
+      await processor.processOutputStep(makeArgs(
+        [makeToolCall("device__lua_desktop__read_file", { path: "/etc/passwd" })],
+        { onAbort: () => { aborted = true; } },
+      ));
+      assert.equal(aborted, true, "scope_boundary should fire when targetPath is extracted from args.path");
+    });
+
+    it("processOutputStep populates targetUrl so network_allowlist fires at process stage", async () => {
+      const gov = createGovernance({
+        rules: [
+          {
+            id: "allow-only-trusted",
+            name: "Allow trusted domains only",
+            condition: { type: "network_allowlist", params: { allowedDomains: ["api.trusted.com"] } },
+            outcome: "block",
+            reason: "Domain not in allowlist",
+            priority: 100,
+            enabled: true,
+            stage: "process",
+          },
+        ],
+      });
+      let aborted = false;
+      const processor = new GovernanceProcessor(gov, {
+        agentId: "url-test", agentName: "url-test", owner: "team",
+      });
+      await processor.processOutputStep(makeArgs(
+        [makeToolCall("fetch", { url: "https://evil.example.com/exfil" })],
+        { onAbort: () => { aborted = true; } },
+      ));
+      assert.equal(aborted, true, "network_allowlist should fire when targetUrl is extracted from args.url");
+    });
+
     it("scanToolResults: false makes wrapTool a no-op", async () => {
       const gov = createGovernance({
         rules: [

@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.14.1] - 2026-04-30 — Field extraction on the `process` stage
+
+`scope_boundary` and `network_allowlist` rules at stage `process` (the
+default for those conditions, where pre-execution blocking happens)
+silently never fired on tool calls today — `evaluateToolCall` (the path
+behind `processOutputStep`) didn't populate `ctx.targetPath` /
+`ctx.targetUrl`, and those conditions read those fields exclusively.
+
+0.14.0 wired the field-extraction registry into `wrapTool` (tool_result
+stage). 0.14.1 wires it into `evaluateToolCall` too — same registry, same
+generic name conventions (`path` / `filePath` / `url` / `href` / ...).
+With this fix:
+
+```yaml
+- id: block-etc
+  condition: { type: scope_boundary, params: { blockedPaths: ["/etc/**"] } }
+  outcome: block
+  stage: process
+```
+
+…now actually blocks `device__lua_desktop__read_file({ path: "/etc/passwd" })`
+*before* Desktop runs the read, instead of falling through silently.
+
+### Tests
+
+1,372 tests, 0 failures (+2 — scope_boundary fires on `args.path`,
+network_allowlist fires on `args.url`, both at stage process).
+
 ## [0.14.0] - 2026-04-30 — `tool_result` stage + `wrapTool` helper
 
 Closes the framework gap where tool-call return content (file contents,

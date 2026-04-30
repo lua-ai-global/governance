@@ -42,6 +42,7 @@ import { governStreamChunk } from "./mastra-processor-stream.js";
 import {
   wrapToolWithGovernance,
   wrapToolsWithGovernance,
+  extractFields,
   type MastraTool,
 } from "./mastra-processor-tool-wrap.js";
 
@@ -337,13 +338,25 @@ export class GovernanceProcessor implements MastraProcessorInterface {
 
     const metadata = await this.buildMetadata("tool_call", args);
 
+    // Pull `targetPath` / `targetUrl` off the tool's args so policy
+    // conditions like `scope_boundary` and `network_allowlist` actually
+    // fire at the `process` stage. Without this, those rules silently
+    // never match — they read ctx.targetPath/ctx.targetUrl, not raw
+    // input args. Same registry that wrapTool uses for `tool_result` —
+    // generic name conventions (path / filePath / url / href / ...) cover
+    // most tools without explicit configuration.
+    const toolArgs = toolCall.args as Record<string, unknown> | undefined;
+    const fields = extractFields(toolArgs, this.config.toolFieldExtraction, toolCall.toolName);
+
     const ctx: EnforcementContext = {
       agentId: this.agentId!,
       agentName: this.config.agentName,
       agentLevel: this.agentLevel,
       action,
       tool: toolCall.toolName,
-      input: toolCall.args as Record<string, unknown> | undefined,
+      input: toolArgs,
+      targetPath: fields.targetPath,
+      targetUrl: fields.targetUrl,
       sessionTokensUsed: this.config.sessionTokenTracker?.(),
       ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
     };
