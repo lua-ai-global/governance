@@ -290,7 +290,7 @@
     "ollama": { "optional": true }
   },
   "devDependencies": {
-    "@types/node": "^25.4.0",
+    "@types/node": "^25.6.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
