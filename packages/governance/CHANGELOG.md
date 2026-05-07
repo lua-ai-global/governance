@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.17.0] - 2026-05-07 — Custom conditions reachable from `createGovernance()`
+
+The condition registry (`registerCondition` / `unregisterCondition` /
+`getRegisteredCondition` / `getRegisteredConditions` /
+`clearConditionRegistry`) and `PolicyEngineConfig.conditions` were already
+on `PolicyEngine` since 0.15, but `GovernanceInstance` (the thing
+`createGovernance()` returns) didn't expose them — `instance.policies` is
+a `ReadonlyPolicyEngine` view that intentionally hides mutators. So
+callers who followed the documented `createGovernance()` flow had no path
+to register a custom condition without dropping down to
+`createPolicyEngine()` and re-wiring everything else themselves.
+
+This release closes that gap. Additive only — no breaking changes.
+
+### Added — `GovernanceConfig.conditions`
+
+```ts
+const gov = createGovernance({
+  conditions: [{
+    name: "geo_fence",
+    description: "Block actions outside allowed regions",
+    evaluator: (ctx, params) => /* ... */ false,
+  }],
+  rules: [/* ... */],
+});
+```
+
+Forwarded into the underlying `createPolicyEngine` call.
+
+### Added — registry passthroughs on `GovernanceInstance`
+
+Mirroring the existing `addRule` / `removeRule` pattern:
+
+- `gov.registerCondition(entry, opts?)`
+- `gov.unregisterCondition(name)`
+- `gov.getRegisteredCondition(name)`
+- `gov.getRegisteredConditions()`
+- `gov.clearConditionRegistry(opts?)`
+
+All thin forwarders to the engine.
+
+### Changed — `GovernanceConfig.defaultOutcome` accepts the full `PolicyOutcome` union
+
+Was `"allow" | "block"`; now matches `PolicyEngineConfig.defaultOutcome`
+(`"allow" | "block" | "warn" | "require_approval" | "mask"`). Existing
+callers passing `"allow"` or `"block"` are unaffected.
+
+### Docs
+
+README's "Quick Start" section gained a **Custom Conditions** subsection
+demonstrating both construction-time (`config.conditions`) and runtime
+(`gov.registerCondition()`) registration via `createGovernance()`. The
+previous custom-condition example used the lower-level `createPolicyEngine`
+which left users on the documented `createGovernance` path stuck.
+
 ## [0.16.0] - 2026-04-30 — Per-policy multi-modal scan dispatch
 
 0.15 introduced `governance-sdk/scan/multi-modal` as a host-callable

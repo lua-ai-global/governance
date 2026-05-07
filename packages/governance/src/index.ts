@@ -37,7 +37,15 @@ import {
   type IntegrityAuditEvent,
 } from "./audit-integrity.js";
 import type { AgentRegistration, GovernanceAssessment, FleetSummary } from "./types.js";
-import type { PolicyRule, PolicyEngine, PolicyStage, EnforcementContext, EnforcementDecision } from "./policy.js";
+import type {
+  PolicyRule,
+  PolicyEngine,
+  PolicyOutcome,
+  PolicyStage,
+  EnforcementContext,
+  EnforcementDecision,
+  RegisteredConditionType,
+} from "./policy.js";
 import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } from "./storage.js";
 
 /**
@@ -76,7 +84,20 @@ export { createMemoryStorage } from "./storage.js";
 export interface GovernanceConfig {
   storage?: GovernanceStorage;
   rules?: PolicyRule[];
-  defaultOutcome?: "allow" | "block";
+  /**
+   * Default outcome when no rules match. Accepts the full `PolicyOutcome`
+   * union to mirror `PolicyEngineConfig.defaultOutcome` — the common case
+   * is `"allow"` or `"block"`, but `"warn"` / `"require_approval"` /
+   * `"mask"` are valid too.
+   */
+  defaultOutcome?: PolicyOutcome;
+  /**
+   * Custom condition types to register on the underlying policy engine.
+   * Mirrors `PolicyEngineConfig.conditions` so callers using
+   * `createGovernance()` don't have to drop down to `createPolicyEngine()`
+   * just to register a custom evaluator.
+   */
+  conditions?: RegisteredConditionType[];
   /** When set, enforce() and register() POST to this URL instead of running locally */
   serverUrl?: string;
   /** Bearer token for remote calls — required when serverUrl is set */
@@ -189,6 +210,16 @@ export interface GovernanceInstance {
   addRule: (rule: PolicyRule) => void;
   /** Remove a policy rule by ID */
   removeRule: (ruleId: string) => void;
+  /** Register a custom condition type on the underlying policy engine */
+  registerCondition: (entry: RegisteredConditionType, opts?: { override?: boolean }) => void;
+  /** Unregister a condition type by name */
+  unregisterCondition: (name: string) => boolean;
+  /** Get a registered condition type by name */
+  getRegisteredCondition: (name: string) => RegisteredConditionType | undefined;
+  /** List all registered condition types (custom + built-ins) */
+  getRegisteredConditions: () => RegisteredConditionType[];
+  /** Clear all registered conditions. Set `keepBuiltins: true` to re-register built-ins. */
+  clearConditionRegistry: (opts?: { keepBuiltins?: boolean }) => void;
   /** Test API connectivity. Returns status without throwing. */
   connect: () => Promise<{ connected: boolean; mode: string; latencyMs: number }>;
   /** Current connection status (cached from last enforce/connect call). */
@@ -233,6 +264,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   const policies = createPolicyEngine({
     rules: config.rules,
     defaultOutcome: config.defaultOutcome,
+    conditions: config.conditions,
   });
 
   // ── Integrity audit chain (opt-in) ───────────────────────────
@@ -600,6 +632,26 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     policies.removeRule(ruleId);
   }
 
+  function registerCondition(entry: RegisteredConditionType, opts?: { override?: boolean }): void {
+    policies.registerCondition(entry, opts);
+  }
+
+  function unregisterCondition(name: string): boolean {
+    return policies.unregisterCondition(name);
+  }
+
+  function getRegisteredCondition(name: string): RegisteredConditionType | undefined {
+    return policies.getRegisteredCondition(name);
+  }
+
+  function getRegisteredConditions(): RegisteredConditionType[] {
+    return policies.getRegisteredConditions();
+  }
+
+  function clearConditionRegistry(opts?: { keepBuiltins?: boolean }): void {
+    policies.clearConditionRegistry(opts);
+  }
+
   const noopStatus = () => ({ connected: true, mode: "local" as const, latencyMs: 0 });
 
   const integrityChain = integrity
@@ -660,6 +712,11 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     recordOutcome,
     score: scoreAgentFn, scoreFleet: scoreFleetFn,
     policies: readonlyPolicies, storage, addRule, removeRule,
+    registerCondition,
+    unregisterCondition,
+    getRegisteredCondition,
+    getRegisteredConditions,
+    clearConditionRegistry,
     connect: remote ? remote.connect : async () => noopStatus(),
     status: remote ? remote.status : noopStatus,
     waitForApproval: remote

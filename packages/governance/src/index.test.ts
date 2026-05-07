@@ -175,6 +175,101 @@ describe("createGovernance", () => {
   });
 });
 
+describe("createGovernance — custom conditions", () => {
+  test("registerCondition + addRule lets enforce() match a custom condition", async () => {
+    const gov = createGovernance();
+    gov.registerCondition({
+      name: "geo_fence",
+      description: "Block actions outside allowed regions",
+      evaluator: (ctx, params) => {
+        const region = (ctx.metadata?.region as string | undefined) ?? "";
+        const allowed = params.allowedRegions as string[];
+        return region.length > 0 && !allowed.includes(region);
+      },
+    });
+
+    gov.addRule({
+      id: "geo-rule",
+      name: "Geo fence",
+      condition: { type: "geo_fence", params: { allowedRegions: ["us", "eu"] } },
+      outcome: "block",
+      reason: "Region not allowed",
+      priority: 100,
+      enabled: true,
+    });
+
+    const blocked = await gov.enforce({
+      agentId: "a1",
+      action: "tool_call",
+      tool: "any",
+      metadata: { region: "cn" },
+    });
+    assert.equal(blocked.blocked, true, "non-allowed region should be blocked");
+    assert.equal(blocked.ruleId, "geo-rule");
+
+    const allowed = await gov.enforce({
+      agentId: "a1",
+      action: "tool_call",
+      tool: "any",
+      metadata: { region: "us" },
+    });
+    assert.equal(allowed.blocked, false, "allowed region should pass");
+  });
+
+  test("config.conditions registers conditions at construction time", async () => {
+    const gov = createGovernance({
+      conditions: [
+        {
+          name: "high_cost",
+          description: "Block when session cost exceeds threshold",
+          evaluator: (ctx, params) => (ctx.sessionCost ?? 0) > (params.maxCost as number),
+        },
+      ],
+      rules: [
+        {
+          id: "cost-check",
+          name: "Cost check",
+          condition: { type: "high_cost", params: { maxCost: 10 } },
+          outcome: "block",
+          reason: "Session cost over budget",
+          priority: 100,
+          enabled: true,
+        },
+      ],
+    });
+
+    assert.ok(gov.getRegisteredCondition("high_cost"), "config.conditions should be registered");
+
+    const blocked = await gov.enforce({
+      agentId: "a1",
+      action: "tool_call",
+      sessionCost: 15,
+    });
+    assert.equal(blocked.blocked, true);
+    assert.equal(blocked.ruleId, "cost-check");
+
+    const allowed = await gov.enforce({
+      agentId: "a1",
+      action: "tool_call",
+      sessionCost: 5,
+    });
+    assert.equal(allowed.blocked, false);
+  });
+
+  test("unregisterCondition + clearConditionRegistry forward to engine", () => {
+    const gov = createGovernance();
+    gov.registerCondition({ name: "tmp", description: "tmp", evaluator: () => false });
+    assert.ok(gov.getRegisteredCondition("tmp"));
+    assert.equal(gov.unregisterCondition("tmp"), true);
+    assert.equal(gov.getRegisteredCondition("tmp"), undefined);
+
+    gov.registerCondition({ name: "x", description: "x", evaluator: () => false });
+    gov.clearConditionRegistry({ keepBuiltins: true });
+    assert.equal(gov.getRegisteredCondition("x"), undefined);
+    assert.ok(gov.getRegisteredCondition("tool_blocked"), "builtins kept");
+  });
+});
+
 describe("createPolicyEngine", () => {
   test("evaluates rules in priority order", () => {
     const engine = createPolicyEngine({

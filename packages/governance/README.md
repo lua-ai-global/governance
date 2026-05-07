@@ -189,6 +189,57 @@ if (decision.outcome === 'require_approval') {
 }
 ```
 
+### Custom Conditions
+
+When the built-in condition types aren't enough, register your own evaluators directly on the governance instance — no need to drop down to `createPolicyEngine` for this. Pass them at construction or register them at runtime:
+
+```typescript
+import { createGovernance } from 'governance-sdk';
+
+// Option A — register at construction time
+const gov = createGovernance({
+  conditions: [
+    {
+      name: 'geo_fence',
+      description: 'Block actions outside allowed regions',
+      evaluator: (ctx, params) => {
+        const region = (ctx.metadata?.region as string | undefined) ?? '';
+        const allowed = params.allowedRegions as string[];
+        return region.length > 0 && !allowed.includes(region);
+      },
+    },
+  ],
+  rules: [{
+    id: 'geo-rule',
+    name: 'Geo fence',
+    condition: { type: 'geo_fence', params: { allowedRegions: ['us', 'eu'] } },
+    outcome: 'block',
+    reason: 'Region not allowed',
+    priority: 100,
+    enabled: true,
+  }],
+});
+
+// Option B — register after construction
+gov.registerCondition({
+  name: 'high_cost',
+  description: 'Block when session cost exceeds threshold',
+  evaluator: (ctx, params) => (ctx.sessionCost ?? 0) > (params.maxCost as number),
+});
+
+gov.addRule({
+  id: 'cost-check',
+  name: 'Cost check',
+  condition: { type: 'high_cost', params: { maxCost: 10 } },
+  outcome: 'block',
+  reason: 'Session cost over budget',
+  priority: 100,
+  enabled: true,
+});
+```
+
+Mirror methods are available on the instance: `registerCondition`, `unregisterCondition`, `getRegisteredCondition`, `getRegisteredConditions`, `clearConditionRegistry`. Custom evaluators must be **synchronous** — the policy engine is sync by design.
+
 ### CLI
 
 ```bash
