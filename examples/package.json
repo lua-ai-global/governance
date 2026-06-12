@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "governance-sdk": "^0.9.0",
-    "tsx": "^4.19.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.7.0"
   }
 }
