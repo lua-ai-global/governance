@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.18.0] - 2026-06-26 — Per-org (multi-tenant) audit chains
+
+The tamper-evident audit chain is now scoped **per organization**. Before
+this release a single `createGovernance({ integrityAudit })` instance kept
+one global hash chain, so every org's events were interleaved into the same
+chain and sequence space — you couldn't hand one tenant a clean, contiguous,
+independently-verifiable export, and one tenant's volume affected another's
+chain. Now each `organizationId` gets its own head, its own 1..N sequence,
+and its own write lock; events with no org share a single org-less chain,
+byte-for-byte compatible with chains written before this release.
+
+Additive and backward-compatible — org-less usage is unchanged.
+
+### Added
+
+- `EnforcementContext.organizationId`, `AgentRegistration.organizationId`,
+  `ActionOutcome.organizationId` — supply the tenant to scope its chain.
+  `enforce()` / `enforceStage()` also fall back to `metadata.organizationId`.
+- `integrityChain.stats(organizationId?)` and `integrityChain.export({ organizationId })`
+  now operate on a single org's chain.
+- `GovernanceStorage.getChainHead(organizationId?)` — resume the right org's
+  chain on restart. The in-memory and Postgres adapters implement it.
+
+### Changed
+
+- `canonicalize()` binds `organizationId` into the per-event hash **only when
+  present**, so an event cannot be relabelled into another org's chain without
+  detection. Org-less events hash exactly as before (no migration needed).
+- Postgres adapter now persists `organization_id` on agents and audit events
+  (the columns/indexes already existed but were never written), and the
+  `integrity_sequence` unique index is now per-org
+  (`(COALESCE(organization_id,''), integrity_sequence)`). The integrity
+  migration drops the old global unique index and creates the composite one
+  — idempotent, safe on existing rows.
+
 ## [0.17.0] - 2026-05-07 — Custom conditions reachable from `createGovernance()`
 
 The condition registry (`registerCondition` / `unregisterCondition` /

@@ -407,3 +407,55 @@ describe("PostgreSQL Storage Adapter", () => {
     assert.ok(count >= 2, "should have registration + enforcement events");
   });
 });
+
+describe("PostgreSQL Storage Adapter — organization_id persistence", () => {
+  test("createAgent persists organization_id (roundtrip)", async () => {
+    const pool = createMockPool();
+    const storage = await createPostgresStorage({ pool });
+    await storage.createAgent({
+      id: "org-agent-1",
+      name: "a",
+      framework: "mastra",
+      owner: "team",
+      version: "1.0.0",
+      channels: [],
+      tools: [],
+      compositeScore: 50,
+      governanceLevel: 2,
+      status: "approved",
+      organizationId: "orgA",
+      registeredAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const got = await storage.getAgent("org-agent-1");
+    assert.equal(got?.organizationId, "orgA");
+  });
+
+  test("createAuditEventWithIntegrity persists organization_id (roundtrip)", async () => {
+    const pool = createMockPool();
+    const storage = await createPostgresStorage({ pool });
+    await storage.createAuditEventWithIntegrity!(
+      {
+        id: "evt-1",
+        agentId: "a1",
+        eventType: "policy_evaluation",
+        outcome: "allow",
+        severity: "info",
+        organizationId: "orgA",
+        createdAt: new Date().toISOString(),
+      },
+      { hash: "h", previousHash: "0".repeat(64), sequence: 1, signedAt: new Date().toISOString() },
+    );
+    const events = await storage.queryAuditEvents({ organizationId: "orgA" });
+    assert.equal(events.length, 1);
+    assert.equal(events[0].organizationId, "orgA");
+  });
+
+  test("getChainHead accepts an organizationId argument", async () => {
+    const pool = createMockPool();
+    const storage = await createPostgresStorage({ pool });
+    // Smoke: the partitioned query runs with the org param bound.
+    const head = await storage.getChainHead!("orgA");
+    assert.equal(head, null);
+  });
+});

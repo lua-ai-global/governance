@@ -399,6 +399,24 @@ const chain = await gov.integrityChain!.export();
 const { valid, brokenAt, breakDetail } = await verifyAuditIntegrity(chain, process.env.AUDIT_SECRET!);
 ```
 
+**Per-org (multi-tenant) chains.** Since 0.18, chains are scoped per
+`organizationId`: each org gets its own head, its own `1..N` sequence, and
+its own write lock, so one tenant's events never interleave with another's.
+Pass the org on the context (or via `metadata.organizationId`) and export /
+verify a single tenant's contiguous chain:
+
+```typescript
+await gov.enforce({ agentId, organizationId: 'org_acme', action: 'tool_call', tool: 'search' });
+
+const acme = await gov.integrityChain!.export({ organizationId: 'org_acme' });
+await verifyAuditIntegrity(acme, process.env.AUDIT_SECRET!); // contiguous, standalone-verifiable
+```
+
+Events without an `organizationId` share a single org-less chain, byte-for-byte
+compatible with chains written before 0.18 — no migration needed. The org is
+bound into each event's hash (when present), so an event can't be relabelled
+into another tenant's chain without breaking verification.
+
 **What gets chained (when `integrityAudit` is set):**
 
 | Event type | Written by | What it captures |

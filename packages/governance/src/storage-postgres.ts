@@ -96,8 +96,8 @@ export async function createPostgresStorage(
   async function createAgent(data: StoredAgent): Promise<StoredAgent> {
     await ensureMigrated();
     await pool.query(
-      `INSERT INTO ${prefix}_agents (id,name,framework,owner,description,version,channels,tools,permissions,metadata,composite_score,governance_level,status,registered_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-      [data.id, data.name, data.framework, data.owner, data.description ?? null, data.version, JSON.stringify(data.channels), JSON.stringify(data.tools), data.permissions ? JSON.stringify(data.permissions) : null, data.metadata ? JSON.stringify(data.metadata) : null, data.compositeScore, data.governanceLevel, data.status, data.registeredAt, data.updatedAt],
+      `INSERT INTO ${prefix}_agents (id,name,framework,owner,description,version,channels,tools,permissions,metadata,composite_score,governance_level,status,organization_id,registered_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+      [data.id, data.name, data.framework, data.owner, data.description ?? null, data.version, JSON.stringify(data.channels), JSON.stringify(data.tools), data.permissions ? JSON.stringify(data.permissions) : null, data.metadata ? JSON.stringify(data.metadata) : null, data.compositeScore, data.governanceLevel, data.status, data.organizationId ?? null, data.registeredAt, data.updatedAt],
     );
     return data;
   }
@@ -170,8 +170,8 @@ export async function createPostgresStorage(
   async function createAuditEvent(event: AuditEvent): Promise<AuditEvent> {
     await ensureMigrated();
     await pool.query(
-      `INSERT INTO ${prefix}_audit_events (id,agent_id,event_type,outcome,severity,detail,policy_rule_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [event.id, event.agentId, event.eventType, event.outcome, event.severity, event.detail ? JSON.stringify(event.detail) : null, event.policyRuleId ?? null, event.createdAt],
+      `INSERT INTO ${prefix}_audit_events (id,agent_id,event_type,outcome,severity,detail,policy_rule_id,organization_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [event.id, event.agentId, event.eventType, event.outcome, event.severity, event.detail ? JSON.stringify(event.detail) : null, event.policyRuleId ?? null, event.organizationId ?? null, event.createdAt],
     );
     return event;
   }
@@ -197,7 +197,7 @@ export async function createPostgresStorage(
     // UNIQUE index on integrity_sequence enforces no-duplicates even under
     // concurrent writers (though the chainLock in index.ts already serialises).
     await pool.query(
-      `INSERT INTO ${prefix}_audit_events (id,agent_id,event_type,outcome,severity,detail,policy_rule_id,created_at,integrity_hash,integrity_previous_hash,integrity_sequence,integrity_signed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      `INSERT INTO ${prefix}_audit_events (id,agent_id,event_type,outcome,severity,detail,policy_rule_id,organization_id,created_at,integrity_hash,integrity_previous_hash,integrity_sequence,integrity_signed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         event.id,
         event.agentId,
@@ -206,6 +206,7 @@ export async function createPostgresStorage(
         event.severity,
         event.detail ? JSON.stringify(event.detail) : null,
         event.policyRuleId ?? null,
+        event.organizationId ?? null,
         event.createdAt,
         integrity.hash,
         integrity.previousHash,
@@ -216,10 +217,13 @@ export async function createPostgresStorage(
     return event;
   }
 
-  async function getChainHead(): Promise<{ sequence: number; hash: string } | null> {
+  async function getChainHead(organizationId?: string): Promise<{ sequence: number; hash: string } | null> {
     await ensureMigrated();
+    // Scope to the org's chain. `IS NOT DISTINCT FROM` matches NULL = NULL so
+    // an undefined org resolves to the org-less chain, not every row.
     const result = await pool.query<{ integrity_sequence: string | number | null; integrity_hash: string | null }>(
-      `SELECT integrity_sequence, integrity_hash FROM ${prefix}_audit_events WHERE integrity_sequence IS NOT NULL ORDER BY integrity_sequence DESC LIMIT 1`,
+      `SELECT integrity_sequence, integrity_hash FROM ${prefix}_audit_events WHERE integrity_sequence IS NOT NULL AND organization_id IS NOT DISTINCT FROM $1 ORDER BY integrity_sequence DESC LIMIT 1`,
+      [organizationId ?? null],
     );
     const row = result.rows[0];
     if (!row || row.integrity_sequence == null || row.integrity_hash == null) return null;

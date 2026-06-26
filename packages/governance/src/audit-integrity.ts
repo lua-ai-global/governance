@@ -111,6 +111,12 @@ export function deepSortKeys(value: unknown): unknown {
 /** Compute the canonical string representation of an audit event for hashing */
 export function canonicalize(event: AuditEvent, previousHash: string, sequence: number): string {
   // Deterministic serialization: ALL keys sorted recursively (including nested detail)
+  //
+  // `organizationId` is bound into the hash ONLY when the event carries one.
+  // This cryptographically scopes per-org chains (an event cannot be relabelled
+  // into another org's chain without breaking its hash) while staying byte-for-byte
+  // backward-compatible with org-less chains written before per-org scoping existed
+  // — omitting the key produces the identical canonical form as before.
   const canonical = deepSortKeys({
     agentId: event.agentId,
     createdAt: event.createdAt,
@@ -122,6 +128,7 @@ export function canonicalize(event: AuditEvent, previousHash: string, sequence: 
     previousHash,
     sequence,
     severity: event.severity,
+    ...(event.organizationId != null ? { organizationId: event.organizationId } : {}),
   });
 
   return JSON.stringify(canonical);

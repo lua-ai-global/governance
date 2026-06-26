@@ -85,6 +85,8 @@ export interface AgentRegistration {
   framework: AgentFramework;
   description?: string;
   owner: string;
+  /** Organization that owns this agent — scopes audit + per-org chain. */
+  organizationId?: string;
   version?: string;
   channels?: string[];
   tools?: string[];

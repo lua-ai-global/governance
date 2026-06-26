@@ -70,8 +70,8 @@ export function getSchemaSQL(prefix: string): string {
     CREATE INDEX IF NOT EXISTS idx_${prefix}_agents_org
       ON ${prefix}_agents (organization_id) WHERE organization_id IS NOT NULL;
 
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_${prefix}_audit_integrity_seq
-      ON ${prefix}_audit_events (integrity_sequence) WHERE integrity_sequence IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_${prefix}_audit_integrity_org_seq
+      ON ${prefix}_audit_events (COALESCE(organization_id, ''), integrity_sequence) WHERE integrity_sequence IS NOT NULL;
   `;
 }
 
@@ -166,8 +166,15 @@ export function getIntegrityMigrationSQL(prefix: string): string {
     ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS integrity_previous_hash TEXT;
     ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS integrity_sequence BIGINT;
     ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS integrity_signed_at TIMESTAMPTZ;
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_${prefix}_audit_integrity_seq
-      ON ${prefix}_audit_events (integrity_sequence) WHERE integrity_sequence IS NOT NULL;
+    ALTER TABLE ${prefix}_audit_events ADD COLUMN IF NOT EXISTS organization_id TEXT;
+    -- Chains are scoped per-org: sequence is unique WITHIN an org, not globally.
+    -- Drop the old global unique index and replace with a per-org composite so
+    -- two orgs can both hold sequence=1. COALESCE folds the org-less chain into
+    -- a single '' bucket. Safe + idempotent: existing rows have organization_id
+    -- NULL, so they stay unique under the new index.
+    DROP INDEX IF EXISTS idx_${prefix}_audit_integrity_seq;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_${prefix}_audit_integrity_org_seq
+      ON ${prefix}_audit_events (COALESCE(organization_id, ''), integrity_sequence) WHERE integrity_sequence IS NOT NULL;
   `;
 }
 

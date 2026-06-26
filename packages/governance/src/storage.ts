@@ -45,11 +45,13 @@ export interface GovernanceStorage {
     integrity: StoredAuditIntegrity,
   ): Promise<AuditEvent>;
   /**
-   * Return the latest (highest-sequence) integrity record in storage, or null
-   * if no chained events exist. Called once at createGovernance() startup to
-   * resume the chain across process restarts.
+   * Return the latest (highest-sequence) integrity record for the given org,
+   * or null if that org has no chained events. Chains are scoped per-org, so
+   * pass the `organizationId` to resume the right chain; omit it (or pass
+   * undefined) for the org-less chain. Called lazily on the first write per
+   * org to resume across process restarts.
    */
-  getChainHead?(): Promise<{
+  getChainHead?(organizationId?: string): Promise<{
     sequence: number;
     hash: string;
   } | null>;
@@ -128,7 +130,9 @@ export function createMemoryStorage(): GovernanceStorage {
   const agents: Map<string, StoredAgent> = new Map();
   const events: AuditEvent[] = [];
   const integrity: Map<string, StoredAuditIntegrity> = new Map();
-  let chainHead: { sequence: number; hash: string } | null = null;
+  // Chain head per org (key = organizationId, or "" for the org-less chain).
+  const chainHeads: Map<string, { sequence: number; hash: string }> = new Map();
+  const orgKeyOf = (organizationId?: string) => organizationId ?? "";
 
   return {
     async createAgent(data) {
@@ -197,13 +201,16 @@ export function createMemoryStorage(): GovernanceStorage {
         for (const d of dropped) integrity.delete(d.id);
       }
       integrity.set(event.id, integrityMeta);
-      if (!chainHead || integrityMeta.sequence > chainHead.sequence) {
-        chainHead = { sequence: integrityMeta.sequence, hash: integrityMeta.hash };
+      const key = orgKeyOf(event.organizationId);
+      const head = chainHeads.get(key);
+      if (!head || integrityMeta.sequence > head.sequence) {
+        chainHeads.set(key, { sequence: integrityMeta.sequence, hash: integrityMeta.hash });
       }
       return event;
     },
-    async getChainHead() {
-      return chainHead ? { ...chainHead } : null;
+    async getChainHead(organizationId?: string) {
+      const head = chainHeads.get(orgKeyOf(organizationId));
+      return head ? { ...head } : null;
     },
     async getAuditIntegrity(eventId) {
       const meta = integrity.get(eventId);

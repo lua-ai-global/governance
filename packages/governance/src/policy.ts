@@ -81,6 +81,13 @@ export interface EnforcementContext {
   agentId: string;
   agentName?: string;
   agentLevel?: number;
+  /**
+   * Organization that owns this agent/request. Used to scope the tamper-evident
+   * audit chain per-org (each org gets an independent HMAC chain) and for
+   * multi-tenant audit queries. Populated by the host; falls back to
+   * `metadata.organizationId` when omitted. Does not affect policy evaluation.
+   */
+  organizationId?: string;
   action: PolicyAction;
   tool?: string;
   input?: Record<string, unknown>;

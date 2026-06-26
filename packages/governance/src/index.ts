@@ -55,6 +55,8 @@ import type { GovernanceStorage, StoredAgent, AuditEvent, AuditQueryFilters } fr
  */
 export interface ActionOutcome {
   agentId: string;
+  /** Organization that owns this agent — scopes the audit event to its per-org chain. */
+  organizationId?: string;
   /** The tool / action that ran — matches what was on the EnforcementContext. */
   tool?: string;
   action?: string;
@@ -190,10 +192,17 @@ export interface GovernanceInstance {
    * offline verification via `verifyAuditIntegrity`.
    */
   integrityChain?: {
-    /** Export the full chain (or a filtered slice) as IntegrityAuditEvent[]. */
+    /**
+     * Export the chain as IntegrityAuditEvent[]. Pass `{ organizationId }` in
+     * the filters to export a single org's contiguous, independently-verifiable
+     * chain (chains are scoped per-org).
+     */
     export: (filters?: AuditQueryFilters) => Promise<IntegrityAuditEvent[]>;
-    /** Chain stats: latest sequence, latest hash, algorithm. */
-    stats: () => { latestSequence: number; latestHash: string; algorithm: string };
+    /**
+     * Chain stats for one org (or the org-less chain when omitted):
+     * latest sequence, latest hash, algorithm.
+     */
+    stats: (organizationId?: string) => { latestSequence: number; latestHash: string; algorithm: string };
   };
   audit: {
     log: (event: Omit<AuditEvent, "id" | "createdAt">) => Promise<AuditEvent>;
@@ -280,9 +289,31 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   // the chain within a single process. Cross-process safety is provided
   // by the UNIQUE index on integrity_sequence at the storage layer.
   const integrity = config.integrityAudit;
-  let chainLastHash = GENESIS_HASH;
-  let chainSequence = 0;
-  let chainLock: Promise<unknown> = Promise.resolve();
+  // Per-org chain state. Each organization gets its OWN hash chain (own head,
+  // own sequence 1..N, own write lock) so one org's audit trail is never
+  // interleaved with another's — an org can export + verify its slice
+  // standalone, and cross-org tampering breaks the chain. Events with no
+  // organizationId share a single sentinel bucket (backward-compatible with
+  // the original global chain).
+  const GLOBAL_CHAIN_KEY = " __global__";
+  interface OrgChainState {
+    lastHash: string;
+    sequence: number;
+    loaded: boolean;
+    loadPromise: Promise<void> | null;
+    /** Serialises writes for THIS org so its sequence is race-free. */
+    lock: Promise<unknown>;
+  }
+  const orgChains = new Map<string, OrgChainState>();
+  function chainStateFor(organizationId: string | undefined): OrgChainState {
+    const key = organizationId ?? GLOBAL_CHAIN_KEY;
+    let state = orgChains.get(key);
+    if (!state) {
+      state = { lastHash: GENESIS_HASH, sequence: 0, loaded: false, loadPromise: null, lock: Promise.resolve() };
+      orgChains.set(key, state);
+    }
+    return state;
+  }
   // Fallback in-memory index for adapters that don't implement
   // createAuditEventWithIntegrity (e.g. third-party 0.11.x adapters).
   // When the storage adapter IS integrity-aware, we don't populate this
@@ -291,23 +322,31 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   const storageHasIntegrity =
     typeof storage.createAuditEventWithIntegrity === "function" &&
     typeof storage.getAuditIntegrity === "function";
-  let chainHeadLoaded = false;
-  let chainHeadLoadPromise: Promise<void> | null = null;
 
-  async function loadChainHead(): Promise<void> {
-    if (chainHeadLoaded || !integrity) return;
-    if (chainHeadLoadPromise) return chainHeadLoadPromise;
-    chainHeadLoadPromise = (async () => {
+  /** Resolve the org id from an explicit field, falling back to metadata. */
+  function resolveOrgId(
+    explicit: string | undefined,
+    metadata: Record<string, unknown> | undefined,
+  ): string | undefined {
+    if (explicit) return explicit;
+    const fromMeta = metadata?.organizationId;
+    return typeof fromMeta === "string" && fromMeta.length > 0 ? fromMeta : undefined;
+  }
+
+  async function loadChainHead(state: OrgChainState, organizationId: string | undefined): Promise<void> {
+    if (state.loaded || !integrity) return;
+    if (state.loadPromise) return state.loadPromise;
+    state.loadPromise = (async () => {
       if (typeof storage.getChainHead === "function") {
-        const head = await storage.getChainHead();
+        const head = await storage.getChainHead(organizationId);
         if (head) {
-          chainLastHash = head.hash;
-          chainSequence = head.sequence;
+          state.lastHash = head.hash;
+          state.sequence = head.sequence;
         }
       }
-      chainHeadLoaded = true;
+      state.loaded = true;
     })();
-    return chainHeadLoadPromise;
+    return state.loadPromise;
   }
 
   async function writeAudit(
@@ -324,15 +363,18 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       return storage.createAuditEvent(full);
     }
 
-    // Chained path. Serialise via chainLock so sequence is race-free.
-    // On failure we preserve the chainLastHash/chainSequence (don't bump)
-    // so the next write attempts the same slot — avoids silent gaps.
-    const result = chainLock.then(async () => {
-      // First call after boot: resume chain from durable state, if any.
-      if (!chainHeadLoaded) await loadChainHead();
+    // Chained path. Each org has its own head + lock, so its sequence is
+    // contiguous within the org and independent across orgs. Serialise via
+    // the org's lock so the sequence is race-free. On failure we preserve
+    // the org's lastHash/sequence (don't bump) so the next write attempts
+    // the same slot — avoids silent gaps.
+    const state = chainStateFor(full.organizationId);
+    const result = state.lock.then(async () => {
+      // First call after boot: resume this org's chain from durable state.
+      if (!state.loaded) await loadChainHead(state, full.organizationId);
 
-      const previousHash = chainLastHash;
-      const nextSequence = chainSequence + 1;
+      const previousHash = state.lastHash;
+      const nextSequence = state.sequence + 1;
       const canonical = canonicalizeAuditEvent(full, previousHash, nextSequence);
       const hash = await hmacSha256(integrity.signingKey, canonical);
       const integrityMeta: AuditIntegrity = {
@@ -360,12 +402,12 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
           ),
         );
       }
-      chainLastHash = hash;
-      chainSequence = nextSequence;
+      state.lastHash = hash;
+      state.sequence = nextSequence;
       return stored;
     });
 
-    chainLock = result.catch(() => {
+    state.lock = result.catch(() => {
       /* lock must advance even on failure */
     });
 
@@ -391,6 +433,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     // agent's canonical agentId from lua.skill.yaml so the dashboard
     // record uses the same id the runtime will send to enforce()).
     const id = input.id ?? crypto.randomUUID();
+    const organizationId = resolveOrgId(input.organizationId, input.metadata);
     const assessment = assessAgent(id, input);
 
     // Persist capability booleans in metadata so re-scoring can reconstruct them
@@ -408,6 +451,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
       framework: input.framework,
       owner: input.owner,
       description: input.description,
+      organizationId,
       version: input.version ?? "1.0.0",
       channels: input.channels ?? [],
       tools: input.tools ?? [],
@@ -425,6 +469,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     // fire-and-forget for the legacy behaviour.
     const regWrite = writeAudit({
       agentId: id,
+      ...(organizationId ? { organizationId } : {}),
       eventType: "agent_registered",
       outcome: "success",
       severity: "info",
@@ -445,6 +490,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     }
 
     const decision = policies.evaluate(ctx);
+    const organizationId = resolveOrgId(ctx.organizationId, ctx.metadata);
 
     // When integrityAudit is configured, we AWAIT the chain write so
     // sequencing is deterministic (and onFailure:"block" can veto the
@@ -452,6 +498,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     // to stay off the hot path.
     const writePromise = writeAudit({
       agentId: ctx.agentId,
+      ...(organizationId ? { organizationId } : {}),
       eventType: "policy_evaluation",
       outcome: decision.outcome,
       severity: decision.blocked ? "warning" : "info",
@@ -589,9 +636,11 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     if (remote) return remote.enforce(ctx, stage);
 
     const decision = policies.evaluateStage(ctx, stage);
+    const organizationId = resolveOrgId(ctx.organizationId, ctx.metadata);
 
     const writePromise = writeAudit({
       agentId: ctx.agentId,
+      ...(organizationId ? { organizationId } : {}),
       eventType: `policy_evaluation_${stage}`,
       outcome: decision.outcome,
       severity: decision.blocked ? "warning" : "info",
@@ -657,9 +706,12 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   const integrityChain = integrity
     ? {
         async export(filters?: AuditQueryFilters): Promise<IntegrityAuditEvent[]> {
-          // Ensure boot-time resume has run so stats()/export() reflect
-          // durable state even if no writes have happened yet.
-          if (!chainHeadLoaded) await loadChainHead();
+          // Ensure boot-time resume has run for the org being exported so
+          // stats()/export() reflect durable state even if no writes have
+          // happened yet this process. Export a single org at a time
+          // (filters.organizationId) to get a contiguous, verifiable chain.
+          const orgState = chainStateFor(filters?.organizationId);
+          if (!orgState.loaded) await loadChainHead(orgState, filters?.organizationId);
           const events = await storage.queryAuditEvents({
             ...filters,
             limit: undefined,
@@ -678,10 +730,11 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
           }
           return result;
         },
-        stats() {
+        stats(organizationId?: string) {
+          const orgState = chainStateFor(organizationId);
           return {
-            latestSequence: chainSequence,
-            latestHash: chainLastHash,
+            latestSequence: orgState.sequence,
+            latestHash: orgState.lastHash,
             algorithm: "hmac-sha256",
           };
         },
@@ -691,6 +744,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   async function recordOutcome(outcome: ActionOutcome): Promise<AuditEvent> {
     return writeAudit({
       agentId: outcome.agentId,
+      ...(outcome.organizationId ? { organizationId: outcome.organizationId } : {}),
       eventType: "action_outcome",
       outcome: outcome.success ? "success" : "failure",
       severity: outcome.success ? "info" : "warning",
