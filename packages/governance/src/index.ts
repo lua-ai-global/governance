@@ -744,9 +744,8 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
             limit: undefined,
             offset: undefined,
           });
-          const sorted = [...events].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
           const result: IntegrityAuditEvent[] = [];
-          for (const e of sorted) {
+          for (const e of events) {
             // Prefer durable integrity record; fall back to in-memory
             // index for adapters that don't yet persist it.
             const durable = storageHasIntegrity
@@ -755,7 +754,15 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
             const meta = durable ?? integrityIndex.get(e.id);
             if (meta) result.push({ ...e, integrity: meta });
           }
-          return result;
+          // Chain order is the lock-allocated sequence, not wall clock —
+          // createdAt is stamped before the write lock and can invert under
+          // concurrent writers. createdAt only tiebreaks legacy forked rows.
+          return result.sort((a, b) => {
+            if (a.integrity.sequence !== b.integrity.sequence) {
+              return a.integrity.sequence - b.integrity.sequence;
+            }
+            return a.createdAt.localeCompare(b.createdAt);
+          });
         },
         stats(organizationId?: string) {
           const orgState = chainStateFor(organizationId);

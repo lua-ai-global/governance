@@ -220,7 +220,7 @@ export async function createPostgresStorage(
     await ensureMigrated();
     const result = await pool.query<{ integrity_sequence: string | number | null; integrity_hash: string | null }>(
       chainHeadSQL(prefix),
-      [organizationId ?? null],
+      [organizationId ?? ""],
     );
     return parseChainHeadRow(result.rows[0]);
   }
@@ -248,24 +248,35 @@ export async function createPostgresStorage(
         // lock is granted), the head read goes stale, and the same sequence is
         // re-derived → 23505. Pin it so a server/role default can't break us.
         await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
-        // pg_advisory_xact_lock auto-releases at COMMIT/ROLLBACK. The org-less
-        // chain uses the empty string, matching the COALESCE(organization_id,'')
-        // partition of the unique index.
-        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [event.organizationId ?? ""]);
+        // pg_advisory_xact_lock auto-releases at COMMIT/ROLLBACK. The two-arg
+        // form namespaces the key under AUDIT_CHAIN_LOCK_CLASS so other
+        // advisory-lock users of the same database can't contend with us. The
+        // org-less chain uses the empty string, matching the
+        // COALESCE(organization_id,'') partition of the unique index.
+        await client.query("SELECT pg_advisory_xact_lock($1, hashtext($2))", [
+          AUDIT_CHAIN_LOCK_CLASS,
+          event.organizationId ?? "",
+        ]);
         const headRes = await client.query<{ integrity_sequence: string | number | null; integrity_hash: string | null }>(
           chainHeadSQL(prefix),
-          [event.organizationId ?? null],
+          [event.organizationId ?? ""],
         );
         const head = parseChainHeadRow(headRes.rows[0]);
         const integrity = await computeIntegrity(head);
         await client.query(auditIntegrityInsertSQL(prefix), auditIntegrityInsertParams(event, integrity));
         await client.query("COMMIT");
+        client.release();
         return { event, integrity };
       } catch (err) {
-        await client.query("ROLLBACK").catch(() => undefined);
+        try {
+          await client.query("ROLLBACK");
+          client.release();
+        } catch (rollbackErr) {
+          // ROLLBACK failing means the connection is dead or wedged in an
+          // aborted transaction — destroy it rather than poison the pool.
+          client.release(rollbackErr);
+        }
         throw err;
-      } finally {
-        client.release();
       }
     }
 
@@ -359,11 +370,21 @@ function auditIntegrityInsertParams(event: AuditEvent, integrity: StoredAuditInt
   ];
 }
 
+/**
+ * Advisory-lock namespace (int4) for audit-chain appends — the classid of the
+ * two-arg pg_advisory_xact_lock form. Arbitrary but fixed: it only has to be
+ * distinct from any other advisory-lock user of the same database.
+ */
+const AUDIT_CHAIN_LOCK_CLASS = 0x67764143;
+
 /** SELECT for the highest-sequence integrity row of one org's chain. */
 function chainHeadSQL(prefix: string): string {
-  // `IS NOT DISTINCT FROM` matches NULL = NULL so an undefined org resolves to
-  // the org-less chain, not every row.
-  return `SELECT integrity_sequence, integrity_hash FROM ${prefix}_audit_events WHERE integrity_sequence IS NOT NULL AND organization_id IS NOT DISTINCT FROM $1 ORDER BY integrity_sequence DESC LIMIT 1`;
+  // COALESCE(organization_id,'') is the exact partition of the unique index
+  // and the advisory-lock key: NULL and '' orgs are one chain everywhere, so
+  // the head read can never disagree with the uniqueness/lock scope. Bind the
+  // org-less chain as ''. Matching the index expression also lets this LIMIT 1
+  // walk the unique index directly.
+  return `SELECT integrity_sequence, integrity_hash FROM ${prefix}_audit_events WHERE integrity_sequence IS NOT NULL AND COALESCE(organization_id, '') = $1 ORDER BY integrity_sequence DESC LIMIT 1`;
 }
 
 /** Coerce a chain-head row (pg returns BIGINT as string) into typed head or null. */

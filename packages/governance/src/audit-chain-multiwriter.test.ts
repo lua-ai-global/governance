@@ -15,7 +15,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createGovernance } from "./index";
 import { createMemoryStorage } from "./storage";
+import type { AuditEvent } from "./storage";
 import { verifyAuditIntegrity } from "./audit-integrity-verify";
+import { GENESIS_HASH, canonicalize, hmacSha256 } from "./audit-integrity";
+import type { AuditIntegrity, IntegrityAuditEvent } from "./audit-integrity";
 
 const KEY = "multi-writer-secret";
 
@@ -73,5 +76,57 @@ describe("integrity chain — multi-writer (shared storage, two instances)", () 
       const result = await verifyAuditIntegrity(chain, KEY);
       assert.equal(result.valid, true, `${org}: ${result.breakDetail ?? "invalid"}`);
     }
+  });
+});
+
+describe("integrity chain — wall-clock order disagrees with chain order", () => {
+  // createdAt is stamped BEFORE the append lock allocates the sequence, so
+  // under concurrent writers (lock-wait inversion) or cross-pod clock skew a
+  // lower sequence can carry a LATER timestamp. The chain order is the
+  // sequence — verification and export must not key on wall clock.
+  async function chainedEvent(
+    i: number,
+    createdAt: string,
+    prev: AuditIntegrity | null,
+  ): Promise<IntegrityAuditEvent> {
+    const event: AuditEvent = {
+      id: `evt-${i}`,
+      agentId: `a${i}`,
+      eventType: "tool_call",
+      outcome: "allow",
+      severity: "info",
+      organizationId: "orgSkew",
+      createdAt,
+    };
+    const previousHash = prev?.hash ?? GENESIS_HASH;
+    const sequence = (prev?.sequence ?? 0) + 1;
+    const hash = await hmacSha256(KEY, canonicalize(event, previousHash, sequence));
+    return { ...event, integrity: { hash, previousHash, sequence, signedAt: createdAt } };
+  }
+
+  it("verifies a chain whose createdAt order inverts its sequence order", async () => {
+    // The seq-1 writer stamped its clock LAST: it entered writeAudit first
+    // but won the lock ahead of two writers with earlier-running clocks.
+    const e1 = await chainedEvent(1, "2026-07-15T10:00:00.150Z", null);
+    const e2 = await chainedEvent(2, "2026-07-15T10:00:00.100Z", e1.integrity);
+    const e3 = await chainedEvent(3, "2026-07-15T10:00:00.125Z", e2.integrity);
+
+    const result = await verifyAuditIntegrity([e1, e2, e3], KEY);
+    assert.equal(result.valid, true, result.breakDetail ?? "timestamp-skewed chain must verify");
+  });
+
+  it("export() orders by sequence, not createdAt", async () => {
+    const storage = createMemoryStorage();
+    const e1 = await chainedEvent(1, "2026-07-15T10:00:00.150Z", null);
+    const e2 = await chainedEvent(2, "2026-07-15T10:00:00.100Z", e1.integrity);
+    for (const { integrity, ...event } of [e1, e2]) {
+      await storage.createAuditEventWithIntegrity!(event, integrity);
+    }
+
+    const gov = createGovernance({ storage, integrityAudit: { signingKey: KEY } });
+    const chain = await gov.integrityChain!.export({ organizationId: "orgSkew" });
+    assert.deepEqual(chain.map((e) => e.integrity.sequence), [1, 2]);
+    const result = await verifyAuditIntegrity(chain, KEY);
+    assert.equal(result.valid, true, result.breakDetail ?? "exported chain must verify");
   });
 });

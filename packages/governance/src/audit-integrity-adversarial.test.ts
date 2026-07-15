@@ -53,7 +53,7 @@ describe("audit integrity — adversarial scenarios", () => {
   });
 
   it("detects reorder attempt: renumbering sequences to mask a swap breaks the hash", async () => {
-    // The verifier sorts by (createdAt, sequence) before checking, so a raw
+    // The verifier sorts by sequence before checking, so a raw
     // array reorder re-sorts back to canonical order. An attacker wanting to
     // actually reorder the chain would have to edit the sequence numbers and
     // previousHash fields — doing so breaks the signed hash. This test

@@ -32,10 +32,17 @@ export async function verifyAuditIntegrity(
   entries: IntegrityAuditEvent[],
   signingKey: string,
 ): Promise<ChainVerificationResult> {
+  // Order by sequence, not createdAt: the sequence is allocated under the
+  // chain's write lock and is HMAC-covered, so it IS the chain order. Wall
+  // clocks are stamped before the lock and can disagree with it (lock-wait
+  // inversion under concurrent writers, cross-process clock skew) — sorting
+  // by createdAt would report a valid chain as tampered. A forged sequence
+  // still fails the hash/previousHash checks below.
   const sorted = [...entries].sort((a, b) => {
-    const t = a.createdAt.localeCompare(b.createdAt);
-    if (t !== 0) return t;
-    return a.integrity.sequence - b.integrity.sequence;
+    const sa = a.integrity?.sequence;
+    const sb = b.integrity?.sequence;
+    if (sa != null && sb != null && sa !== sb) return sa - sb;
+    return a.createdAt.localeCompare(b.createdAt);
   });
 
   let currentPreviousHash = GENESIS_HASH;

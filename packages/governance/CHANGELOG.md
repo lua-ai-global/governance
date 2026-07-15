@@ -30,9 +30,12 @@ Backward compatible: the canonical hash form, per-org scoping, `verify()`,
   key stays in the SDK core), and persists event + integrity as one operation.
   Implemented by the memory adapter (per-org async lock) and the Postgres
   adapter.
-- Postgres path uses a transaction with `pg_advisory_xact_lock(hashtext(org))`
-  → head `SELECT` → `INSERT` → `COMMIT`, serialising each org's chain against
-  itself across all writers (unrelated orgs proceed in parallel).
+- Postgres path uses a transaction with
+  `pg_advisory_xact_lock(<classid>, hashtext(org))` → head `SELECT` → `INSERT`
+  → `COMMIT`, serialising each org's chain against itself across all writers
+  (unrelated orgs proceed in parallel). The two-arg lock form namespaces the
+  key under a fixed classid so other advisory-lock users of the same database
+  can't contend with the audit chain.
 - `PgClientLike` type and an optional `connect()` on `PgPoolLike` for the
   transactional path. Pools exposing only `query()` fall back to a bounded
   read-head → insert → retry-on-`23505` loop, which is also multi-writer-safe.
@@ -43,6 +46,26 @@ Backward compatible: the canonical hash form, per-org scoping, `verify()`,
   provides it; the previous `createAuditEventWithIntegrity` + process-local
   sequence path remains only as a fallback for third-party adapters that
   predate this method (correct under a single writer).
+- The Postgres chain-head `SELECT` now scopes by `COALESCE(organization_id,'')`
+  — the exact partition of the unique index and the advisory-lock key — so the
+  head read can never disagree with the uniqueness/lock scope (a literal-`''`
+  org and the org-less chain were previously read as different heads while
+  colliding on the same index partition). Matching the index expression also
+  lets the head read walk the unique index directly.
+
+### Fixed
+
+- `verifyAuditIntegrity()` and `integrityChain.export()` now order entries by
+  the HMAC-covered `sequence` (wall-clock `createdAt` only tiebreaks) instead
+  of `createdAt`-first. `createdAt` is stamped before the append lock, so
+  under concurrent writers a lower sequence can carry a later timestamp
+  (lock-wait inversion, cross-pod clock skew) — the old ordering could report
+  a valid multi-writer chain as tampered. Sequence ordering is tamper-safe:
+  the sequence is inside the signed hash, so forging it still breaks the
+  hash/previous-hash checks.
+- On the transactional append path, a failed `ROLLBACK` now destroys the
+  pooled connection (`client.release(err)`) instead of returning a dead or
+  aborted-transaction client to the pool.
 
 ### Notes
 
@@ -53,6 +76,11 @@ Backward compatible: the canonical hash form, per-org scoping, `verify()`,
 - The standalone `createIntegrityAudit()` wrapper in `audit-integrity.ts`
   retains its pure in-process module-state chain and is not covered by this
   fix — it is not the path `createGovernance({ integrityAudit })` uses.
+- Rolling deploys: the advisory lock only protects writers that take it.
+  During a mixed-version window, pre-0.18.2 processes still allocate from
+  their process-local counters and can collide with or fork past locked
+  writers. Replace all writers together; expect residual unique-violation
+  warnings until the last old process drains.
 
 ## [0.18.1] - 2026-06-26 — Evasion-resistant injection normalization
 

@@ -114,7 +114,8 @@ function createTxnPool(opts: { clientLog?: string[] } = {}): PgPoolLike {
         async query(text: string, values?: unknown[]) {
           const t = text.trim();
           if (t.includes("pg_advisory_xact_lock")) {
-            const key = orgKey(values?.[0] as string);
+            // Two-arg form: values[0] = lock classid, values[1] = org key.
+            const key = orgKey(values?.[1] as string);
             const prev = locks.get(key) ?? Promise.resolve();
             let resolveMine!: () => void;
             const mine = new Promise<void>((r) => { resolveMine = r; });
@@ -250,5 +251,59 @@ describe("postgres appendToAuditChain — retry fallback (no connect())", () => 
     assert.deepEqual(attempts, [1, 2]);
     assert.equal(integrity.sequence, 2);
     assert.equal(integrity.previousHash, "competitor");
+  });
+});
+
+describe("postgres appendToAuditChain — connection hygiene on failure", () => {
+  function failingPool(opts: { rollbackFails: boolean; releaseArgs: unknown[][]; insertErr: Error; rollbackErr: Error }): PgPoolLike {
+    return {
+      async query() {
+        return { rows: [], rowCount: 0 } as never; // migrations
+      },
+      async connect(): Promise<PgClientLike> {
+        return {
+          async query(text: string) {
+            const t = text.trim();
+            if (t.startsWith("INSERT")) throw opts.insertErr;
+            if (t.startsWith("ROLLBACK") && opts.rollbackFails) throw opts.rollbackErr;
+            return { rows: [], rowCount: 0 } as never;
+          },
+          release(...args: unknown[]) {
+            opts.releaseArgs.push(args);
+          },
+        };
+      },
+      async end() {},
+    };
+  }
+
+  const auditEvent = { id: "e1", agentId: "a", eventType: "t", outcome: "allow" as const, severity: "info", createdAt: new Date().toISOString() };
+  const compute = async () => ({ hash: "h", previousHash: "0".repeat(64), sequence: 1, signedAt: new Date().toISOString() });
+
+  it("destroys the client — release(err) — when ROLLBACK fails after a failed write", async () => {
+    const releaseArgs: unknown[][] = [];
+    const insertErr = Object.assign(new Error("insert exploded"), { code: "XX000" });
+    const rollbackErr = new Error("connection terminated");
+    const pool = failingPool({ rollbackFails: true, releaseArgs, insertErr, rollbackErr });
+
+    const storage = await createPostgresStorage({ pool, autoMigrate: true });
+    await assert.rejects(storage.appendToAuditChain!(auditEvent, compute), insertErr);
+
+    // Released exactly once, WITH the rollback error → pool destroys the
+    // connection instead of handing an aborted/dead one to the next caller.
+    assert.equal(releaseArgs.length, 1);
+    assert.equal(releaseArgs[0][0], rollbackErr);
+  });
+
+  it("releases the client cleanly when ROLLBACK succeeds", async () => {
+    const releaseArgs: unknown[][] = [];
+    const insertErr = Object.assign(new Error("insert exploded"), { code: "XX000" });
+    const pool = failingPool({ rollbackFails: false, releaseArgs, insertErr, rollbackErr: new Error("unused") });
+
+    const storage = await createPostgresStorage({ pool, autoMigrate: true });
+    await assert.rejects(storage.appendToAuditChain!(auditEvent, compute), insertErr);
+
+    assert.equal(releaseArgs.length, 1);
+    assert.equal(releaseArgs[0][0], undefined);
   });
 });
