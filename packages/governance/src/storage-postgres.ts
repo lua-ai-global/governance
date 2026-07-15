@@ -283,8 +283,14 @@ export async function createPostgresStorage(
     // Fallback for pools that expose only query() (no transaction handle):
     // read the durable head, compute, INSERT — and on a unique-violation
     // (another writer took the sequence between our read and insert) re-read
-    // the fresh head and retry. Correct without a transaction; bounded retries.
-    const MAX_ATTEMPTS = 8;
+    // the fresh head and retry. Correct without a transaction, and the bound
+    // is a real guarantee, not a hope: every 23505 means a COMPETITOR
+    // committed the sequence we derived, so a writer can lose at most once
+    // per concurrent same-org contender — MAX_ATTEMPTS caps how much
+    // same-instant contention the path absorbs before surfacing the error.
+    // The jittered backoff desynchronises contenders that all read the same
+    // head, so later rounds rarely re-collide.
+    const MAX_ATTEMPTS = 12;
     for (let attempt = 1; ; attempt++) {
       const head = await getChainHead(event.organizationId);
       const integrity = await computeIntegrity(head);
@@ -292,8 +298,8 @@ export async function createPostgresStorage(
         await pool.query(auditIntegrityInsertSQL(prefix), auditIntegrityInsertParams(event, integrity));
         return { event, integrity };
       } catch (err) {
-        if (attempt < MAX_ATTEMPTS && isUniqueViolation(err)) continue;
-        throw err;
+        if (attempt >= MAX_ATTEMPTS || !isUniqueViolation(err)) throw err;
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * Math.min(25 * attempt, 250)));
       }
     }
   }

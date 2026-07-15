@@ -252,6 +252,49 @@ describe("postgres appendToAuditChain — retry fallback (no connect())", () => 
     assert.equal(integrity.sequence, 2);
     assert.equal(integrity.previousHash, "competitor");
   });
+
+  it("absorbs N-way same-org contention without dropping a write", async () => {
+    // Every 23505 means a competitor committed the derived sequence, so a
+    // writer loses at most once per concurrent contender: with 10 writers and
+    // MAX_ATTEMPTS=12 completion is guaranteed, not probabilistic.
+    const rows: AuditRowShape[] = [];
+    const pool: PgPoolLike = {
+      async query(text: string, values?: unknown[]) {
+        const t = text.trim();
+        if (t.includes("CREATE") || t.includes("ALTER") || t.includes("DROP INDEX")) return { rows: [], rowCount: 0 } as never;
+        if (t.startsWith("SELECT") && t.includes("integrity_sequence IS NOT NULL")) {
+          if (rows.length === 0) return { rows: [], rowCount: 0 } as never;
+          const top = rows.reduce((a, b) => (b.integrity_sequence > a.integrity_sequence ? b : a));
+          return { rows: [{ integrity_sequence: top.integrity_sequence, integrity_hash: top.integrity_hash }], rowCount: 1 } as never;
+        }
+        if (t.startsWith("INSERT")) {
+          const seq = values![11] as number;
+          if (rows.some((r) => r.integrity_sequence === seq)) {
+            throw Object.assign(new Error("duplicate"), { code: "23505" });
+          }
+          rows.push({ organization_id: values![7] as string | null, integrity_sequence: seq, integrity_hash: values![9] as string });
+          return { rows: [], rowCount: 1 } as never;
+        }
+        return { rows: [], rowCount: 0 } as never;
+      },
+      async end() {},
+    };
+
+    const storage = await createPostgresStorage({ pool, autoMigrate: true });
+    const N = 10;
+    await Promise.all(
+      Array.from({ length: N }, (_, i) =>
+        storage.appendToAuditChain!(
+          { id: `e${i}`, agentId: `a${i}`, eventType: "t", outcome: "allow", severity: "info", organizationId: "orgC", createdAt: new Date().toISOString() },
+          async (head) => ({ hash: `h${i}`, previousHash: head?.hash ?? "GEN", sequence: (head?.sequence ?? 0) + 1, signedAt: new Date().toISOString() }),
+        ),
+      ),
+    );
+
+    assert.equal(rows.length, N);
+    const sequences = rows.map((r) => r.integrity_sequence).sort((a, b) => a - b);
+    assert.deepEqual(sequences, Array.from({ length: N }, (_, i) => i + 1));
+  });
 });
 
 describe("postgres appendToAuditChain — connection hygiene on failure", () => {

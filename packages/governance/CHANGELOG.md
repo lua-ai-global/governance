@@ -38,7 +38,10 @@ Backward compatible: the canonical hash form, per-org scoping, `verify()`,
   can't contend with the audit chain.
 - `PgClientLike` type and an optional `connect()` on `PgPoolLike` for the
   transactional path. Pools exposing only `query()` fall back to a bounded
-  read-head → insert → retry-on-`23505` loop, which is also multi-writer-safe.
+  read-head → insert → retry-on-`23505` loop with jittered backoff, which is
+  also multi-writer-safe: every unique-violation means a competitor committed
+  the derived sequence, so a writer loses at most once per concurrent same-org
+  contender (the retry cap absorbs 12-way same-instant contention).
 
 ### Changed
 
