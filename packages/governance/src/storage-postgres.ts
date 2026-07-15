@@ -11,12 +11,27 @@ import type { AgentRow, AuditRow } from "./storage-postgres-schema.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
+/** Minimal pg.PoolClient-compatible interface (a single checked-out connection) */
+export interface PgClientLike {
+  query<R = Record<string, unknown>>(
+    text: string,
+    values?: unknown[],
+  ): Promise<{ rows: R[]; rowCount: number | null }>;
+  release(err?: unknown): void;
+}
+
 /** Minimal pg.Pool-compatible interface */
 export interface PgPoolLike {
   query<R = Record<string, unknown>>(
     text: string,
     values?: unknown[],
   ): Promise<{ rows: R[]; rowCount: number | null }>;
+  /**
+   * Check out a dedicated connection for a transaction. Present on real
+   * pg.Pool; optional here so lightweight/mock pools that only implement
+   * query() still satisfy the interface (they use the retry fallback).
+   */
+  connect?(): Promise<PgClientLike>;
   end(): Promise<void>;
 }
 
@@ -193,45 +208,83 @@ export async function createPostgresStorage(
   ): Promise<AuditEvent> {
     await ensureMigrated();
     // Single INSERT: event + integrity metadata atomically. A failure here
-    // persists neither, so the chain never has a half-written row. The
-    // UNIQUE index on integrity_sequence enforces no-duplicates even under
-    // concurrent writers (though the chainLock in index.ts already serialises).
-    await pool.query(
-      `INSERT INTO ${prefix}_audit_events (id,agent_id,event_type,outcome,severity,detail,policy_rule_id,organization_id,created_at,integrity_hash,integrity_previous_hash,integrity_sequence,integrity_signed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [
-        event.id,
-        event.agentId,
-        event.eventType,
-        event.outcome,
-        event.severity,
-        event.detail ? JSON.stringify(event.detail) : null,
-        event.policyRuleId ?? null,
-        event.organizationId ?? null,
-        event.createdAt,
-        integrity.hash,
-        integrity.previousHash,
-        integrity.sequence,
-        integrity.signedAt,
-      ],
-    );
+    // persists neither, so the chain never has a half-written row. Note the
+    // caller pre-computed the sequence from process-local state, so this path
+    // is only safe under a single writer — appendToAuditChain() is the
+    // multi-writer-safe entry point and the one createGovernance() prefers.
+    await pool.query(auditIntegrityInsertSQL(prefix), auditIntegrityInsertParams(event, integrity));
     return event;
   }
 
   async function getChainHead(organizationId?: string): Promise<{ sequence: number; hash: string } | null> {
     await ensureMigrated();
-    // Scope to the org's chain. `IS NOT DISTINCT FROM` matches NULL = NULL so
-    // an undefined org resolves to the org-less chain, not every row.
     const result = await pool.query<{ integrity_sequence: string | number | null; integrity_hash: string | null }>(
-      `SELECT integrity_sequence, integrity_hash FROM ${prefix}_audit_events WHERE integrity_sequence IS NOT NULL AND organization_id IS NOT DISTINCT FROM $1 ORDER BY integrity_sequence DESC LIMIT 1`,
+      chainHeadSQL(prefix),
       [organizationId ?? null],
     );
-    const row = result.rows[0];
-    if (!row || row.integrity_sequence == null || row.integrity_hash == null) return null;
-    // pg returns BIGINT as string by default to preserve precision; coerce.
-    const sequence = typeof row.integrity_sequence === "string"
-      ? parseInt(row.integrity_sequence, 10)
-      : row.integrity_sequence;
-    return { sequence, hash: row.integrity_hash };
+    return parseChainHeadRow(result.rows[0]);
+  }
+
+  async function appendToAuditChain(
+    event: AuditEvent,
+    computeIntegrity: (
+      head: { sequence: number; hash: string } | null,
+    ) => Promise<StoredAuditIntegrity>,
+  ): Promise<{ event: AuditEvent; integrity: StoredAuditIntegrity }> {
+    await ensureMigrated();
+    // Preferred path: a real transaction with a per-org advisory lock makes
+    // head-read → computeIntegrity → INSERT indivisible across ALL writers,
+    // including separate processes sharing this database. The org's chain is
+    // serialised only against itself (hashtext(orgKey)), so unrelated orgs
+    // proceed in parallel.
+    if (typeof pool.connect === "function") {
+      const client = await pool.connect();
+      try {
+        // READ COMMITTED is load-bearing, not cosmetic: the guarantee is that
+        // the head SELECT below — run AFTER the advisory lock is granted — sees
+        // the prior writer's just-committed row. Under READ COMMITTED each
+        // statement takes a fresh snapshot, so it does. Under REPEATABLE READ /
+        // SERIALIZABLE the snapshot is fixed at the first statement (before the
+        // lock is granted), the head read goes stale, and the same sequence is
+        // re-derived → 23505. Pin it so a server/role default can't break us.
+        await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+        // pg_advisory_xact_lock auto-releases at COMMIT/ROLLBACK. The org-less
+        // chain uses the empty string, matching the COALESCE(organization_id,'')
+        // partition of the unique index.
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [event.organizationId ?? ""]);
+        const headRes = await client.query<{ integrity_sequence: string | number | null; integrity_hash: string | null }>(
+          chainHeadSQL(prefix),
+          [event.organizationId ?? null],
+        );
+        const head = parseChainHeadRow(headRes.rows[0]);
+        const integrity = await computeIntegrity(head);
+        await client.query(auditIntegrityInsertSQL(prefix), auditIntegrityInsertParams(event, integrity));
+        await client.query("COMMIT");
+        return { event, integrity };
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
+    // Fallback for pools that expose only query() (no transaction handle):
+    // read the durable head, compute, INSERT — and on a unique-violation
+    // (another writer took the sequence between our read and insert) re-read
+    // the fresh head and retry. Correct without a transaction; bounded retries.
+    const MAX_ATTEMPTS = 8;
+    for (let attempt = 1; ; attempt++) {
+      const head = await getChainHead(event.organizationId);
+      const integrity = await computeIntegrity(head);
+      try {
+        await pool.query(auditIntegrityInsertSQL(prefix), auditIntegrityInsertParams(event, integrity));
+        return { event, integrity };
+      } catch (err) {
+        if (attempt < MAX_ATTEMPTS && isUniqueViolation(err)) continue;
+        throw err;
+      }
+    }
   }
 
   async function getAuditIntegrity(eventId: string): Promise<StoredAuditIntegrity | null> {
@@ -274,11 +327,59 @@ export async function createPostgresStorage(
     queryAuditEvents,
     countAuditEvents,
     createAuditEventWithIntegrity,
+    appendToAuditChain,
     getChainHead,
     getAuditIntegrity,
     migrate,
     close: () => pool.end(),
   };
+}
+
+/** INSERT statement writing an audit event + its integrity columns in one row. */
+function auditIntegrityInsertSQL(prefix: string): string {
+  return `INSERT INTO ${prefix}_audit_events (id,agent_id,event_type,outcome,severity,detail,policy_rule_id,organization_id,created_at,integrity_hash,integrity_previous_hash,integrity_sequence,integrity_signed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`;
+}
+
+/** Positional params for auditIntegrityInsertSQL, in column order. */
+function auditIntegrityInsertParams(event: AuditEvent, integrity: StoredAuditIntegrity): unknown[] {
+  return [
+    event.id,
+    event.agentId,
+    event.eventType,
+    event.outcome,
+    event.severity,
+    event.detail ? JSON.stringify(event.detail) : null,
+    event.policyRuleId ?? null,
+    event.organizationId ?? null,
+    event.createdAt,
+    integrity.hash,
+    integrity.previousHash,
+    integrity.sequence,
+    integrity.signedAt,
+  ];
+}
+
+/** SELECT for the highest-sequence integrity row of one org's chain. */
+function chainHeadSQL(prefix: string): string {
+  // `IS NOT DISTINCT FROM` matches NULL = NULL so an undefined org resolves to
+  // the org-less chain, not every row.
+  return `SELECT integrity_sequence, integrity_hash FROM ${prefix}_audit_events WHERE integrity_sequence IS NOT NULL AND organization_id IS NOT DISTINCT FROM $1 ORDER BY integrity_sequence DESC LIMIT 1`;
+}
+
+/** Coerce a chain-head row (pg returns BIGINT as string) into typed head or null. */
+function parseChainHeadRow(
+  row: { integrity_sequence: string | number | null; integrity_hash: string | null } | undefined,
+): { sequence: number; hash: string } | null {
+  if (!row || row.integrity_sequence == null || row.integrity_hash == null) return null;
+  const sequence = typeof row.integrity_sequence === "string"
+    ? parseInt(row.integrity_sequence, 10)
+    : row.integrity_sequence;
+  return { sequence, hash: row.integrity_hash };
+}
+
+/** Postgres unique-violation SQLSTATE — the audit chain's per-org sequence index. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
 
 function buildAuditWhere(filters: AuditQueryFilters): { clauses: string[]; values: unknown[]; paramIdx: number } {

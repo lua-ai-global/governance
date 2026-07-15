@@ -322,6 +322,10 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   const storageHasIntegrity =
     typeof storage.createAuditEventWithIntegrity === "function" &&
     typeof storage.getAuditIntegrity === "function";
+  // Multi-writer-safe path: the adapter allocates the sequence + previous-hash
+  // from the durable head atomically (per-org lock), so concurrent processes
+  // never fork the chain or collide on a sequence. Preferred when available.
+  const storageHasAtomicAppend = typeof storage.appendToAuditChain === "function";
 
   /** Resolve the org id from an explicit field, falling back to metadata. */
   function resolveOrgId(
@@ -370,6 +374,29 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
     // the same slot — avoids silent gaps.
     const state = chainStateFor(full.organizationId);
     const result = state.lock.then(async () => {
+      // Preferred: the storage adapter allocates the sequence + previous-hash
+      // from the CURRENT durable head atomically, so this is safe across pods.
+      // The in-process `state.lock` above still serialises this pod's writes to
+      // the org (cheap local ordering ahead of the DB lock); `state.*` is only
+      // refreshed afterwards as a cache for stats(), never read to derive the
+      // next slot.
+      if (storageHasAtomicAppend) {
+        const { event: stored, integrity: integrityMeta } = await storage.appendToAuditChain!(
+          full,
+          async (head) => {
+            const previousHash = head?.hash ?? GENESIS_HASH;
+            const nextSequence = (head?.sequence ?? 0) + 1;
+            const canonical = canonicalizeAuditEvent(full, previousHash, nextSequence);
+            const hash = await hmacSha256(integrity.signingKey, canonical);
+            return { hash, previousHash, sequence: nextSequence, signedAt: new Date().toISOString() };
+          },
+        );
+        state.lastHash = integrityMeta.hash;
+        state.sequence = integrityMeta.sequence;
+        state.loaded = true;
+        return stored;
+      }
+
       // First call after boot: resume this org's chain from durable state.
       if (!state.loaded) await loadChainHead(state, full.organizationId);
 

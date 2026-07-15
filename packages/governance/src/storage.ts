@@ -56,6 +56,33 @@ export interface GovernanceStorage {
     hash: string;
   } | null>;
   /**
+   * Atomically append an event to its org's integrity chain, deriving the
+   * sequence and previous-hash from the CURRENT durable head rather than any
+   * caller-held (process-local) state.
+   *
+   * The adapter, holding a per-org lock that spans the whole operation:
+   *   1. reads the current chain head for `event.organizationId`,
+   *   2. calls `computeIntegrity(head)` to derive the HMAC metadata — the
+   *      signing key stays inside the SDK core, never in storage,
+   *   3. persists the event + integrity as one indivisible write.
+   *
+   * `head` is null when the org has no chained events yet. This is the
+   * multi-writer-safe path: concurrent writers — including separate processes
+   * sharing one database — each observe a distinct, monotonic head, so
+   * sequences stay contiguous (no duplicate-key drops) and the hash chain
+   * links to the true latest row instead of a per-process fork.
+   *
+   * Optional: adapters that predate this (0.18.x and earlier) may omit it.
+   * When absent, createGovernance() falls back to createAuditEventWithIntegrity
+   * with a process-local sequence — correct only for single-writer deployments.
+   */
+  appendToAuditChain?(
+    event: AuditEvent,
+    computeIntegrity: (
+      head: { sequence: number; hash: string } | null,
+    ) => Promise<StoredAuditIntegrity>,
+  ): Promise<{ event: AuditEvent; integrity: StoredAuditIntegrity }>;
+  /**
    * Fetch the stored integrity record for a specific event id. Used by
    * integrityChain.export() and verifyAuditIntegrity() to rebuild the chain
    * from durable state instead of in-memory.
@@ -132,6 +159,10 @@ export function createMemoryStorage(): GovernanceStorage {
   const integrity: Map<string, StoredAuditIntegrity> = new Map();
   // Chain head per org (key = organizationId, or "" for the org-less chain).
   const chainHeads: Map<string, { sequence: number; hash: string }> = new Map();
+  // Per-org append lock: serialises head-read → computeIntegrity → write so the
+  // sequence is allocated atomically even when concurrent callers interleave
+  // across the `await` in computeIntegrity.
+  const chainLocks: Map<string, Promise<unknown>> = new Map();
   const orgKeyOf = (organizationId?: string) => organizationId ?? "";
 
   return {
@@ -211,6 +242,25 @@ export function createMemoryStorage(): GovernanceStorage {
     async getChainHead(organizationId?: string) {
       const head = chainHeads.get(orgKeyOf(organizationId));
       return head ? { ...head } : null;
+    },
+    async appendToAuditChain(event, computeIntegrity) {
+      const key = orgKeyOf(event.organizationId);
+      const prev = chainLocks.get(key) ?? Promise.resolve();
+      const run = prev.then(async () => {
+        const head = chainHeads.get(key) ?? null;
+        const integrityMeta = await computeIntegrity(head ? { ...head } : null);
+        events.push(event);
+        if (events.length > MAX_AUDIT_EVENTS) {
+          const dropped = events.splice(0, events.length - MAX_AUDIT_EVENTS);
+          for (const d of dropped) integrity.delete(d.id);
+        }
+        integrity.set(event.id, integrityMeta);
+        chainHeads.set(key, { sequence: integrityMeta.sequence, hash: integrityMeta.hash });
+        return { event, integrity: integrityMeta };
+      });
+      // Lock must advance even if this write throws, or the org's chain wedges.
+      chainLocks.set(key, run.catch(() => undefined));
+      return run;
     },
     async getAuditIntegrity(eventId) {
       const meta = integrity.get(eventId);

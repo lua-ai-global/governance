@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.18.2] - 2026-07-15 — Multi-pod-safe audit integrity chain
+
+Fixes silent audit-event loss and hash-chain forking when the integrity audit
+(`integrityAudit`) runs behind more than one process (e.g. multiple pods
+sharing one Postgres database).
+
+Previously the chain's `sequence` and `previousHash` were held as
+process-local state, resumed from the durable head only once at boot. Every
+process then advanced its own counter independently, so two processes derived
+the same sequence for the same org — one `INSERT` won and the other lost to
+the `UNIQUE (COALESCE(organization_id,''), integrity_sequence)` index
+(Postgres `23505`), dropping that governance decision's tamper-evident record.
+Even without a collision the per-process `previousHash` forked the chain.
+
+Sequence allocation and previous-hash derivation are now atomic **against the
+database, per org**: the storage adapter reads the current head, derives the
+HMAC, and inserts — all under a per-org lock — on every write. No consumer
+code change is required beyond upgrading; `createGovernance({ integrityAudit })`
+picks up the safe path automatically.
+
+Backward compatible: the canonical hash form, per-org scoping, `verify()`,
+`export()`, and `stats()` are unchanged.
+
+### Added
+
+- `GovernanceStorage.appendToAuditChain(event, computeIntegrity)` — atomically
+  reads the org's durable head, invokes `computeIntegrity(head)` (the signing
+  key stays in the SDK core), and persists event + integrity as one operation.
+  Implemented by the memory adapter (per-org async lock) and the Postgres
+  adapter.
+- Postgres path uses a transaction with `pg_advisory_xact_lock(hashtext(org))`
+  → head `SELECT` → `INSERT` → `COMMIT`, serialising each org's chain against
+  itself across all writers (unrelated orgs proceed in parallel).
+- `PgClientLike` type and an optional `connect()` on `PgPoolLike` for the
+  transactional path. Pools exposing only `query()` fall back to a bounded
+  read-head → insert → retry-on-`23505` loop, which is also multi-writer-safe.
+
+### Changed
+
+- `createGovernance()` prefers `appendToAuditChain` when the storage adapter
+  provides it; the previous `createAuditEventWithIntegrity` + process-local
+  sequence path remains only as a fallback for third-party adapters that
+  predate this method (correct under a single writer).
+
+### Notes
+
+- `integrityChain.stats()` still reports this process's last-written sequence
+  and hash (a process-local cache), so it can lag another pod's writes. The
+  durable chain is authoritative; `export()` + `verifyAuditIntegrity()` read
+  from storage. A DB-backed `stats()`/`verify()` is a candidate follow-up.
+- The standalone `createIntegrityAudit()` wrapper in `audit-integrity.ts`
+  retains its pure in-process module-state chain and is not covered by this
+  fix — it is not the path `createGovernance({ integrityAudit })` uses.
+
 ## [0.18.1] - 2026-06-26 — Evasion-resistant injection normalization
 
 Hardens `detectInjection()` against obfuscated prompt-injection attacks that
