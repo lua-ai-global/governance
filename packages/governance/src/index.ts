@@ -322,10 +322,19 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
   const storageHasIntegrity =
     typeof storage.createAuditEventWithIntegrity === "function" &&
     typeof storage.getAuditIntegrity === "function";
+  // Durable integrity READS only need getAuditIntegrity — an adapter can
+  // implement the newer appendToAuditChain write contract + getAuditIntegrity
+  // without the legacy createAuditEventWithIntegrity. export()/verify() must
+  // still read that durable integrity rather than the (empty) in-process index.
+  const storageCanReadIntegrity = typeof storage.getAuditIntegrity === "function";
   // Multi-writer-safe path: the adapter allocates the sequence + previous-hash
   // from the durable head atomically (per-org lock), so concurrent processes
   // never fork the chain or collide on a sequence. Preferred when available.
   const storageHasAtomicAppend = typeof storage.appendToAuditChain === "function";
+  // One-time advisory: an adapter with durable integrity but no atomic append
+  // uses process-local sequence allocation, which is only safe under a single
+  // writer. Signalled once so multi-process deployments aren't silently unsafe.
+  let warnedNonAtomicAppend = false;
 
   /** Resolve the org id from an explicit field, falling back to metadata. */
   function resolveOrgId(
@@ -395,6 +404,20 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
         state.sequence = integrityMeta.sequence;
         state.loaded = true;
         return stored;
+      }
+
+      // Process-local sequence path (no appendToAuditChain). Correct under a
+      // SINGLE writer only. Warn once so custom adapters in multi-process
+      // deployments get the documented signal. (The pure-legacy branch below
+      // additionally warns per-write about the non-durable session-local
+      // downgrade — a strictly more severe, data-losing failure mode.)
+      if (storageHasIntegrity && !warnedNonAtomicAppend) {
+        warnedNonAtomicAppend = true;
+        onAuditError?.(
+          new Error(
+            "integrity chain: storage adapter implements createAuditEventWithIntegrity but not appendToAuditChain; audit appends use process-local sequence allocation and are multi-process-safe only under a single writer — implement appendToAuditChain for atomic cross-process appends",
+          ),
+        );
       }
 
       // First call after boot: resume this org's chain from durable state.
@@ -748,7 +771,7 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
           for (const e of events) {
             // Prefer durable integrity record; fall back to in-memory
             // index for adapters that don't yet persist it.
-            const durable = storageHasIntegrity
+            const durable = storageCanReadIntegrity
               ? await storage.getAuditIntegrity!(e.id)
               : null;
             const meta = durable ?? integrityIndex.get(e.id);

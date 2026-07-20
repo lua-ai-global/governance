@@ -69,6 +69,17 @@ Backward compatible: the canonical hash form, per-org scoping, `verify()`,
 - On the transactional append path, a failed `ROLLBACK` now destroys the
   pooled connection (`client.release(err)`) instead of returning a dead or
   aborted-transaction client to the pool.
+- `integrityChain.export()` / `verifyAuditIntegrity()` now read durable
+  integrity whenever the adapter implements `getAuditIntegrity`, no longer
+  gating that read on the legacy `createAuditEventWithIntegrity`. An adapter
+  implementing the new `appendToAuditChain` write contract plus
+  `getAuditIntegrity` (but not the legacy write method) previously exported an
+  empty chain even though its writes persisted integrity durably.
+- A storage adapter with durable integrity but no `appendToAuditChain` now
+  emits a one-time `onAuditError` advisory: it uses process-local sequence
+  allocation, which is multi-process-safe only under a single writer. The
+  README's "falls back safely and warns" guidance previously held only for the
+  older session-local (no `createAuditEventWithIntegrity`) fallback.
 
 ### Notes
 
