@@ -51,6 +51,16 @@ describe("integrity chain — multi-writer (shared storage, two instances)", () 
     // The single interleaved chain verifies standalone.
     const result = await verifyAuditIntegrity(chain, KEY);
     assert.equal(result.valid, true, result.breakDetail ?? "chain did not verify");
+
+    // stats() reflects the TRUE durable head (N), not either pod's
+    // process-local last-append sequence. Under interleaving each pod's own
+    // cache lands below N, so a process-local stats() would under-report here.
+    const statsA = await podA.integrityChain!.stats("orgX");
+    const statsB = await podB.integrityChain!.stats("orgX");
+    assert.equal(statsA.latestSequence, N, "podA stats must see the union head, not its own writes");
+    assert.equal(statsB.latestSequence, N, "podB stats must see the union head, not its own writes");
+    assert.equal(statsA.latestHash, chain[N - 1].integrity.hash, "latestHash is the true tip");
+    assert.equal(statsA.latestHash, statsB.latestHash, "both pods agree on the durable head");
   });
 
   it("keeps each org's chain contiguous when two pods write to two orgs at once", async () => {

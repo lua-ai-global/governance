@@ -34,7 +34,7 @@ describe("integrity chain restart durability (0.12)", () => {
 
     const gov1 = createGovernance({ storage, integrityAudit: { signingKey: KEY } });
     await writeSomeEvents(gov1, 5);
-    const stats1 = gov1.integrityChain!.stats();
+    const stats1 = await gov1.integrityChain!.stats();
     assert.equal(stats1.latestSequence, 5, "first instance wrote sequences 1..5");
     const firstHash = stats1.latestHash;
 
@@ -42,7 +42,7 @@ describe("integrity chain restart durability (0.12)", () => {
     const gov2 = createGovernance({ storage, integrityAudit: { signingKey: KEY } });
     // Write one more event — must pick up at sequence 6 and chain to firstHash.
     await writeSomeEvents(gov2, 1);
-    const stats2 = gov2.integrityChain!.stats();
+    const stats2 = await gov2.integrityChain!.stats();
     assert.equal(stats2.latestSequence, 6, "second instance resumed at sequence 6");
     assert.notEqual(stats2.latestHash, firstHash, "new event produced new head");
 

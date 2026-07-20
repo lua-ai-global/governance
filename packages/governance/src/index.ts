@@ -201,8 +201,18 @@ export interface GovernanceInstance {
     /**
      * Chain stats for one org (or the org-less chain when omitted):
      * latest sequence, latest hash, algorithm.
+     *
+     * Reads the **durable** chain head from storage (`getChainHead`) whenever
+     * the adapter provides it — the memory and Postgres adapters do — so under
+     * a multi-process deployment the stats reflect the true head, including
+     * writes made by other processes sharing the store, not just this
+     * process's last append. Adapters with no `getChainHead` fall back to this
+     * process's boot-resumed local cache (correct single-process only).
+     *
+     * Async since 0.19.0 (was sync ≤0.18.x): the durable head read is a
+     * storage round-trip. `await` the call.
      */
-    stats: (organizationId?: string) => { latestSequence: number; latestHash: string; algorithm: string };
+    stats: (organizationId?: string) => Promise<{ latestSequence: number; latestHash: string; algorithm: string }>;
   };
   audit: {
     log: (event: Omit<AuditEvent, "id" | "createdAt">) => Promise<AuditEvent>;
@@ -787,8 +797,26 @@ export function createGovernance(config: GovernanceConfig = {}): GovernanceInsta
             return a.createdAt.localeCompare(b.createdAt);
           });
         },
-        stats(organizationId?: string) {
+        async stats(organizationId?: string) {
+          // Durable head is the source of truth. Reading it FRESH per call
+          // (not the process-local cache, which only reflects this process's
+          // own appends) is what makes stats() correct under multiple writers
+          // sharing one store — same durable-head machinery export() uses.
+          // No mutation of chain state here: the write path owns
+          // orgState.lastHash/sequence under the per-org lock.
+          if (typeof storage.getChainHead === "function") {
+            const head = await storage.getChainHead(organizationId);
+            return {
+              latestSequence: head?.sequence ?? 0,
+              latestHash: head?.hash ?? GENESIS_HASH,
+              algorithm: "hmac-sha256",
+            };
+          }
+          // Adapter without a durable head (pre-0.12 / custom): fall back to
+          // this process's cache, resuming once from boot state if needed.
+          // Session-local by construction — correct single-process only.
           const orgState = chainStateFor(organizationId);
+          if (!orgState.loaded) await loadChainHead(orgState, organizationId);
           return {
             latestSequence: orgState.sequence,
             latestHash: orgState.lastHash,

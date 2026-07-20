@@ -113,4 +113,24 @@ describe("integrity chain — partial storage adapters", () => {
     const verification = await verifyAuditIntegrity(chain, KEY);
     assert.equal(verification.valid, true, verification.breakDetail ?? "chain should verify");
   });
+
+  it("stats() falls back to the process-local cache when the adapter has no getChainHead", async () => {
+    const base = createMemoryStorage();
+    // Durable writes but NO durable-head reader — the only stats() input left
+    // is this process's boot-resumed cache (correct single-process only).
+    const noHead: GovernanceStorage = {
+      ...coreSurface(base),
+      createAuditEventWithIntegrity: base.createAuditEventWithIntegrity,
+      getAuditIntegrity: base.getAuditIntegrity,
+      // intentionally omit: getChainHead, appendToAuditChain
+    };
+
+    const gov = createGovernance({ storage: noHead, integrityAudit: { signingKey: KEY } });
+    await writeN(gov, 3);
+
+    const stats = await gov.integrityChain!.stats();
+    assert.equal(stats.latestSequence, 3, "stats tracks this process's local sequence");
+    assert.match(stats.latestHash, /^[0-9a-f]{64}$/, "latestHash is the local chain tip");
+    assert.equal(stats.algorithm, "hmac-sha256");
+  });
 });

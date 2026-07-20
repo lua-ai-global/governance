@@ -500,6 +500,18 @@ transaction, or a compare-and-set retry on your uniqueness constraint). If you
 can't, leave it unimplemented and run a single writer — the SDK falls back
 safely and warns.
 
+**`integrityChain.stats()` reads the durable head (async since 0.19).** It
+resolves the latest sequence + hash from `storage.getChainHead()` on every
+call — so under multiple writers it reports the true tip, including writes made
+by other processes, not just this process's last append. `export()` and
+`verifyAuditIntegrity()` are already durable-backed; as of 0.19 `stats()` joins
+them and is `async` (was sync ≤0.18) — `await` it. Adapters with no
+`getChainHead` fall back to the process-local cache (single-process only).
+
+```typescript
+const { latestSequence, latestHash } = await gov.integrityChain!.stats('org_acme');
+```
+
 **The standalone `createIntegrityAudit()` wrapper is single-process only.** It
 keeps its chain in process memory and never persists integrity metadata, so it
 forks across processes and loses verifiability across restarts. Use it for

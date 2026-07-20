@@ -198,6 +198,15 @@ describe("postgres appendToAuditChain — transactional path", () => {
     assert.deepEqual(sequences, Array.from({ length: N }, (_, i) => i + 1));
     const result = await verifyAuditIntegrity(chain, KEY);
     assert.equal(result.valid, true, result.breakDetail ?? "invalid");
+
+    // stats() reads the durable head from the shared pool, so BOTH pods report
+    // the true tip (N) — not their own process-local last append.
+    const statsA = await podA.integrityChain!.stats("orgP");
+    const statsB = await podB.integrityChain!.stats("orgP");
+    assert.equal(statsA.latestSequence, N, "podA stats reflects the durable DB head");
+    assert.equal(statsB.latestSequence, N, "podB stats reflects the durable DB head");
+    assert.equal(statsA.latestHash, chain[N - 1].integrity.hash, "latestHash is the DB tip");
+    assert.equal(statsA.latestHash, statsB.latestHash, "both pods agree via the shared DB head");
   });
 });
 

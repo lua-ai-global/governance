@@ -47,8 +47,8 @@ describe("integrity chain — per-org scoping", () => {
     assert.equal(rB.valid, true, rB.breakDetail ?? "");
 
     // Heads are tracked per-org.
-    assert.equal(gov.integrityChain!.stats("orgA").latestSequence, 3);
-    assert.equal(gov.integrityChain!.stats("orgB").latestSequence, 2);
+    assert.equal((await gov.integrityChain!.stats("orgA")).latestSequence, 3);
+    assert.equal((await gov.integrityChain!.stats("orgB")).latestSequence, 2);
   });
 
   it("binds organizationId into the hash — relabelling into another org breaks verification", async () => {
@@ -72,7 +72,7 @@ describe("integrity chain — per-org scoping", () => {
     const chain = await gov.integrityChain!.export({ organizationId: "orgMeta" });
     assert.equal(chain.length, 1);
     assert.equal(chain[0].organizationId, "orgMeta");
-    assert.equal(gov.integrityChain!.stats("orgMeta").latestSequence, 1);
+    assert.equal((await gov.integrityChain!.stats("orgMeta")).latestSequence, 1);
   });
 
   it("keeps the org-less chain independent from org chains", async () => {
@@ -85,8 +85,8 @@ describe("integrity chain — per-org scoping", () => {
     const orgless = await gov.integrityChain!.export({});
     const orglessOnly = orgless.filter((e) => e.organizationId == null);
     assert.deepEqual(orglessOnly.map((e) => e.integrity.sequence), [1, 2]);
-    assert.equal(gov.integrityChain!.stats().latestSequence, 2);
-    assert.equal(gov.integrityChain!.stats("orgA").latestSequence, 1);
+    assert.equal((await gov.integrityChain!.stats()).latestSequence, 2);
+    assert.equal((await gov.integrityChain!.stats("orgA")).latestSequence, 1);
   });
 
   it("register() stamps the org onto the agent record and the agent_registered event", async () => {

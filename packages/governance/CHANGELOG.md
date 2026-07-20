@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.19.0] - 2026-07-20 — DB-backed integrity chain stats (multi-process truth)
+
+Completes the multi-process hardening from 0.18.2. That release made the audit
+integrity chain's *writes* atomic against the durable per-org head and made
+`export()` / `verifyAuditIntegrity()` read durable state. `integrityChain.stats()`
+was the one reader left on process-local state — it returned this process's
+last-written `sequence` / `lastHash` from an in-closure cache, so under a
+multi-process deployment (replicas, `pm2` cluster, serverless) it lagged writes
+made by other processes sharing the store. This release makes `stats()` read the
+durable head too, so all three readers agree on the true tip.
+
+### Changed — `integrityChain.stats()` is DB-backed and now async (BREAKING-ISH)
+
+- `stats(organizationId?)` reads `storage.getChainHead(organizationId)` fresh on
+  every call whenever the adapter provides it (the memory and Postgres adapters
+  do), returning the true durable `latestSequence` / `latestHash` — including
+  writes from other processes — instead of a process-local cache. It does not
+  mutate chain state; the write path still owns the per-org head under its lock.
+- Because the durable read is a storage round-trip, the method is now `async`:
+  it returns `Promise<{ latestSequence; latestHash; algorithm }>` (was a plain
+  object ≤0.18.x). Callers must `await` it. This is the same sync→durable shift
+  0.12.0 made for the chain itself; the return shape is otherwise unchanged (no
+  new fields).
+- Adapters with no `getChainHead` (pre-0.12 / custom) fall back to this
+  process's boot-resumed local cache — correct single-process only, matching the
+  fallback the write path already uses.
+- Pre-1.0 minor bump per 0.x semver. All in-repo callers are updated; external
+  callers add one `await`.
+
+### Notes
+
+- The standalone `createIntegrityAudit()` wrapper in `audit-integrity.ts` is
+  unchanged and remains **single-process only** — it holds no storage handle to
+  read a durable head, and its `stats()` was already `async`.
+- Supersedes the 0.18.2 "`stats()` … deferred (it would change the method from
+  sync to async)" note — that is now done and tracked here.
+
 ## [0.18.2] - 2026-07-15 — Multi-process-safe audit integrity chain
 
 Fixes silent audit-event loss and hash-chain forking when the integrity audit

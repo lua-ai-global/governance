@@ -205,7 +205,7 @@ describe("integrity chain end-to-end — every SDK audit write is HMAC-chained",
     await gov.register({ name: "a", framework: "mastra", owner: "t" });
     await gov.register({ name: "b", framework: "mastra", owner: "t" });
 
-    const stats = gov.integrityChain!.stats();
+    const stats = await gov.integrityChain!.stats();
     assert.equal(stats.latestSequence, 2);
     assert.equal(stats.algorithm, "hmac-sha256");
     assert.match(stats.latestHash, /^[0-9a-f]{64}$/);
