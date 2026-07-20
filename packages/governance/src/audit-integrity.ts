@@ -146,6 +146,29 @@ export const GENESIS_HASH = "0".repeat(64); // Initial chain hash
  * an immutable chain. Any tampering is immediately detectable.
  *
  * Satisfies EU AI Act Article 12 logging integrity requirements.
+ *
+ * ---
+ *
+ * ⚠️ **Single-process / single-session only.** This wrapper keeps its chain
+ * (`sequence`, last hash, and the per-event integrity map) in **process
+ * memory**. It never persists integrity metadata and never reads the durable
+ * chain head, so:
+ *
+ *   - Two processes (multiple replicas, a `pm2` cluster, serverless instances)
+ *     each start their own `sequence` at 1 and fork the chain.
+ *   - A restart loses the in-memory map, so events written before the restart
+ *     can no longer be verified.
+ *
+ * For **durable, multi-process-safe** tamper-evident audit, use
+ * `createGovernance({ integrityAudit: { signingKey } })` with a storage adapter
+ * that implements `appendToAuditChain` (the built-in Postgres adapter does).
+ * That path allocates the sequence and previous-hash atomically from the
+ * durable per-org head under a storage-level lock, so concurrent writers —
+ * including separate processes sharing one database — never collide or fork.
+ * See the "Multi-process deployments" note in the README.
+ *
+ * This standalone wrapper remains useful for in-memory prototyping, tests, and
+ * genuinely single-process tools where a self-contained chain is enough.
  */
 export function createIntegrityAudit(
   governance: GovernanceInstance,

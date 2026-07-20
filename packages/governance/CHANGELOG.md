@@ -1,10 +1,10 @@
 # Changelog
 
-## [0.18.2] - 2026-07-15 — Multi-pod-safe audit integrity chain
+## [0.18.2] - 2026-07-15 — Multi-process-safe audit integrity chain
 
 Fixes silent audit-event loss and hash-chain forking when the integrity audit
-(`integrityAudit`) runs behind more than one process (e.g. multiple pods
-sharing one Postgres database).
+(`integrityAudit`) runs behind more than one process (e.g. multiple replicas, a
+`pm2` cluster, or serverless instances sharing one Postgres database).
 
 Previously the chain's `sequence` and `previousHash` were held as
 process-local state, resumed from the durable head only once at boot. Every
@@ -62,7 +62,7 @@ Backward compatible: the canonical hash form, per-org scoping, `verify()`,
   the HMAC-covered `sequence` (wall-clock `createdAt` only tiebreaks) instead
   of `createdAt`-first. `createdAt` is stamped before the append lock, so
   under concurrent writers a lower sequence can carry a later timestamp
-  (lock-wait inversion, cross-pod clock skew) — the old ordering could report
+  (lock-wait inversion, cross-process clock skew) — the old ordering could report
   a valid multi-writer chain as tampered. Sequence ordering is tamper-safe:
   the sequence is inside the signed hash, so forging it still breaks the
   hash/previous-hash checks.
@@ -73,12 +73,18 @@ Backward compatible: the canonical hash form, per-org scoping, `verify()`,
 ### Notes
 
 - `integrityChain.stats()` still reports this process's last-written sequence
-  and hash (a process-local cache), so it can lag another pod's writes. The
+  and hash (a process-local cache), so it can lag another process's writes. The
   durable chain is authoritative; `export()` + `verifyAuditIntegrity()` read
-  from storage. A DB-backed `stats()`/`verify()` is a candidate follow-up.
+  from storage. A DB-backed `stats()` is deferred (it would change the method
+  from sync to async — a breaking signature change); tracked in #39.
 - The standalone `createIntegrityAudit()` wrapper in `audit-integrity.ts`
-  retains its pure in-process module-state chain and is not covered by this
-  fix — it is not the path `createGovernance({ integrityAudit })` uses.
+  keeps its chain in process memory and is **single-process only** — it is a
+  separate, in-memory construct from the durable
+  `createGovernance({ integrityAudit })` path this fix hardens (the wrapper
+  holds no storage handle to append against). It now carries a prominent
+  single-process warning in its JSDoc and the README "Multi-process
+  deployments" note; use `createGovernance({ integrityAudit })` for durable,
+  multi-process audit.
 - Rolling deploys: the advisory lock only protects writers that take it.
   During a mixed-version window, pre-0.18.2 processes still allocate from
   their process-local counters and can collide with or fork past locked

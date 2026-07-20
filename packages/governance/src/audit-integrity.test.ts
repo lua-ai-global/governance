@@ -209,4 +209,26 @@ describe("Tamper-Evident Audit (EU AI Act Article 12)", () => {
     // Even with same content, different keys = different hashes
     assert.notEqual(e1.integrity.hash, e2.integrity.hash);
   });
+
+  // Documents the wrapper's single-process boundary (see its JSDoc + the
+  // README "Multi-process deployments" note): the chain lives in process
+  // memory, so a second wrapper over the SAME governance/storage starts its
+  // own sequence at 1 and forks — it does NOT resume the durable head. The
+  // multi-process-safe path is createGovernance({ integrityAudit }).
+  it("keeps its chain in-process — a second wrapper over the same governance forks (single-process by design)", async () => {
+    const gov = createGovernance({});
+    const first = createIntegrityAudit(gov, { signingKey: TEST_KEY });
+    const second = createIntegrityAudit(gov, { signingKey: TEST_KEY });
+
+    const a1 = await first.log({ agentId: "agent-1", eventType: "tool_call", outcome: "success", severity: "info" });
+    const a2 = await first.log({ agentId: "agent-1", eventType: "tool_call", outcome: "success", severity: "info" });
+    assert.equal(a1.integrity.sequence, 1);
+    assert.equal(a2.integrity.sequence, 2);
+
+    // A separate wrapper does not observe `first`'s in-memory head — it starts
+    // its own chain at genesis rather than continuing from sequence 2.
+    const b1 = await second.log({ agentId: "agent-1", eventType: "tool_call", outcome: "success", severity: "info" });
+    assert.equal(b1.integrity.sequence, 1);
+    assert.equal(b1.integrity.previousHash, "0".repeat(64));
+  });
 });

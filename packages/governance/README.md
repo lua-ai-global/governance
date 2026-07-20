@@ -79,9 +79,12 @@ is exactly what it does and does not do:
   `integrityAudit: { signingKey }` for tamper-evident audit. Since 0.12
   the chain is persisted durably (survives process restart) when the
   storage adapter supports `createAuditEventWithIntegrity` (memory and
-  Postgres adapters both do). HMAC chains are still only tamper-evident
-  to holders of the signing secret — rotate and pair with an external
-  anchor if you need adversary-grade non-repudiation.
+  Postgres adapters both do). Since 0.18.2 that chain is also
+  **multi-process-safe** when the adapter implements `appendToAuditChain`
+  (Postgres) — see [Multi-process deployments](#multi-process-deployments).
+  HMAC chains are still only tamper-evident to holders of the signing
+  secret — rotate and pair with an external anchor if you need
+  adversary-grade non-repudiation.
 - **Cloud `register()` is a synthetic confirmation** — the API auto-registers
   on first `enforce()`.
 - **No built-in red team / jailbreak harness.** Use inspect-ai, PyRIT, or
@@ -452,6 +455,62 @@ didn't invoke `enforce()` or `recordOutcome()` itself.
   creates a chain gap that `verifyAuditIntegrity` will detect; set
   `'block'` to reject the enforce() call instead when you can't tolerate
   gaps.
+
+#### Multi-process deployments
+
+If more than one process writes to the **same audit store** — Kubernetes
+replicas, a `pm2` cluster, or serverless instances all pointed at one
+Postgres database — the chain must allocate each event's `sequence` and
+`previousHash` from the **current durable head**, not from process-local
+state. Otherwise two processes derive the same sequence for the same org
+(one `INSERT` wins, the other is dropped by the unique index) and their
+per-process `previousHash` forks the chain.
+
+This is the job of the optional storage-contract method
+`appendToAuditChain(event, computeIntegrity)`. The adapter, under a per-org
+lock that spans the whole operation, reads the org's durable head, calls back
+into the SDK to compute the HMAC (the signing key never leaves the SDK core),
+and persists the event + integrity as one indivisible write:
+
+```typescript
+import { createGovernance } from 'governance-sdk';
+import { createPostgresStorage } from 'governance-sdk/storage-postgres';
+
+const gov = createGovernance({
+  storage: await createPostgresStorage({ pool }), // pg.Pool — real transactions
+  integrityAudit: { signingKey: process.env.AUDIT_SECRET! },
+});
+// Every process using this config appends atomically against the shared DB —
+// no duplicate-sequence drops, no per-process chain fork.
+```
+
+`createGovernance()` uses `appendToAuditChain` automatically whenever the
+storage adapter provides it. **Support by shipped adapter:**
+
+| Adapter | `appendToAuditChain` | Multi-process safe? |
+|---|---|---|
+| **Postgres** (`createPostgresStorage`) | ✅ per-org `pg_advisory_xact_lock` transaction (falls back to a bounded `23505`-retry loop for query-only pools) | ✅ across processes sharing the database |
+| **Memory** (`createMemoryStorage`) | ✅ per-org in-process async lock | Single process **by design** — memory is not shared across processes |
+| Third-party adapter without the method | — | Falls back to the legacy process-local-sequence path (correct under a **single writer** only) |
+
+**Custom storage adapters:** to be multi-process-safe, implement
+`appendToAuditChain` so the head-read → compute → insert sequence is atomic
+against concurrent writers (a row lock, an advisory lock, a serializable
+transaction, or a compare-and-set retry on your uniqueness constraint). If you
+can't, leave it unimplemented and run a single writer — the SDK falls back
+safely and warns.
+
+**The standalone `createIntegrityAudit()` wrapper is single-process only.** It
+keeps its chain in process memory and never persists integrity metadata, so it
+forks across processes and loses verifiability across restarts. Use it for
+prototyping and tests; use `createGovernance({ integrityAudit })` (above) for
+durable, multi-process audit.
+
+**Rolling deploys:** the lock only protects writers that take it. During a
+mixed-version window (some processes pre-0.18.2), the old processes still
+allocate from process-local counters and can collide with or fork past the
+locked writers. Replace all writers together and expect residual
+unique-violation warnings until the last old process drains.
 
 ### Kill Switch
 
