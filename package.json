@@ -23,6 +23,6 @@
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
-    "satori": "^0.26.0"
+    "satori": "^0.29.0"
   }
 }
