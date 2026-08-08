@@ -16,6 +16,7 @@ const STAGE_MAP: Record<string, PolicyStage> = {
   // Process — run during execution (default)
   tool_blocked: "process",
   tool_allowed: "process",
+  tool_match: "process",
   action_type: "process",
   agent_level: "process",
   require_signed_identity: "process",

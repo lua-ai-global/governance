@@ -84,6 +84,35 @@ export function requireApproval(actions: PolicyAction[], reason?: string): Polic
 }
 
 /**
+ * Require human approval for specific tools, matched by name against the
+ * runtime `ctx.tool` field. Use this — not `requireApproval` — when the
+ * approval list is a set of tool names: `requireApproval` gates action
+ * *categories* (`ctx.action`, e.g. "payment"), and runtime tool calls
+ * always evaluate as `action: "tool_call"` with the tool name in `ctx.tool`.
+ *
+ * @param tools - Tool names that need human review before execution
+ * @param reason - Optional custom reason message
+ * @returns A PolicyRule with outcome "require_approval"
+ *
+ * @example
+ * ```ts
+ * const rule = requireToolApproval(['linear_create_task_task', 'send_email']);
+ * ```
+ */
+export function requireToolApproval(tools: string[], reason?: string): PolicyRule {
+  return {
+    id: `require-tool-approval-${tools.join("-")}`,
+    name: `Require approval for tools: ${tools.join(", ")}`,
+    condition: { type: "tool_match", params: { tools } },
+    outcome: "require_approval",
+    reason: reason ?? `Tool requires human approval: ${tools.join(", ")}`,
+    priority: 80,
+    enabled: true,
+    stage: "process",
+  };
+}
+
+/**
  * Enforce a per-session token budget. Blocks when sessionTokensUsed exceeds maxTokens.
  *
  * @param maxTokens - Maximum tokens allowed per session

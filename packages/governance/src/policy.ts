@@ -487,6 +487,7 @@ export {
   blockTools,
   allowOnlyTools,
   requireApproval,
+  requireToolApproval,
   tokenBudget,
   rateLimit,
   requireLevel,

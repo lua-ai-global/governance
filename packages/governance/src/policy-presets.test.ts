@@ -4,12 +4,15 @@ import {
   blockTools,
   allowOnlyTools,
   requireApproval,
+  requireToolApproval,
   tokenBudget,
   rateLimit,
   requireLevel,
   requireSequence,
   timeWindow,
 } from "./policy-presets";
+import { createPolicyEngine } from "./policy";
+import type { EnforcementContext } from "./policy";
 
 describe("policy preset builders", () => {
   describe("blockTools", () => {
@@ -94,6 +97,77 @@ describe("policy preset builders", () => {
     test("custom reason works", () => {
       const rule = requireApproval(["payment"], "needs CFO sign-off");
       assert.equal(rule.reason, "needs CFO sign-off");
+    });
+  });
+
+  describe("requireToolApproval", () => {
+    const toolCallCtx = (tool: string): EnforcementContext => ({
+      agentId: "agent-1",
+      action: "tool_call",
+      tool,
+    });
+
+    test("creates rule with require_approval outcome", () => {
+      assert.equal(requireToolApproval(["linear_create_task_task"]).outcome, "require_approval");
+    });
+
+    test("uses tool_match condition carrying the tool list", () => {
+      const rule = requireToolApproval(["linear_create_task_task", "send_email"]);
+      assert.equal(rule.condition.type, "tool_match");
+      assert.deepEqual(rule.condition.params.tools, ["linear_create_task_task", "send_email"]);
+    });
+
+    test("id includes tool names", () => {
+      const rule = requireToolApproval(["a", "b"]);
+      assert.equal(rule.id, "require-tool-approval-a-b");
+    });
+
+    test("priority is 80", () => {
+      assert.equal(requireToolApproval(["x"]).priority, 80);
+    });
+
+    test("custom reason works", () => {
+      const rule = requireToolApproval(["x"], "needs sign-off");
+      assert.equal(rule.reason, "needs sign-off");
+    });
+
+    // Tool calls evaluate with action "tool_call" and the tool name in
+    // ctx.tool — the rule matches on ctx.tool.
+    test("evaluator yields require_approval for a tool_call of a listed tool", () => {
+      const engine = createPolicyEngine({
+        rules: [requireToolApproval(["linear_create_task_task"])],
+      });
+      const decision = engine.evaluate(toolCallCtx("linear_create_task_task"));
+      assert.equal(decision.outcome, "require_approval");
+      assert.equal(decision.blocked, true);
+      assert.equal(decision.ruleId, "require-tool-approval-linear_create_task_task");
+    });
+
+    test("evaluator does not fire for unlisted tools", () => {
+      const engine = createPolicyEngine({
+        rules: [requireToolApproval(["linear_create_task_task"])],
+      });
+      const decision = engine.evaluate(toolCallCtx("web_search"));
+      assert.equal(decision.outcome, "allow");
+      assert.equal(decision.ruleId, null);
+    });
+
+    test("evaluator does not fire when ctx.tool is absent", () => {
+      const engine = createPolicyEngine({
+        rules: [requireToolApproval(["linear_create_task_task"])],
+      });
+      const decision = engine.evaluate({ agentId: "agent-1", action: "tool_call" });
+      assert.equal(decision.outcome, "allow");
+    });
+
+    test("requireApproval action_type semantics are unchanged", () => {
+      const engine = createPolicyEngine({ rules: [requireApproval(["payment"])] });
+      const payment = engine.evaluate({ agentId: "agent-1", action: "payment" });
+      assert.equal(payment.outcome, "require_approval");
+      // A tool_call whose tool name happens to be "payment" is NOT an
+      // action of type "payment" — action_type still gates action categories.
+      const toolCall = engine.evaluate(toolCallCtx("payment"));
+      assert.equal(toolCall.outcome, "allow");
     });
   });
 
