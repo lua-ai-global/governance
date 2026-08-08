@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.20.0] - 2026-08-08 — Tool-name approval gating (`requireToolApproval`)
+
+Adds a first-class way to require human approval for specific *tools*. The
+existing `requireApproval(actions)` preset compiles an `action_type` condition,
+which matches the action *category* (`ctx.action`). Hosts that evaluate every
+tool invocation as `action: "tool_call"` with the tool name in `ctx.tool`
+could not express "require approval for tool X" — a tool-name list fed into
+`requireApproval()` produced a rule that never matched at runtime.
+
+### Added
+
+- `tool_match` built-in condition — outcome-neutral membership test on
+  `ctx.tool` (the same matching `tool_blocked` uses, without the block-list
+  framing). Stage default: `process`.
+- `requireToolApproval(tools, reason?)` preset — builds a
+  `tool_match` rule with outcome `require_approval`, priority 80. Exported
+  from the package root and `governance-sdk/policy` alongside the other
+  presets.
+
+### Notes
+
+- `requireApproval(actions)` is unchanged — it remains the correct preset for
+  genuine action categories (`"payment"`, `"database_mutation"`, …). A
+  `tool_call` whose tool name coincides with an action-type string still does
+  not match `action_type` rules.
+
 ## [0.19.0] - 2026-07-20 — DB-backed integrity chain stats (multi-process truth)
 
 Completes the multi-process hardening from 0.18.2. That release made the audit

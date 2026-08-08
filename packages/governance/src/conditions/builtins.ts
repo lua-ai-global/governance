@@ -53,6 +53,14 @@ export function getBuiltinConditions(
       },
     },
     {
+      name: "tool_match",
+      description: "Match specific tools by name (outcome-neutral membership test on ctx.tool)",
+      evaluator: (ctx, p) => {
+        const tools = p.tools as string[];
+        return !!ctx.tool && tools.includes(ctx.tool);
+      },
+    },
+    {
       name: "action_type",
       description: "Gate specific action types",
       evaluator: (ctx, p) => {

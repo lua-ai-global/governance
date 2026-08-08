@@ -263,7 +263,8 @@ Define rules that govern agent behavior at runtime. Policies return one of **fiv
 
 - `blockTools(toolNames)` — block specific tools from being called
 - `allowOnlyTools(toolNames)` — whitelist-only tool access
-- `requireApproval(condition)` — gate actions behind human approval
+- `requireApproval(actionTypes)` — gate action *categories* (`ctx.action`) behind human approval
+- `requireToolApproval(toolNames)` — gate specific tools by name (`ctx.tool`) behind human approval
 - `tokenBudget(limit)` — enforce token consumption limits
 - `rateLimit(config)` — throttle agent requests. **Stateless** — the rule
   reads `ctx.recentActionCount`, which your host populates. Durable
