@@ -173,11 +173,14 @@ describe("getArticles()", () => {
 });
 
 describe("getDaysUntilDeadline()", () => {
-  test("returns a positive number (deadline is 2026-08-02)", () => {
+  test("returns days relative to the fixed 2026-08-02 deadline", () => {
     const days = getDaysUntilDeadline();
     assert.ok(typeof days === "number");
-    // As of March 2026, should be ~146 days
-    assert.ok(days > 0, `Expected positive days, got ${days}`);
-    assert.ok(days < 500, `Expected reasonable days count, got ${days}`);
+    if (new Date() < new Date("2026-08-02")) {
+      assert.ok(days > 0, `Expected positive days, got ${days}`);
+      assert.ok(days < 500, `Expected reasonable days count, got ${days}`);
+    } else {
+      assert.ok(days <= 0, `Deadline passed; expected non-positive days, got ${days}`);
+    }
   });
 });

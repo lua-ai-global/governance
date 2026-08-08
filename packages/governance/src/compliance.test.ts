@@ -160,9 +160,13 @@ describe("EU AI Act Compliance (Articles 9, 11, 12, 14, 15)", () => {
     );
   });
 
-  it("getDaysUntilDeadline returns positive number", () => {
+  it("getDaysUntilDeadline tracks the fixed 2026-08-02 deadline", () => {
     const days = getDaysUntilDeadline();
-    assert.ok(days > 0);
-    assert.ok(days < 600); // Sanity check
+    if (new Date() < new Date("2026-08-02")) {
+      assert.ok(days > 0);
+      assert.ok(days < 600); // Sanity check
+    } else {
+      assert.ok(days <= 0);
+    }
   });
 });
