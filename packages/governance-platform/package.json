@@ -54,7 +54,7 @@
     "pg": { "optional": true }
   },
   "devDependencies": {
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.8",
     "typescript": "^5.7.0"
   }
 }
